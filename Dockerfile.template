@@ -1,0 +1,49 @@
+# Dockerfile for TypeScript Workspace Template (Bun)
+# Multi-stage build for optimized image size
+
+FROM oven/bun:1.1-alpine as builder
+
+# Set working directory
+WORKDIR /usr/src/{{PROJECT_NAME}}
+
+# Install system dependencies
+RUN apk add --no-cache git
+
+# Copy workspace files
+COPY . .
+
+# Install dependencies
+RUN bun install --frozen-lockfile
+
+# Build workspace
+RUN bun run build
+
+# Runtime stage
+FROM oven/bun:1.1-alpine
+
+# Create non-root user
+RUN addgroup -g 1001 appuser && adduser -D -u 1001 -G appuser appuser
+
+# Set working directory
+WORKDIR /home/appuser
+
+# Copy built artifacts from builder
+COPY --from=builder --chown=appuser:appuser /usr/src/{{PROJECT_NAME}}/packages /home/appuser/packages
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV LOG_LEVEL=info
+
+# Switch to non-root user
+USER appuser
+
+# Default command (bin package)
+CMD ["bun", "packages/bin/dist/index.js"]
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s \
+    CMD bun --version || exit 1
+
+# Metadata
+LABEL description="{{PROJECT_DESCRIPTION}}"
+LABEL version="1.0.0"

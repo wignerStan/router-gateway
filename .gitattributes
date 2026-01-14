@@ -1,0 +1,164 @@
+# Git Attributes for Bun/TypeScript Project Template
+# https://git-scm.com/docs/gitattributes
+
+# ============================================
+# Text Files
+# ============================================
+
+# Auto detect text files
+* text=auto
+
+# Source code
+*.{ts,js,cjs,mjs,jsx,tsx} text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+
+# Shell scripts
+*.sh text eol=lf
+*.bash text eol=lf
+*.zsh text eol=lf
+
+# Configuration files
+Makefile text eol=lf
+justfile text eol=lf
+.editorconfig text eol=lf
+.gitattributes text eol=lf
+.gitignore text eol=lf
+.pre-commit-config.yaml text eol=lf
+.eslintrc.* text eol=lf
+.prettierrc.* text eol=lf
+
+# Docker files
+Dockerfile* text eol=lf
+*.dockerfile text eol=lf
+
+# CI/CD files
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# ============================================
+# Binary Files
+# ============================================
+
+# Images
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg binary
+
+# Fonts
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+
+# Archives
+*.zip binary
+*.tar binary
+*.gz binary
+*.bz2 binary
+*.7z binary
+*.rar binary
+
+# Executables
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.a binary
+*.lib binary
+
+# Node/Bun artifacts
+*.node binary
+
+# ============================================
+# Language Specific
+# ============================================
+
+# TypeScript/JavaScript
+*.{ts,js,cjs,mjs,jsx,tsx} linguist-generated=false
+package-lock.json linguist-generated=true
+yarn.lock linguist-generated=true
+pnpm-lock.yaml linguist-generated=true
+bun.lockb linguist-generated=true
+
+# Documentation
+*.md linguist-documentation
+LICENSE* linguist-license
+
+# ============================================
+# Diff Settings
+# ============================================
+
+# Use better diff for certain file types
+*.{ts,js,cjs,mjs,jsx,tsx} diff=javascript
+*.json diff=json
+*.yaml diff=yaml
+*.toml diff=toml
+
+# ============================================
+# Merge Settings
+# ============================================
+
+# Use union merge for lockfiles
+package-lock.json merge=binary
+yarn.lock merge=binary
+pnpm-lock.yaml merge=binary
+bun.lockb merge=binary
+
+# ============================================
+# Export Settings
+# ============================================
+
+# Export-ignore for files that shouldn't be in archives
+.gitattributes export-ignore
+.gitignore export-ignore
+.git/ export-ignore
+.github/ export-ignore
+.vscode/ export-ignore
+.idea/ export-ignore
+node_modules/ export-ignore
+dist/ export-ignore
+coverage/ export-ignore
+*.md export-ignore
+.env export-ignore
+.env.* export-ignore
+
+# ============================================
+# Whitespace Settings
+# ============================================
+
+# Trim trailing whitespace
+*.{ts,js,cjs,mjs,jsx,tsx} whitespace=trailing-space,space-before-tab,cr-at-eol
+*.toml whitespace=trailing-space,space-before-tab,cr-at-eol
+*.yaml whitespace=trailing-space,space-before-tab,cr-at-eol
+*.json whitespace=trailing-space,space-before-tab,cr-at-eol
+
+# ============================================
+# End-of-Line Settings
+# ============================================
+
+# Force LF for all text files
+* text eol=lf
+
+# ============================================
+# Linguist Settings
+# ============================================
+
+# Generated files
+package-lock.json linguist-generated=true
+yarn.lock linguist-generated=true
+pnpm-lock.yaml linguist-generated=true
+bun.lockb linguist-generated=true
+
+# Documentation
+README.md linguist-documentation
+CHANGELOG.md linguist-documentation
+CONTRIBUTING.md linguist-documentation
+LICENSE* linguist-license
