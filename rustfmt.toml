@@ -1,0 +1,17 @@
+# Rust Formatting Configuration
+# Production-ready settings for stable Rust
+
+edition = "2021"
+max_width = 100
+tab_spaces = 4
+use_small_heuristics = "Default"
+
+# Reorder imports
+reorder_imports = true
+
+# Use field init shorthand
+use_field_init_shorthand = true
+use_try_shorthand = true
+
+# Match block trailing comma for better diffs
+match_block_trailing_comma = true
