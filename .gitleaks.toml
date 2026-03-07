@@ -1,0 +1,38 @@
+# Gitleaks Configuration
+# Pre-commit secret detection rules
+
+title = "Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[rules]
+# Allow example placeholders
+[[rules.allowlist]]
+regexes = [
+    '''\{\{[A-Z_]+\}\}''',  # Template placeholders like {{SECRET_KEY}}
+    '''<YOUR_.*>''',        # Placeholder tokens
+    '''your-.*-here''',     # Example placeholders
+]
+
+# Specific rules for this project
+[[rules]]
+id = "generic-api-key"
+description = "Generic API Key"
+regex = '''(?i)(?:api[_-]?key|apikey|token|secret|password|pwd)\s*[=:]\s*['"]?[a-zA-Z0-9_\-]{20,}['"]?'''
+tags = ["key", "generic"]
+
+[[rules]]
+id = "jwt-token"
+description = "JWT Token"
+regex = '''eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*'''
+tags = ["jwt", "token"]
+
+[allowlist]
+description = "Global allowlist"
+paths = [
+    '''\.env\.example$''',
+    '''gitleaks\.toml$''',
+    '''CLAUDE\.md$''',
+    '''AGENTS\.md$''',
+]
