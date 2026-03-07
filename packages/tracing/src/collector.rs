@@ -48,6 +48,9 @@ impl MemoryTraceCollector {
 #[async_trait]
 impl TraceCollector for MemoryTraceCollector {
     async fn record_trace(&self, trace: TraceSpan) {
+        if self.max_size == 0 {
+            return;
+        }
         let mut traces = self.traces.write().await;
 
         // Add the new trace
@@ -168,8 +171,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_memory_collector_zero_size() {
-        // Zero size: len() >= max_size is true immediately (0 >= 0)
-        // so it pops, then pushes, leaving 1 trace
+        // Zero size should not store any traces
         let collector = MemoryTraceCollector::new(0);
 
         let trace = TraceSpan::new(
@@ -181,9 +183,7 @@ mod tests {
 
         collector.record_trace(trace).await;
 
-        // With max_size=0, the check is len() >= 0, which is always true
-        // After pop (empty) and push, we have 1 trace
-        assert_eq!(collector.trace_count().await, 1);
+        assert_eq!(collector.trace_count().await, 0);
     }
 
     #[tokio::test]

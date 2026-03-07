@@ -10,6 +10,8 @@ pub struct TraceMetrics {
     pub successful_requests: u64,
     /// Number of failed requests (non-2xx status codes)
     pub failed_requests: u64,
+    /// Number of requests with recorded latency
+    pub latency_count: u64,
     /// Average latency in milliseconds
     pub avg_latency_ms: f64,
     /// EWMA (Exponentially Weighted Moving Average) of latency
@@ -29,6 +31,7 @@ pub struct TraceMetrics {
 pub struct ProviderMetrics {
     pub total_requests: u64,
     pub successful_requests: u64,
+    pub latency_count: u64,
     pub avg_latency_ms: f64,
     pub ewma_latency_ms: f64,
 }
@@ -38,6 +41,7 @@ pub struct ProviderMetrics {
 pub struct ModelMetrics {
     pub total_requests: u64,
     pub successful_requests: u64,
+    pub latency_count: u64,
     pub avg_latency_ms: f64,
     pub total_input_tokens: u64,
     pub total_output_tokens: u64,
@@ -73,12 +77,13 @@ impl TraceMetrics {
 
         // Update latency metrics
         if let Some(latency) = trace.latency_ms {
+            self.latency_count += 1;
             let latency_f64 = latency as f64;
 
-            // Simple average (can be improved with online algorithm)
-            self.avg_latency_ms = (self.avg_latency_ms * (self.total_requests - 1) as f64
+            // Simple average
+            self.avg_latency_ms = (self.avg_latency_ms * (self.latency_count - 1) as f64
                 + latency_f64)
-                / self.total_requests as f64;
+                / self.latency_count as f64;
 
             // EWMA with alpha=0.1 (smoothing factor)
             self.ewma_latency_ms = Self::calculate_ewma(self.ewma_latency_ms, latency_f64, 0.1);
@@ -126,10 +131,11 @@ impl ProviderMetrics {
         }
 
         if let Some(latency) = trace.latency_ms {
+            self.latency_count += 1;
             let latency_f64 = latency as f64;
-            self.avg_latency_ms = (self.avg_latency_ms * (self.total_requests - 1) as f64
+            self.avg_latency_ms = (self.avg_latency_ms * (self.latency_count - 1) as f64
                 + latency_f64)
-                / self.total_requests as f64;
+                / self.latency_count as f64;
             self.ewma_latency_ms =
                 TraceMetrics::calculate_ewma(self.ewma_latency_ms, latency_f64, 0.1);
         }
@@ -153,10 +159,11 @@ impl ModelMetrics {
         }
 
         if let Some(latency) = trace.latency_ms {
+            self.latency_count += 1;
             let latency_f64 = latency as f64;
-            self.avg_latency_ms = (self.avg_latency_ms * (self.total_requests - 1) as f64
+            self.avg_latency_ms = (self.avg_latency_ms * (self.latency_count - 1) as f64
                 + latency_f64)
-                / self.total_requests as f64;
+                / self.latency_count as f64;
         }
 
         if let Some(tokens) = trace.input_tokens {

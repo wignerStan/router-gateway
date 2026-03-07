@@ -5,14 +5,17 @@ use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 // Local package imports
+use llm_tracing::{MemoryTraceCollector, TracingMiddleware};
 use model_registry::Registry as ModelRegistry;
 use smart_routing::Router as SmartRouter;
+use std::sync::Arc;
 
 #[derive(Clone)]
 #[allow(dead_code)] // Fields will be used when routing logic is implemented
 struct AppState {
     registry: ModelRegistry,
     router: SmartRouter,
+    tracing: TracingMiddleware,
 }
 
 #[tokio::main]
@@ -34,9 +37,15 @@ async fn main() -> anyhow::Result<()> {
     let smart_router = SmartRouter::new();
     tracing::info!("Smart router initialized");
 
+    // Initialize tracing middleware
+    let collector = Arc::new(MemoryTraceCollector::with_default_size());
+    let tracing_middleware = TracingMiddleware::new(collector);
+    tracing::info!("LLM tracing initialized");
+
     let state = AppState {
         registry,
         router: smart_router,
+        tracing: tracing_middleware.clone(),
     };
 
     // Build our application with routes
@@ -45,6 +54,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/health", get(health_check))
         .route("/api/models", get(list_models))
         .route("/api/route", get(route_request))
+        .layer(axum::middleware::from_fn_with_state(
+            tracing_middleware,
+            llm_tracing::tracing_middleware,
+        ))
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 

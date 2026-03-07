@@ -380,6 +380,7 @@ dependencies = [
  "axum",
  "http-body-util",
  "hyper",
+ "llm-tracing",
  "model-registry",
  "serde",
  "serde_json",

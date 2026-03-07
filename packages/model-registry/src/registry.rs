@@ -129,10 +129,24 @@ impl Registry {
                 // Otherwise, we are the fetcher
                 let (tx, _rx) = broadcast::channel(1);
                 pending.insert(model_id.to_string(), tx.clone());
-
-                // Perform the fetch in a separate task or just here
-                // We'll do it here and notify others
                 drop(pending); // Release lock before I/O
+
+                // Ensure cleanup of pending map even on cancellation
+                struct FetchGuard {
+                    id: String,
+                    pending: Arc<Mutex<HashMap<String, broadcast::Sender<FetchResult>>>>,
+                }
+                impl Drop for FetchGuard {
+                    fn drop(&mut self) {
+                        if let Ok(mut pending) = self.pending.try_lock() {
+                            pending.remove(&self.id);
+                        }
+                    }
+                }
+                let _guard = FetchGuard {
+                    id: model_id.to_string(),
+                    pending: Arc::clone(&self.pending_fetches),
+                };
 
                 let fetch_result = self.fetcher.fetch(model_id).await;
 
@@ -153,14 +167,12 @@ impl Registry {
                             );
                             Ok(Some(info))
                         }
-                    },
+                    }
                     Ok(None) => Ok(None),
                     Err(e) => Err(e.to_string()),
                 };
 
-                // Cleanup pending map and broadcast
-                let mut pending = self.pending_fetches.lock().await;
-                pending.remove(model_id);
+                // Broadcast results (guard will remove from map on drop)
                 let _ = tx.send(result_to_broadcast.clone());
 
                 return match result_to_broadcast {
@@ -188,11 +200,12 @@ impl Registry {
             return Ok(HashMap::new());
         }
 
+        use tokio::task::JoinSet;
+        let mut set = JoinSet::new();
         let mut result = HashMap::new();
-        let mut needed = Vec::new();
         let now = Utc::now();
 
-        // Check cache for all models
+        // Check cache and identify needed models
         {
             let cache = self.cache.read().await;
             for model_id in model_ids {
@@ -202,18 +215,23 @@ impl Registry {
                 if let Some(cached) = cache.get(model_id) {
                     if now < cached.expires_at {
                         result.insert(model_id.clone(), cached.info.clone());
-                    } else {
-                        needed.push(model_id.clone());
+                        continue;
                     }
-                } else {
-                    needed.push(model_id.clone());
                 }
+                
+                // Need to fetch this model
+                let registry = self.clone();
+                let id = model_id.clone();
+                set.spawn(async move {
+                    (id.clone(), registry.get(&id).await)
+                });
             }
         }
 
-        // Fetch missing models
-        for id in needed {
-            if let Some(info) = self.get(&id).await? {
+        // Collect parallel results
+        while let Some(res) = set.join_next().await {
+            let (id, fetch_res) = res?;
+            if let Some(info) = fetch_res? {
                 result.insert(id, info);
             }
         }

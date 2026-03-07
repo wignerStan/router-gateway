@@ -17,6 +17,7 @@ anyhow = "1.0"
 # Local packages
 smart-routing = { path = "../../packages/smart-routing" }
 model-registry = { path = "../../packages/model-registry" }
+llm-tracing = { path = "../../packages/tracing" }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
