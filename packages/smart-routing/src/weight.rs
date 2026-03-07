@@ -39,10 +39,71 @@ pub struct DefaultWeightCalculator {
     config: WeightConfig,
 }
 
+/// Data availability assessment for planner mode adaptation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DataAvailability {
+    /// Full data available - all metrics populated with sufficient history
+    Full,
+    /// Sparse data - some metrics missing or insufficient history
+    Sparse,
+    /// Missing state - critical metrics unavailable
+    Missing,
+}
+
+/// Planner mode for weight calculation adaptation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlannerMode {
+    /// Learned mode - use full weight calculation with all factors
+    Learned,
+    /// Heuristic mode - simplified calculation using available metrics
+    Heuristic,
+    /// Safe weighted mode - conservative defaults for missing state
+    SafeWeighted,
+    /// Deterministic fallback - predictable selection when errors occur
+    Deterministic,
+}
+
 impl DefaultWeightCalculator {
     /// Create a new weight calculator
     pub fn new(config: WeightConfig) -> Self {
         Self { config }
+    }
+
+    /// Assess data availability from metrics
+    fn assess_data_availability(&self, metrics: Option<&AuthMetrics>) -> DataAvailability {
+        match metrics {
+            None => DataAvailability::Missing,
+            Some(m) => {
+                // Check for sufficient data
+                let has_requests = m.total_requests >= 10;
+                let has_latency = m.avg_latency_ms > 0.0;
+                let has_success_rate = m.success_rate >= 0.0;
+
+                if has_requests && has_latency && has_success_rate {
+                    DataAvailability::Full
+                } else if m.total_requests > 0 || has_latency || has_success_rate {
+                    DataAvailability::Sparse
+                } else {
+                    DataAvailability::Missing
+                }
+            },
+        }
+    }
+
+    /// Select planner mode based on data availability and error state
+    fn select_planner_mode(&self, data_availability: DataAvailability, health: HealthStatus) -> PlannerMode {
+        match (data_availability, health) {
+            // Full data with healthy/degraded state -> Learned mode
+            (DataAvailability::Full, HealthStatus::Healthy | HealthStatus::Degraded) => {
+                PlannerMode::Learned
+            },
+            // Sparse data -> Heuristic mode
+            (DataAvailability::Sparse, _) => PlannerMode::Heuristic,
+            // Missing state -> Safe weighted mode
+            (DataAvailability::Missing, _) => PlannerMode::SafeWeighted,
+            // Unhealthy with full data -> Safe weighted (conservative)
+            (DataAvailability::Full, HealthStatus::Unhealthy) => PlannerMode::SafeWeighted,
+        }
     }
 
     /// Calculate success rate score
@@ -114,9 +175,35 @@ impl DefaultWeightCalculator {
 }
 
 impl WeightCalculator for DefaultWeightCalculator {
-    /// Calculate credential weight
+    /// Calculate credential weight with planner mode adaptation
     /// Higher weight = higher selection probability
     fn calculate(
+        &self,
+        auth: &AuthInfo,
+        metrics: Option<&AuthMetrics>,
+        health: HealthStatus,
+    ) -> f64 {
+        // Assess data availability and select planner mode
+        let data_availability = self.assess_data_availability(metrics);
+        let planner_mode = self.select_planner_mode(data_availability, health);
+
+        // Calculate weight based on planner mode
+        match planner_mode {
+            PlannerMode::Learned => self.calculate_learned(auth, metrics, health),
+            PlannerMode::Heuristic => self.calculate_heuristic(auth, metrics, health),
+            PlannerMode::SafeWeighted => self.calculate_safe_weighted(auth, metrics, health),
+            PlannerMode::Deterministic => self.calculate_deterministic(auth, health),
+        }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+impl DefaultWeightCalculator {
+    /// Learned mode: Full weight calculation with all factors
+    fn calculate_learned(
         &self,
         auth: &AuthInfo,
         metrics: Option<&AuthMetrics>,
@@ -169,8 +256,97 @@ impl WeightCalculator for DefaultWeightCalculator {
         total_weight.max(0.0)
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
+    /// Heuristic mode: Simplified calculation using available metrics
+    fn calculate_heuristic(
+        &self,
+        auth: &AuthInfo,
+        metrics: Option<&AuthMetrics>,
+        health: HealthStatus,
+    ) -> f64 {
+        // Use simplified scoring with available data
+        let health_score = self.calculate_health_score(health);
+        let priority_score = self.calculate_priority_score(auth);
+
+        // Use available metrics if present, otherwise defaults
+        let success_score = metrics.map_or(0.5, |m| m.success_rate);
+        let latency_score = metrics.map_or(0.5, |m| {
+            if m.avg_latency_ms > 0.0 {
+                (1.0 / (1.0 + m.avg_latency_ms / 1000.0)).clamp(0.0, 1.0)
+            } else {
+                0.5
+            }
+        });
+
+        // Simplified weighted sum (equal weights for available factors)
+        let total_weight = (success_score + latency_score + health_score + priority_score) / 4.0;
+
+        // Apply penalties
+        let mut weight = total_weight;
+        if auth.quota_exceeded {
+            weight *= self.config.quota_exceeded_penalty;
+        }
+        if auth.unavailable {
+            weight *= self.config.unavailable_penalty;
+        }
+
+        weight.max(0.0)
+    }
+
+    /// Safe weighted mode: Conservative defaults for missing state
+    fn calculate_safe_weighted(
+        &self,
+        auth: &AuthInfo,
+        _metrics: Option<&AuthMetrics>,
+        health: HealthStatus,
+    ) -> f64 {
+        // Use conservative baseline with health and priority only
+        let health_score = self.calculate_health_score(health);
+        let priority_score = self.calculate_priority_score(auth);
+
+        // Conservative scoring - emphasize stability
+        let total_weight = health_score * 0.7 + priority_score * 0.3;
+
+        // Apply strong penalties for any issues
+        let mut weight = total_weight;
+        match health {
+            HealthStatus::Unhealthy => {
+                weight *= self.config.unhealthy_penalty * 0.5; // Extra penalty
+            },
+            HealthStatus::Degraded => {
+                weight *= self.config.degraded_penalty;
+            },
+            _ => {},
+        }
+
+        if auth.quota_exceeded {
+            weight *= self.config.quota_exceeded_penalty * 0.5;
+        }
+        if auth.unavailable {
+            weight *= self.config.unavailable_penalty * 0.1;
+        }
+
+        weight.max(0.0)
+    }
+
+    /// Deterministic fallback: Predictable selection when errors occur
+    fn calculate_deterministic(&self, auth: &AuthInfo, health: HealthStatus) -> f64 {
+        // Use only static, deterministic factors
+        let priority_score = self.calculate_priority_score(auth);
+        let health_score = match health {
+            HealthStatus::Healthy => 1.0,
+            HealthStatus::Degraded => 0.5,
+            HealthStatus::Unhealthy => 0.1,
+        };
+
+        // Simple, predictable calculation
+        let mut weight = (priority_score + health_score) / 2.0;
+
+        // Apply binary penalties (either available or not)
+        if auth.quota_exceeded || auth.unavailable || matches!(health, HealthStatus::Unhealthy) {
+            weight = 0.0;
+        }
+
+        weight.max(0.0)
     }
 }
 

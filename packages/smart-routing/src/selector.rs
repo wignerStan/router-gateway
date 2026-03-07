@@ -1,6 +1,6 @@
 use crate::config::SmartRoutingConfig;
-use crate::health::HealthManager;
-use crate::metrics::MetricsCollector;
+use crate::health::{HealthManager, HealthStatus};
+use crate::metrics::{AuthMetrics, MetricsCollector};
 use crate::policy_weight::PolicyAwareWeightCalculator;
 use crate::weight::{AuthInfo, WeightCalculator};
 use model_registry::{ModelInfo, PolicyContext, PolicyMatcher, PolicyRegistry};
@@ -355,6 +355,16 @@ impl Clone for SmartSelector {
             health: HealthManager::new(self.config.health.clone()),
             policy_matcher: self.policy_matcher.clone(),
         }
+    }
+}
+
+impl WeightCalculator for SmartSelector {
+    fn calculate(&self, auth: &AuthInfo, metrics: Option<&AuthMetrics>, health: HealthStatus) -> f64 {
+        self.calculator.calculate(auth, metrics, health)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
