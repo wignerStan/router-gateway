@@ -1,0 +1,171 @@
+{
+  "policies": [
+    {
+      "id": "vision_required",
+      "name": "Vision Required",
+      "priority": 30,
+      "enabled": true,
+      "filters": {
+        "capabilities": [
+          {
+            "capability": "vision",
+            "mode": "require"
+          }
+        ]
+      },
+      "action": {
+        "action_type": "prefer",
+        "weight_factor": 1.5,
+        "preferred_providers": ["anthropic", "google"]
+      },
+      "conditions": []
+    },
+    {
+      "id": "thinking_required",
+      "name": "Extended Thinking Required",
+      "priority": 30,
+      "enabled": true,
+      "filters": {
+        "capabilities": [
+          {
+            "capability": "thinking",
+            "mode": "require"
+          }
+        ]
+      },
+      "action": {
+        "action_type": "prefer",
+        "weight_factor": 1.5,
+        "preferred_providers": ["anthropic"]
+      },
+      "conditions": []
+    },
+    {
+      "id": "large_context_routing",
+      "name": "Large Context Routing",
+      "priority": 25,
+      "enabled": true,
+      "filters": {
+        "context_windows": ["large", "ultra"]
+      },
+      "action": {
+        "action_type": "prefer",
+        "weight_factor": 1.3,
+        "min_context_window": 100000
+      },
+      "conditions": [
+        {
+          "condition_type": "token_count",
+          "value": "50000",
+          "operator": "gte"
+        }
+      ]
+    },
+    {
+      "id": "cost_optimization",
+      "name": "Cost Optimization",
+      "priority": 10,
+      "enabled": true,
+      "filters": {
+        "costs": ["economy", "standard"],
+        "tiers": ["fast", "standard"]
+      },
+      "action": {
+        "action_type": "weight",
+        "weight_factor": 1.5
+      },
+      "conditions": [
+        {
+          "condition_type": "time_of_day",
+          "value": "22,23,0,1,2,3,4,5,6",
+          "operator": "in"
+        }
+      ]
+    },
+    {
+      "id": "performance_first",
+      "name": "Performance First",
+      "priority": 15,
+      "enabled": true,
+      "filters": {
+        "tiers": ["fast"]
+      },
+      "action": {
+        "action_type": "prefer",
+        "weight_factor": 1.4
+      },
+      "conditions": []
+    },
+    {
+      "id": "quality_first",
+      "name": "Quality First",
+      "priority": 20,
+      "enabled": true,
+      "filters": {
+        "tiers": ["flagship", "standard"]
+      },
+      "action": {
+        "action_type": "prefer",
+        "weight_factor": 1.2,
+        "max_cost_per_million": 50.0
+      },
+      "conditions": []
+    },
+    {
+      "id": "prefer_anthropic",
+      "name": "Prefer Anthropic",
+      "priority": 12,
+      "enabled": true,
+      "filters": {
+        "providers": ["anthropic"]
+      },
+      "action": {
+        "action_type": "weight",
+        "weight_factor": 1.2
+      },
+      "conditions": []
+    },
+    {
+      "id": "prefer_openai",
+      "name": "Prefer OpenAI",
+      "priority": 12,
+      "enabled": true,
+      "filters": {
+        "providers": ["openai"]
+      },
+      "action": {
+        "action_type": "weight",
+        "weight_factor": 1.2
+      },
+      "conditions": []
+    },
+    {
+      "id": "prefer_google",
+      "name": "Prefer Google",
+      "priority": 12,
+      "enabled": true,
+      "filters": {
+        "providers": ["google"]
+      },
+      "action": {
+        "action_type": "weight",
+        "weight_factor": 1.2
+      },
+      "conditions": []
+    },
+    {
+      "id": "block_ultra_premium",
+      "name": "Block Ultra Premium",
+      "priority": 100,
+      "enabled": false,
+      "filters": {
+        "costs": ["ultra_premium"]
+      },
+      "action": {
+        "action_type": "block",
+        "weight_factor": 0.0
+      },
+      "conditions": []
+    }
+  ]
+}
