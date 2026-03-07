@@ -1,249 +1,405 @@
-# Justfile for TypeScript Workspace Projects
-# Production-ready task runner for comprehensive development operations
-# Aligned with rust_v1.0 standards
+# Justfile for Rust Workspace Projects
+# Production-ready task runner with Tiered Verification System
+# Aligned with Agentic Native principles
 
 set shell := ["bash", "-c"]
 
+# Workspace members for quick reference
+members := "apps/cli apps/gateway packages/smart-routing packages/model-registry packages/tracing"
+
 # ============================================
-# Setup & Install
+# DEFAULT & HELP
 # ============================================
 
-# Install all dependencies
+# Default: show available commands
+default:
+    @just --list
+
+# Show help with categories
+help:
+    @echo "╔════════════════════════════════════════════════════════════╗"
+    @echo "║              GATEWAY WORKSPACE - JUST COMMANDS              ║"
+    @echo "╠════════════════════════════════════════════════════════════╣"
+    @echo "║ TIER 1 (FAST <5s):  just qa                                ║"
+    @echo "║ TIER 2 (SLOW >5s):  just qa-full                           ║"
+    @echo "╠════════════════════════════════════════════════════════════╣"
+    @echo "║ DEV:     start, dev, cli, watch                            ║"
+    @echo "║ BUILD:   build, build-release, docs                        ║"
+    @echo "║ TEST:    test, test-package, test-coverage                 ║"
+    @echo "║ QUALITY: fmt, lint, type-check, qa, qa-full                ║"
+    @echo "║ SECURITY: audit, security-scan                             ║"
+    @echo "║ UTILITY: members, graph, outdated, env                     ║"
+    @echo "║ JQ:      jq-members, jq-deps, jq-features, jq-manifest     ║"
+    @echo "╚════════════════════════════════════════════════════════════╝"
+
+# ============================================
+# TIERED VERIFICATION SYSTEM
+# ============================================
+
+# Tier 1: Fast feedback (<5s) - Use for pre-commit
+qa: fmt-check lint-fast type-check
+    @echo "✅ Tier 1 QA passed (fast checks)"
+
+# Tier 2: Comprehensive (>5s) - Use for pre-push / CI
+qa-full: qa test security-audit
+    @echo "✅ Tier 2 QA passed (full verification)"
+
+# ============================================
+# SETUP & INSTALL
+# ============================================
+
+# Install all dependencies and setup hooks
 install:
-    bun install
+    cargo fetch
     pre-commit install --hook-type pre-push --hook-type commit-msg
 
 # Install development tools
 install-dev:
-    bun install
-    bun install -d @types/node typescript tsx
+    cargo fetch
+    rustup component add clippy rustfmt
 
 # ============================================
-# Workspace Operations
+# FAST DEVELOPMENT COMMANDS (<5s)
 # ============================================
 
-# List all workspace members
-members:
-    bun pm ls
+# Type check workspace (fast feedback)
+type-check:
+    cargo check --all
 
-# Show dependency graph
-graph:
-    echo "Dependency graph for workspace:"
-    echo "bin --> api --> core"
-    echo "frontend --> api --> core"
-    echo "backend  --> api --> core"
+# Format all code
+fmt:
+    cargo fmt --all
 
-# Show workspace structure
-structure:
-    echo "Workspace structure:"
-    find packages -name "package.json" 2>/dev/null || echo "No packages found"
+# Check formatting (fast)
+fmt-check:
+    cargo fmt --all -- --check
 
-# Update all dependencies
-update:
-    bun update
+# Fast lint (warnings only, no strict)
+lint-fast:
+    cargo clippy --all-targets --all-features
 
-# Check for outdated dependencies
-outdated:
-    bun pm outdated
+# Strict lint (treat warnings as errors)
+lint:
+    cargo clippy --all-targets --all-features -- -D warnings
 
-# Show dependency tree
-tree:
-    echo "Use: bun pm ls to view dependencies"
+# Run clippy with auto-fix
+lint-fix:
+    cargo clippy --all-targets --all-features --fix --allow-dirty
 
 # ============================================
-# Development Tasks
+# SLOW DEVELOPMENT COMMANDS (>5s)
 # ============================================
 
-# Build all packages
+# Build all packages (debug)
 build:
-    bun run build
+    cargo build
+
+# Build all packages (release)
+build-release:
+    cargo build --release
+
+# Build specific package
+build-package PACKAGE:
+    cargo build -p {{PACKAGE}}
 
 # Build with watch mode
+watch:
+    cargo watch -x "check --all" -x "test --all"
+
+# Build and watch
 build-watch:
-    bun run --filter '*' dev
-
-# Run the app (bin package)
-start:
-    cd packages/bin && bun run start
-
-# Run in development mode with watch
-dev:
-    cd packages/bin && bun run dev
+    cargo watch -x build
 
 # ============================================
-# Testing Tasks
+# TESTING
 # ============================================
 
 # Run all tests
 test:
-    bun run test
-
-# Run tests with watch mode
-test-watch:
-    bun run --filter '*' test:watch
-
-# Run tests with coverage
-test-coverage:
-    bun run --filter '*' test:coverage
+    cargo test --all
 
 # Run tests with verbose output
 test-verbose:
-    bun test --verbose
+    cargo test --all -- --nocapture
+
+# Fast unit tests only (skip integration tests)
+test-fast:
+    cargo test --all --lib
+
+# Run tests with coverage (requires cargo-tarpaulin)
+test-coverage:
+    cargo tarpaulin --all --out Xml --output-dir coverage
+
+# Run tests for specific package
+test-package PACKAGE:
+    cargo test -p {{PACKAGE}}
+
+# Run doc tests
+test-doc:
+    cargo test --doc --all
+
+# Run specific test by name pattern
+test-filter PATTERN:
+    cargo test --all {{PATTERN}}
+
+# Run smart-routing tests
+test-routing:
+    cargo test -p smart-routing
+
+# Run model-registry tests
+test-registry:
+    cargo test -p model-registry
+
+# Run tracing tests
+test-tracing:
+    cargo test -p llm-tracing
+
+# Run gateway tests
+test-gateway:
+    cargo test -p gateway
 
 # ============================================
-# Quality Tasks
+# RUNNING APPLICATIONS
 # ============================================
 
-# Format all code
-fmt:
-    prettier --write "**/*.{ts,js,json,md,yml,yaml}"
+# Run the gateway app
+start:
+    cargo run --bin gateway
 
-# Check formatting
-fmt-check:
-    prettier --check "**/*.{ts,js,json,md,yml,yaml}"
+# Run in development mode with debug logging
+dev:
+    RUST_LOG=debug RUST_BACKTRACE=1 cargo run --bin gateway
 
-# Lint all code
-lint:
-    bun run lint
+# Run CLI tool
+cli *ARGS:
+    cargo run --bin cli -- {{ARGS}}
 
-# Lint and fix
-lint-fix:
-    bun run --filter '*' lint:fix
-
-# Type check
-type-check:
-    bun run type-check
-
-# All quality checks
-qa:
-    just fmt && just lint && just type-check && just test
-
-# Full QA suite
-qa-full:
-    just fmt && just lint && just type-check && just test && just security-scan && just audit
+# Run gateway with specific config
+run-config CONFIG:
+    cargo run --bin gateway -- --config {{CONFIG}}
 
 # ============================================
-# Security Tasks
+# SECURITY
 # ============================================
+
+# Audit dependencies for vulnerabilities
+audit:
+    cargo audit
 
 # Security scan (gitleaks)
 security-scan:
     gitleaks detect --source . --verbose --report-path gitleaks-report.json
 
-# Audit dependencies
-audit:
-    bun pm audit
+# Combined security check
+security-audit: audit security-scan
+    @echo "✅ Security audit complete"
+
+# Check for security issues only
+security:
+    just security-audit
+
+# ============================================
+# DOCUMENTATION
+# ============================================
+
+# Build documentation
+docs:
+    cargo doc --no-deps --all
+
+# Open documentation in browser
+docs-open:
+    cargo doc --no-deps --all --open
+
+# Build docs for specific package
+docs-package PACKAGE:
+    cargo doc --no-deps -p {{PACKAGE}}
+
+# ============================================
+# JQ COMMANDS FOR DEVELOPMENT
+# ============================================
+
+# List all workspace members (json output)
+jq-members:
+    cargo metadata --no-deps --format-version 1 | jq '.packages[] | {name, version, manifest_path}'
+
+# Show dependency tree as JSON
+jq-deps:
+    cargo metadata --format-version 1 | jq '.resolve.nodes[] | {id, deps: [.deps[].name]}'
+
+# List all features available in workspace
+jq-features:
+    cargo metadata --format-version 1 | jq '[.packages[] | {name, features: (.features | keys)}]'
+
+# Show manifest summary
+jq-manifest:
+    cargo metadata --no-deps --format-version 1 | jq '{workspace_members: [.packages[].name], total_packages: (.packages | length)}'
+
+# Find unused dependencies
+jq-unused:
+    cargo metadata --format-version 1 | jq '.packages[] | {name, dependencies: [.dependencies[].name]}'
+
+# Show all dependencies with versions
+jq-deps-versions:
+    cargo metadata --format-version 1 | jq '.packages[] | select(.id | startswith("registry+")) | {name, version}' | sort -u
+
+# Get package info by name
+jq-package NAME:
+    cargo metadata --no-deps --format-version 1 | jq '.packages[] | select(.name == "{{NAME}}")'
+
+# Show compilation targets
+jq-targets:
+    cargo metadata --no-deps --format-version 1 | jq '.packages[] | {name, targets: [.targets[].name]}'
+
+# ============================================
+# WORKSPACE OPERATIONS
+# ============================================
+
+# List all workspace members
+members:
+    @echo "📦 Workspace Members:"
+    @cargo metadata --no-deps --format-version 1 | jq -r '.packages[].name' | sed 's/^/  /'
+
+# Show dependency graph
+graph:
+    cargo tree --duplicates || cargo tree
+
+# Show workspace structure
+structure:
+    @echo "📁 Workspace Structure:"
+    @find packages apps -name "Cargo.toml" 2>/dev/null | head -20
+
+# Update all dependencies
+update:
+    cargo update
+
+# Check for outdated dependencies
+outdated:
+    cargo outdated 2>/dev/null || cargo update --dry-run
 
 # Check for unused dependencies
 check-unused:
-    echo "Manual check: review package.json dependencies vs imports"
+    cargo machete 2>/dev/null || cargo tree --duplicates
+
+# Generate lockfile
+lockfile:
+    cargo generate-lockfile
 
 # ============================================
-# CI/CD Tasks
+# PRE-COMMIT / PRE-PUSH HOOKS
+# ============================================
+
+# Pre-commit: fast checks only
+pre-commit: fmt-check lint-fast type-check
+    @echo "✅ Pre-commit checks passed"
+
+# Pre-push: full verification
+pre-push: qa-full
+    @echo "✅ Pre-push checks passed"
+
+# ============================================
+# CI/CD TASKS
 # ============================================
 
 # Full CI pipeline
-ci-full:
-    just ci-lint && just ci-type-check && just ci-test && just ci-build
+ci-full: ci-fmt ci-lint ci-test ci-build
+    @echo "✅ CI pipeline complete"
 
-# CI lint
+# CI format check
+ci-fmt:
+    cargo fmt --all -- --check
+
+# CI lint (strict)
 ci-lint:
-    bun run lint
+    cargo clippy --all-targets --all-features -- -D warnings -D clippy::all
+
+# CI test (all features)
+ci-test:
+    cargo test --all --all-features
+
+# CI build (release)
+ci-build:
+    cargo build --release
 
 # CI type check
 ci-type-check:
-    bun run type-check
-
-# CI test
-ci-test:
-    bun run test
-
-# CI build
-ci-build:
-    bun run build
-
-# CI format
-ci-fmt:
-    prettier --check "**/*.{ts,js,json,md,yml,yaml}"
+    cargo check --all --all-features
 
 # ============================================
-# Pre-push Checks
-# ============================================
-
-# Pre-push validation
-pre-push:
-    bun run lint
-    bun run type-check
-    bun run test
-    bun run build
-
-# ============================================
-# Clean Tasks
+# CLEAN TASKS
 # ============================================
 
 # Clean build artifacts
 clean:
-    rm -rf packages/*/dist
+    cargo clean
 
-# Clean all artifacts
-clean-all:
-    rm -rf packages/*/dist
-    rm -rf packages/*/node_modules
-    rm -rf node_modules
-    rm -rf bun.lockb
-    rm -rf coverage
+# Clean target directory for specific package
+clean-package PACKAGE:
+    rm -rf target/debug/deps/{{PACKAGE}}*
+    rm -rf target/release/deps/{{PACKAGE}}*
+
+# Clean generated docs
+clean-docs:
+    rm -rf target/doc
 
 # ============================================
-# Environment Tasks
+# ENVIRONMENT
 # ============================================
 
-# Set development environment
-dev-env:
-    export NODE_ENV=development
-    export LOG_LEVEL=debug
-
-# Set production environment
-prod-env:
-    export NODE_ENV=production
-    export LOG_LEVEL=info
-
-# Show environment
+# Show environment info
 env:
-    echo "NODE_ENV=${NODE_ENV:-not set}"
-    echo "LOG_LEVEL=${LOG_LEVEL:-not set}"
-
-# ============================================
-# Utility Tasks
-# ============================================
+    @echo "🔧 Environment:"
+    @echo "  RUST_LOG: ${RUST_LOG:-not set}"
+    @echo "  RUST_BACKTRACE: ${RUST_BACKTRACE:-not set}"
+    @echo "  RUSTFLAGS: ${RUSTFLAGS:-not set}"
 
 # Environment check
 env-check:
-    bun --version
-    node --version 2>/dev/null || echo "Node not available (Bun only)"
-    just --version
-    echo "Working directory: $(pwd)"
-
-# Generate lockfile
-lockfile:
-    bun install --frozen-lockfile
+    @rustc --version
+    @cargo --version
+    @rustup --version 2>/dev/null || echo "rustup not available"
+    @just --version
 
 # ============================================
-# Help
+# UTILITY
 # ============================================
 
-# Show help
-help:
-    @just --list
+# Run specific example
+run-example EXAMPLE:
+    cargo run --example {{EXAMPLE}}
 
-# Default task
-default:
-    @just --list
+# Check compile times
+check-time:
+    cargo clean
+    time cargo build --release
+
+# Show binary sizes
+binary-sizes:
+    @echo "📊 Binary Sizes:"
+    @ls -lh target/debug/{gateway,cli} 2>/dev/null || echo "Build first with: just build"
+
+# Quick status check
+status: members env
+    @echo ""
+    @echo "📊 Build Status:"
+    @cargo check --all 2>&1 | tail -5
 
 # ============================================
-# Notes
+# NOTES
 # ============================================
 
-# All tasks are designed for Bun runtime
-# Use `just <task> --help` to see task-specific help
-# Tasks can be chained: `just fmt && lint && test`
-# For more information, see: https://just.systems/man/en/
+# Tiered Verification:
+#   Tier 1 (Fast <5s):  just qa           -> fmt-check, lint-fast, type-check
+#   Tier 2 (Slow >5s):  just qa-full      -> qa, test, security-audit
+#
+# Quick Development Flow:
+#   just qa              # Fast feedback during development
+#   just test            # Run tests before committing
+#   just qa-full         # Full verification before push
+#
+# JQ Commands for Analysis:
+#   just jq-members      # List packages as JSON
+#   just jq-deps         # Dependency tree as JSON
+#   just jq-features     # All features available
+#   just jq-package core # Get specific package info
+#
+# For more information: https://just.systems/man/en/

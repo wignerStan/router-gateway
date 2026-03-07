@@ -15,30 +15,37 @@ on:
 jobs:
   test:
     name: Run Tests
-    runs-on: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        node-version: [18, 20]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        rust: [stable]
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          bun-version: latest
+          toolchain: ${{ matrix.rust }}
 
-      - name: Install dependencies
-        run: bun install
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
-      - name: Run lint
-        run: bun run lint
-
-      - name: Run type-check
-        run: bun run type-check
+      - name: Install just
+        uses: extractions/setup-just@v2
 
       - name: Run tests
-        run: bun test
+        run: just ci-test
 
   lint:
     name: Run Linters
@@ -47,30 +54,87 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
-      - name: Install dependencies
-        run: bun install
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
-      - name: Run lint
-        run: bun run lint
+      - name: Install just
+        uses: extractions/setup-just@v2
 
-  build:
-    name: Build Project
-    runs-on: [ubuntu-latest, macos-latest, windows-latest]
+      - name: Run format check
+        run: just ci-fmt
+
+      - name: Run clippy
+        run: just ci-lint
+
+  type-check:
+    name: Type Check
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Install dependencies
-        run: bun install
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
-      - name: Build workspace
-        run: bun run build
+      - name: Install just
+        uses: extractions/setup-just@v2
+
+      - name: Run type-check
+        run: just ci-type-check
+
+  build:
+    name: Build Project
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-release-
+
+      - name: Install just
+        uses: extractions/setup-just@v2
+
+      - name: Build packages
+        run: just ci-build
 
   security-audit:
     name: Security Audit
@@ -79,11 +143,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Audit dependencies
-        run: bun pm audit
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run Security Audit
+        run: cargo audit
 
   gitleaks:
     name: Gitleaks Scan
@@ -104,13 +171,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Install dependencies
-        run: bun install
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
-      - name: Generate TypeDoc (optional)
-        run: |
-          bun install -g typedoc
-          typedoc --out docs/api --exclude '**/*.test.ts'
+      - name: Install just
+        uses: extractions/setup-just@v2
+
+      - name: Build documentation
+        run: just docs
