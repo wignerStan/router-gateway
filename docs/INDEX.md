@@ -26,6 +26,8 @@ Welcome to the Gateway project documentation. This directory follows the [Diáta
 
 ### Architecture
 - [System Architecture](./explanations/architecture.md) - High-level design overview
+- [Routing Strategy Analysis](./explanations/routing-strategy-analysis.md) - Current-state analysis and improvement roadmap for the router
+- [Auto Smart Routing Design](./explanations/auto-smart-routing-design.md) - Detailed implementable design for automatic route selection
 - [Architecture Decision Records](./explanations/adr/) - Key design decisions
 
 ## Additional Resources
