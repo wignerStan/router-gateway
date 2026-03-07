@@ -424,26 +424,37 @@ mod tests {
 
     #[test]
     fn test_bandit_diversity_penalty() {
-        let mut policy = BanditPolicy::new();
+        // Use a higher diversity_weight and lower min_samples to ensure penalty is applied
+        let config = BanditConfig {
+            diversity_weight: 0.5,      // Higher weight for more pronounced penalty effect
+            min_samples_for_thompson: 1, // Ensure penalty is applied after first result
+            ..Default::default()
+        };
+        let mut policy = BanditPolicy::with_config(config);
 
-        policy.record_result("route1", true, 0.9);
-        policy.record_result("route2", true, 0.9);
+        // Record enough results to exceed min_samples_for_thompson
+        for _ in 0..5 {
+            policy.record_result("route1", true, 0.95);
+            policy.record_result("route2", true, 0.95);
+        }
 
-        // Set diversity penalty on route2
-        policy.set_diversity_penalty("route2", 0.5);
+        // Set high diversity penalty on route2
+        policy.set_diversity_penalty("route2", 1.0);
 
         // route1 should be selected more often due to penalty on route2
         let routes = vec!["route1".to_string(), "route2".to_string()];
 
         let mut count1 = 0;
-        for _ in 0..50 {
+        // Use larger sample size for statistical significance
+        for _ in 0..500 {
             if policy.select_route(&routes) == Some("route1".to_string()) {
                 count1 += 1;
             }
         }
 
-        // route1 should be selected more than 50% of the time
-        assert!(count1 > 25);
+        // With penalty of 1.0 and diversity_weight of 0.5, route2 gets a 0.5 penalty
+        // This should give route1 a measurable advantage (>55% selection rate)
+        assert!(count1 > 275, "route1 selected {} out of 500 times, expected > 275", count1);
     }
 
     #[test]
