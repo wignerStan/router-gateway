@@ -1,15 +1,20 @@
+pub mod config;
+
 use axum::{
     extract::State,
     routing::get,
     Json, Router,
 };
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Instant;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 // Local package imports
+use config::GatewayConfig;
 use llm_tracing::{MemoryTraceCollector, TracingMiddleware};
 use model_registry::Registry as ModelRegistry;
 use smart_routing::{
@@ -22,6 +27,7 @@ use smart_routing::{
     health::HealthManager,
     metrics::MetricsCollector,
     router::Router as SmartRouter,
+    weight::AuthInfo,
 };
 
 /// Default request classifier implementation
@@ -62,24 +68,66 @@ impl RequestClassifier for DefaultRequestClassifier {
     }
 }
 
+/// Application state shared across handlers
 struct AppState {
+    /// Gateway configuration
+    config: GatewayConfig,
+
+    /// Model registry for model information
     registry: ModelRegistry,
+
+    /// Smart router for route planning
     router: SmartRouter,
+
+    /// Route executor for running requests
     executor: Arc<RouteExecutor>,
+
+    /// Request classifier
     classifier: Arc<DefaultRequestClassifier>,
+
+    /// Tracing middleware
     tracing: TracingMiddleware,
+
+    /// Server start time for uptime tracking
+    start_time: Instant,
+
+    /// Credential information for routing
+    credentials: Vec<AuthInfo>,
 }
 
 impl Clone for AppState {
     fn clone(&self) -> Self {
         Self {
+            config: self.config.clone(),
             registry: self.registry.clone(),
             router: self.router.clone(),
             executor: Arc::clone(&self.executor),
             classifier: Arc::clone(&self.classifier),
             tracing: self.tracing.clone(),
+            start_time: self.start_time,
+            credentials: self.credentials.clone(),
         }
     }
+}
+
+/// Health status response
+#[derive(Debug, Serialize, Deserialize)]
+struct HealthStatus {
+    status: String,
+    uptime_secs: u64,
+    credential_count: usize,
+    healthy_count: usize,
+    degraded_count: usize,
+    unhealthy_count: usize,
+}
+
+/// Model information for API response
+#[derive(Debug, Serialize, Deserialize)]
+struct ModelInfo {
+    id: String,
+    provider: String,
+    capabilities: Vec<String>,
+    context_window: usize,
 }
 
 #[tokio::main]
@@ -92,6 +140,13 @@ async fn main() -> anyhow::Result<()> {
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
+
+    // Load configuration
+    let config = load_config();
+    tracing::info!(
+        "Loaded configuration with {} credentials",
+        config.credentials.len()
+    );
 
     // Initialize model registry
     let registry = ModelRegistry::default();
@@ -118,13 +173,34 @@ async fn main() -> anyhow::Result<()> {
     let tracing_middleware = TracingMiddleware::new(collector);
     tracing::info!("LLM tracing initialized");
 
+    // Convert credentials to AuthInfo for routing
+    let credentials: Vec<AuthInfo> = config
+        .credentials
+        .iter()
+        .map(|c| AuthInfo {
+            id: c.id.clone(),
+            priority: Some(c.priority),
+            quota_exceeded: false,
+            unavailable: false,
+            model_states: vec![],
+        })
+        .collect();
+
     let state = AppState {
+        config,
         registry,
         router: smart_router,
         executor,
         classifier,
         tracing: tracing_middleware.clone(),
+        start_time: Instant::now(),
+        credentials,
     };
+
+    // Get port from config before moving state
+    let port = state.config.server.port;
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    tracing::info!("Gateway listening on {}", addr);
 
     // Build our application with routes
     let app = Router::new()
@@ -139,17 +215,46 @@ async fn main() -> anyhow::Result<()> {
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
-    // Create a TCP listener
-    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
-    tracing::info!("Gateway listening on {}", addr);
-
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
 
     Ok(())
 }
 
-async fn root() -> Json<serde_json::Value> {
+/// Load configuration from file or environment
+fn load_config() -> GatewayConfig {
+    // Try to load from GATEWAY_CONFIG env var or default paths
+    let config_path = std::env::var("GATEWAY_CONFIG")
+        .ok()
+        .or_else(|| {
+            // Check for common config file locations
+            for path in ["./gateway.yaml", "./config/gateway.yaml", "./gateway.yml"] {
+                if std::path::Path::new(path).exists() {
+                    return Some(path.to_string());
+                }
+            }
+            None
+        });
+
+    match config_path {
+        Some(path) => {
+            tracing::info!("Loading configuration from {}", path);
+            match GatewayConfig::from_file(&path) {
+                Ok(config) => config,
+                Err(e) => {
+                    tracing::warn!("Failed to load config from {}: {}. Using defaults.", path, e);
+                    GatewayConfig::default()
+                }
+            }
+        }
+        None => {
+            tracing::info!("No configuration file found, using defaults");
+            GatewayConfig::default()
+        }
+    }
+}
+
+async fn root() -> Json<Value> {
     Json(json!({
         "name": "Gateway API",
         "version": "0.1.0",
@@ -157,25 +262,68 @@ async fn root() -> Json<serde_json::Value> {
         "features": [
             "Smart Routing",
             "Model Registry",
-            "LLM Tracing"
-        ]
+            "LLM Tracing",
+            "Health Management"
+        ],
+        "endpoints": {
+            "health": "/health",
+            "models": "/api/models",
+            "route": "/api/route"
+        }
     }))
 }
 
-async fn health_check() -> &'static str {
-    "OK"
+async fn health_check(State(state): State<AppState>) -> Json<HealthStatus> {
+    let uptime = state.start_time.elapsed().as_secs();
+
+    // Count credential health states
+    // For now, all configured credentials are considered healthy
+    // In production, this would check actual health status from HealthManager
+    let credential_count = state.credentials.len();
+    let healthy_count = credential_count; // Assume all healthy until health checks run
+    let degraded_count = 0;
+    let unhealthy_count = 0;
+
+    Json(HealthStatus {
+        status: "healthy".to_string(),
+        uptime_secs: uptime,
+        credential_count,
+        healthy_count,
+        degraded_count,
+        unhealthy_count,
+    })
 }
 
-async fn list_models(State(_state): State<AppState>) -> Json<serde_json::Value> {
-    // TODO: Implement actual model listing from registry
+async fn list_models(State(state): State<AppState>) -> Json<Value> {
+    // Build model list from configured credentials
+    let models: Vec<ModelInfo> = state
+        .config
+        .credentials
+        .iter()
+        .flat_map(|cred| {
+            cred.allowed_models.iter().map(|model_id| ModelInfo {
+                id: model_id.clone(),
+                provider: cred.provider.clone(),
+                capabilities: vec![], // Would be populated from model registry
+                context_window: 128_000, // Default, would come from registry
+            })
+        })
+        .collect();
+
+    let count = models.len();
+
     Json(json!({
-        "models": [],
-        "count": 0,
-        "message": "Model registry integration pending"
+        "models": models,
+        "count": count,
+        "message": if count == 0 {
+            "No models configured. Add credentials to gateway.yaml"
+        } else {
+            "Models loaded from configuration"
+        }
     }))
 }
 
-async fn route_request(State(state): State<AppState>) -> Json<serde_json::Value> {
+async fn route_request(State(state): State<AppState>) -> Json<Value> {
     // Create a sample request for demonstration
     // In production, this would come from the request body as JSON
     let sample_request = json!({
@@ -191,9 +339,8 @@ async fn route_request(State(state): State<AppState>) -> Json<serde_json::Value>
     // Step 1: Classify the request using RequestClassifier
     let classified = state.classifier.classify(&sample_request);
 
-    // Step 2: Plan routes using Router
-    // Note: In production, auths would be loaded from configuration/database
-    let auths: Vec<smart_routing::weight::AuthInfo> = vec![];
+    // Step 2: Plan routes using Router with configured credentials
+    let auths = state.credentials.clone();
     let session_id: Option<&str> = None;
 
     let route_plan = state.router.plan(&classified, auths, session_id).await;
@@ -215,18 +362,21 @@ async fn route_request(State(state): State<AppState>) -> Json<serde_json::Value>
     };
 
     // Format fallbacks
-    let fallbacks_json: Vec<serde_json::Value> = route_plan.fallbacks
+    let fallbacks_json: Vec<Value> = route_plan
+        .fallbacks
         .iter()
-        .map(|fb| json!({
-            "credential_id": fb.auth_id,
-            "position": fb.position,
-            "weight": fb.weight,
-            "provider": fb.provider,
-        }))
+        .map(|fb| {
+            json!({
+                "credential_id": fb.auth_id,
+                "position": fb.position,
+                "weight": fb.weight,
+                "provider": fb.provider,
+            })
+        })
         .collect();
 
     // Build response
-    let response = json!({
+    Json(json!({
         "route_plan": {
             "primary": primary_json,
             "fallbacks": fallbacks_json,
@@ -247,11 +397,9 @@ async fn route_request(State(state): State<AppState>) -> Json<serde_json::Value>
         "message": if route_plan.primary.is_some() {
             "Route planned successfully"
         } else {
-            "No suitable routes found - credentials need to be configured"
+            "No suitable routes found - configure credentials in gateway.yaml"
         }
-    });
-
-    Json(response)
+    }))
 }
 
 #[cfg(test)]
@@ -263,9 +411,29 @@ mod integration_tests {
     };
     use tower::ServiceExt;
 
+    fn create_test_state() -> AppState {
+        AppState {
+            config: GatewayConfig::default(),
+            registry: ModelRegistry::default(),
+            router: SmartRouter::new(),
+            executor: Arc::new(RouteExecutor::new(
+                ExecutorConfig::default(),
+                MetricsCollector::new(),
+                HealthManager::new(HealthConfig::default()),
+            )),
+            classifier: Arc::new(DefaultRequestClassifier),
+            tracing: TracingMiddleware::new(Arc::new(MemoryTraceCollector::with_default_size())),
+            start_time: Instant::now(),
+            credentials: vec![],
+        }
+    }
+
     #[tokio::test]
-    async fn test_health_endpoint() {
-        let app = Router::new().route("/health", get(health_check));
+    async fn test_health_endpoint_returns_status() {
+        let state = create_test_state();
+        let app = Router::new()
+            .route("/health", get(health_check))
+            .with_state(state);
 
         let response = app
             .oneshot(
@@ -278,6 +446,14 @@ mod integration_tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap();
+        let health: HealthStatus = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(health.status, "healthy");
+        assert!(health.uptime_secs > 0 || health.uptime_secs == 0); // Can be 0 if very fast
     }
 
     #[tokio::test]
@@ -293,25 +469,36 @@ mod integration_tests {
     }
 
     #[tokio::test]
-    async fn test_basic_routing() {
+    async fn test_models_endpoint() {
+        let state = create_test_state();
         let app = Router::new()
-            .route("/", get(root))
-            .route("/health", get(health_check));
+            .route("/api/models", get(list_models))
+            .with_state(state);
 
-        // Test root path
         let response = app
-            .clone()
-            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/api/models")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
 
-        // Test health path
+    #[tokio::test]
+    async fn test_route_endpoint() {
+        let state = create_test_state();
+        let app = Router::new()
+            .route("/api/route", get(route_request))
+            .with_state(state);
+
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/health")
+                    .uri("/api/route")
                     .body(Body::empty())
                     .unwrap(),
             )

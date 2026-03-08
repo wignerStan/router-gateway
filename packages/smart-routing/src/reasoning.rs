@@ -5,7 +5,6 @@ use std::collections::HashMap;
 ///
 /// Infers thinking/reasoning capability from model hints,
 /// explicit flags, and model family detection.
-
 /// Reasoning capability level
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ReasoningCapability {

@@ -9,7 +9,6 @@ use tokio::sync::RwLock;
 /// Maintains provider affinity across multi-turn conversations.
 /// Prefers the same provider for session continuation to ensure
 /// consistent behavior and context awareness.
-
 /// Session affinity record
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionAffinity {

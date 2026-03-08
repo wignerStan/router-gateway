@@ -10,9 +10,12 @@ tower = "0.5"
 tower-http = { version = "0.5", features = ["trace", "cors"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+serde_yaml = "0.9"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1.0"
+reqwest = { version = "0.12", features = ["json"] }
+tokio-stream = "0.1"
 
 # Local packages
 smart-routing = { path = "../../packages/smart-routing" }
