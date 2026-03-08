@@ -29,7 +29,7 @@ impl TimeBucket {
         let mut buckets = Vec::new();
 
         // Peak/off-peak (9 AM - 9 PM)
-        if hour >= 9 && hour < 21 {
+        if (9..21).contains(&hour) {
             buckets.push(TimeBucket::Peak);
         } else {
             buckets.push(TimeBucket::OffPeak);
@@ -54,7 +54,7 @@ impl TimeBucket {
     /// Get peak/off-peak bucket
     pub fn peak_off_peak(timestamp: DateTime<Utc>) -> TimeBucket {
         let hour = timestamp.hour();
-        if hour >= 9 && hour < 21 {
+        if (9..21).contains(&hour) {
             TimeBucket::Peak
         } else {
             TimeBucket::OffPeak
@@ -222,7 +222,7 @@ impl RouteStatistics {
             let stats = self
                 .time_buckets
                 .entry(bucket.clone())
-                .or_insert_with(BucketStatistics::default);
+                .or_default();
 
             stats.total_requests += 1;
             stats.last_updated = Utc::now();

@@ -48,7 +48,7 @@ impl ContentTypeDetector {
 
         // Array content - check each element
         if let Some(arr) = content.as_array() {
-            return arr.iter().any(|item| Self::content_item_contains_image(item));
+            return arr.iter().any(Self::content_item_contains_image);
         }
 
         // Object content - check type field

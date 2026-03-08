@@ -3,7 +3,7 @@ pub mod providers;
 
 use axum::{
     extract::State,
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -209,6 +209,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/health", get(health_check))
         .route("/api/models", get(list_models))
         .route("/api/route", get(route_request))
+        .route("/v1/chat/completions", post(chat_completions))
         .layer(axum::middleware::from_fn_with_state(
             tracing_middleware,
             llm_tracing::tracing_middleware,
@@ -401,6 +402,138 @@ async fn route_request(State(state): State<AppState>) -> Json<Value> {
             "No suitable routes found - configure credentials in gateway.yaml"
         }
     }))
+}
+
+/// POST /v1/chat/completions - Proxy endpoint for chat completion requests
+async fn chat_completions(
+    State(state): State<AppState>,
+    Json(request): Json<Value>,
+) -> Result<Json<Value>, (axum::http::StatusCode, Json<Value>)> {
+    use providers::{AnthropicAdapter, OpenAIAdapter, ProviderAdapter};
+
+    // Step 1: Classify the request
+    let classified = state.classifier.classify(&request);
+
+    // Step 2: Extract model from request
+    let model_id = request.get("model")
+        .and_then(|m| m.as_str())
+        .unwrap_or("unknown");
+
+    // Step 3: Plan routes
+    let auths = state.credentials.clone();
+    let session_id = request.get("session_id")
+        .and_then(|s| s.as_str());
+    let route_plan = state.router.plan(&classified, auths, session_id).await;
+
+    // Step 4: Get primary route
+    let primary = match &route_plan.primary {
+        Some(p) => p,
+        None => {
+            return Err((
+                axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({
+                    "error": {
+                        "type": "no_route_available",
+                        "message": "No suitable routes found. Configure credentials in gateway.yaml"
+                    }
+                }))
+            ));
+        }
+    };
+
+    // Step 5: Find credential config for this route
+    let credential = state.config.credentials
+        .iter()
+        .find(|c| c.id == primary.credential_id);
+
+    let (api_key, base_url) = match credential {
+        Some(cred) => (cred.api_key.clone(), cred.base_url.clone()),
+        None => {
+            return Err((
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "error": {
+                        "type": "credential_not_found",
+                        "message": format!("Credential {} not found in configuration", primary.credential_id)
+                    }
+                }))
+            ));
+        }
+    };
+
+    // Step 6: Select provider adapter
+    let provider = &primary.provider;
+    let adapter: Box<dyn ProviderAdapter> = match provider.as_str() {
+        "anthropic" => Box::new(AnthropicAdapter::new()),
+        "openai" | "azure-openai" => Box::new(OpenAIAdapter::new()),
+        _ => Box::new(OpenAIAdapter::new()), // Default to OpenAI format
+    };
+
+    // Step 7: Transform request for provider
+    let _transformed = adapter.transform_request(&providers::types::ProviderRequest {
+        messages: vec![], // Would parse from request
+        model: model_id.to_string(),
+        max_tokens: request.get("max_tokens").and_then(|m| m.as_u64()).map(|v| v as u32),
+        temperature: request.get("temperature").and_then(|t| t.as_f64()).map(|v| v as f32),
+        top_p: request.get("top_p").and_then(|t| t.as_f64()).map(|v| v as f32),
+        stop: request.get("stop").and_then(|s| s.as_array()).map(|arr| {
+            arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()
+        }),
+        stream: request.get("stream").and_then(|s| s.as_bool()).unwrap_or(false),
+        system: request.get("system").and_then(|s| s.as_str().map(String::from)),
+        tools: None,
+        tool_choice: None,
+    });
+
+    let endpoint = adapter.get_endpoint(base_url.as_deref(), model_id);
+    let _headers = adapter.build_headers(&api_key);
+
+    // For now, return a mock response (actual HTTP call would go here)
+    // TODO: Implement actual upstream HTTP call with reqwest
+    tracing::info!(
+        "Proxying request to {} at {}",
+        provider,
+        endpoint
+    );
+
+    // Return mock response for now
+    Ok(Json(json!({
+        "id": format!("chatcmpl-{}", uuid::Uuid::new_v4()),
+        "object": "chat.completion",
+        "created": std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs(),
+        "model": model_id,
+        "choices": [{
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "content": format!("[Gateway mock response - route: {}, provider: {}]", primary.credential_id, provider)
+            },
+            "finish_reason": "stop"
+        }],
+        "usage": {
+            "prompt_tokens": classified.estimated_tokens,
+            "completion_tokens": 50,
+            "total_tokens": classified.estimated_tokens + 50
+        },
+        "_gateway": {
+            "route": {
+                "credential_id": primary.credential_id,
+                "provider": provider,
+                "utility": primary.utility,
+            },
+            "classification": {
+                "format": format!("{:?}", classified.format),
+                "capabilities": {
+                    "vision": classified.required_capabilities.vision,
+                    "tools": classified.required_capabilities.tools,
+                    "streaming": classified.required_capabilities.streaming,
+                }
+            }
+        }
+    })))
 }
 
 #[cfg(test)]

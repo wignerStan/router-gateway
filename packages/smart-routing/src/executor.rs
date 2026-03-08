@@ -155,7 +155,7 @@ impl RouteExecutor {
                             success: false,
                             credential_id: Some(primary_route.credential_id.clone()),
                             model_id: Some(primary_route.model_id.clone()),
-                            attempts: attempts, // Already incremented above
+                            attempts, // Already incremented above
                             total_latency_ms: total_latency,
                             status_code: Some(status_code),
                             error: Some(error),
@@ -168,7 +168,7 @@ impl RouteExecutor {
         // Try fallbacks with retry budget (gateway-edv)
         for fallback in &fallbacks {
             // Check retry budget
-            if attempts >= self.config.max_retries + 1 {
+            if attempts > self.config.max_retries {
                 // Budget exhausted
                 break;
             }
@@ -246,7 +246,7 @@ impl RouteExecutor {
                             success: false,
                             credential_id: Some(route_item.credential_id.clone()),
                             model_id: Some(route_item.model_id.clone()),
-                            attempts: attempts, // Already incremented above
+                            attempts, // Already incremented above
                             total_latency_ms: total_latency,
                             status_code: Some(status_code),
                             error: Some(error),

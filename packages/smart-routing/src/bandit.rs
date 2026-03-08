@@ -285,7 +285,7 @@ impl BanditPolicy {
         let stats = self
             .route_stats
             .entry(route_id.to_string())
-            .or_insert_with(RouteStats::default);
+            .or_default();
 
         // Update statistics
         if success {
@@ -309,7 +309,7 @@ impl BanditPolicy {
         let stats = self
             .route_stats
             .entry(route_id.to_string())
-            .or_insert_with(RouteStats::default);
+            .or_default();
         stats.diversity_penalty = penalty.clamp(0.0, 1.0);
     }
 
