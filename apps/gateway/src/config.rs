@@ -9,8 +9,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 /// Main gateway configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GatewayConfig {
     /// Server configuration
     #[serde(default)]
@@ -171,7 +170,6 @@ pub struct ProviderConfig {
     pub headers: HashMap<String, String>,
 }
 
-
 impl GatewayConfig {
     /// Load configuration from a YAML file
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
@@ -183,8 +181,8 @@ impl GatewayConfig {
 
     /// Parse configuration from YAML string
     pub fn from_yaml(yaml: &str) -> Result<Self> {
-        let mut config: GatewayConfig = serde_yaml::from_str(yaml)
-            .with_context(|| "Failed to parse YAML configuration")?;
+        let mut config: GatewayConfig =
+            serde_yaml::from_str(yaml).with_context(|| "Failed to parse YAML configuration")?;
 
         // Expand environment variables in secrets
         config.expand_env_vars()?;
@@ -262,7 +260,8 @@ fn expand_env_var(value: &str) -> String {
         if let Some((var_name, default)) = stripped.split_once(":-") {
             std::env::var(var_name).unwrap_or_else(|_| default.to_string())
         } else {
-            std::env::var(stripped).unwrap_or_else(|_| value.to_string())
+            // Return empty string for unset env vars so validation catches them
+            std::env::var(stripped).unwrap_or_default()
         }
     } else {
         value.to_string()
@@ -320,7 +319,10 @@ credentials:
 "#;
         let result = GatewayConfig::from_yaml(yaml);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Duplicate credential ID"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Duplicate credential ID"));
     }
 
     #[test]
@@ -331,7 +333,10 @@ routing:
 "#;
         let result = GatewayConfig::from_yaml(yaml);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid routing strategy"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid routing strategy"));
     }
 
     #[test]
@@ -351,7 +356,8 @@ routing:
 
     #[test]
     fn test_provider_filtering() {
-        let config = GatewayConfig::from_yaml(r#"
+        let config = GatewayConfig::from_yaml(
+            r#"
 credentials:
   - id: cred1
     provider: anthropic
@@ -362,7 +368,9 @@ credentials:
   - id: cred3
     provider: anthropic
     api_key: key3
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         let anthropic_creds = config.credentials_for_provider("anthropic");
         assert_eq!(anthropic_creds.len(), 2);

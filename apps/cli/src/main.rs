@@ -103,7 +103,9 @@ struct ServerConfigYaml {
     timeout_secs: Option<u64>,
 }
 
-fn default_port() -> u16 { 3000 }
+fn default_port() -> u16 {
+    3000
+}
 
 #[derive(Debug, Deserialize)]
 struct CredentialConfigYaml {
@@ -166,7 +168,7 @@ async fn main() -> Result<()> {
                         response.status()
                     );
                 }
-                std::process::exit(1);
+                anyhow::bail!("UNHEALTHY: Gateway returned status {}", response.status());
             }
 
             let health: HealthStatus = response
@@ -196,20 +198,33 @@ async fn main() -> Result<()> {
                 println!();
                 println!("Credentials:");
                 println!("  Total:          {}", health.credential_count);
-                println!("  Healthy:        {}", health.healthy_count.to_string().green());
+                println!(
+                    "  Healthy:        {}",
+                    health.healthy_count.to_string().green()
+                );
                 if health.degraded_count > 0 {
-                    println!("  Degraded:       {}", health.degraded_count.to_string().yellow());
+                    println!(
+                        "  Degraded:       {}",
+                        health.degraded_count.to_string().yellow()
+                    );
                 }
                 if health.unhealthy_count > 0 {
-                    println!("  Unhealthy:      {}", health.unhealthy_count.to_string().red());
+                    println!(
+                        "  Unhealthy:      {}",
+                        health.unhealthy_count.to_string().red()
+                    );
                 }
             }
 
             // Exit with code based on health
             if health.status != "healthy" || health.unhealthy_count > 0 {
-                std::process::exit(1);
+                anyhow::bail!(
+                    "UNHEALTHY: status={}, unhealthy={}",
+                    health.status,
+                    health.unhealthy_count
+                );
             }
-        }
+        },
 
         Commands::Models { url } => {
             let models_url = format!("{}/api/models", url);
@@ -263,7 +278,7 @@ async fn main() -> Result<()> {
                 println!();
                 println!("Total: {} models", models.count);
             }
-        }
+        },
 
         Commands::Validate { config } => {
             if !config.exists() {
@@ -273,14 +288,18 @@ async fn main() -> Result<()> {
                         config.display()
                     );
                 } else {
-                    println!("{}: File not found: {}", "ERROR".red().bold(), config.display());
+                    println!(
+                        "{}: File not found: {}",
+                        "ERROR".red().bold(),
+                        config.display()
+                    );
                 }
-                std::process::exit(1);
+                anyhow::bail!("File not found: {}", config.display());
             }
 
             // Read and parse the config file
-            let content = std::fs::read_to_string(&config)
-                .context("Failed to read configuration file")?;
+            let content =
+                std::fs::read_to_string(&config).context("Failed to read configuration file")?;
 
             // Parse as YAML and validate structure
             let parsed: Result<GatewayConfigYaml, _> = serde_yaml::from_str(&content);
@@ -305,10 +324,8 @@ async fn main() -> Result<()> {
 
                         // Check for env var in api_key
                         if cred.api_key.starts_with("${") && !cred.api_key.contains(":-") {
-                            let var_name = cred
-                                .api_key
-                                .trim_start_matches("${")
-                                .trim_end_matches("}");
+                            let var_name =
+                                cred.api_key.trim_start_matches("${").trim_end_matches("}");
                             if std::env::var(var_name).is_err() {
                                 warnings.push(format!(
                                     "Credential '{}': environment variable '{}' not set",
@@ -330,11 +347,13 @@ async fn main() -> Result<()> {
                     }
 
                     if format_json {
-                        let server_info = config_value.server.as_ref().map(|s| serde_json::json!({
-                            "port": s.port,
-                            "host": s.host,
-                            "timeout_secs": s.timeout_secs,
-                        }));
+                        let server_info = config_value.server.as_ref().map(|s| {
+                            serde_json::json!({
+                                "port": s.port,
+                                "host": s.host,
+                                "timeout_secs": s.timeout_secs,
+                            })
+                        });
                         println!(
                             "{}",
                             serde_json::to_string_pretty(&serde_json::json!({
@@ -351,11 +370,16 @@ async fn main() -> Result<()> {
                         println!("{} Configuration is valid", "✓".green());
                         println!("  File: {}", config.display());
                         if let Some(ref server) = config_value.server {
-                            println!("  Server: port={}, host={}", server.port, server.host.as_deref().unwrap_or("default"));
+                            println!(
+                                "  Server: port={}, host={}",
+                                server.port,
+                                server.host.as_deref().unwrap_or("default")
+                            );
                         }
                         println!("  Credentials: {} defined", config_value.credentials.len());
                         for cred in &config_value.credentials {
-                            print!("    - {} ({}): priority={}, models={}",
+                            print!(
+                                "    - {} ({}): priority={}, models={}",
                                 cred.id,
                                 cred.provider,
                                 cred.priority,
@@ -366,7 +390,10 @@ async fn main() -> Result<()> {
                             }
                         }
                         if let Some(ref routing) = config_value.routing {
-                            println!("  Strategy: {} (session_affinity={})", routing.strategy, routing.session_affinity);
+                            println!(
+                                "  Strategy: {} (session_affinity={})",
+                                routing.strategy, routing.session_affinity
+                            );
                         }
                         if !warnings.is_empty() {
                             println!();
@@ -384,9 +411,12 @@ async fn main() -> Result<()> {
                     }
 
                     if !errors.is_empty() {
-                        std::process::exit(1);
+                        anyhow::bail!(
+                            "Configuration validation failed with {} errors",
+                            errors.len()
+                        );
                     }
-                }
+                },
                 Err(e) => {
                     if format_json {
                         println!(
@@ -397,10 +427,10 @@ async fn main() -> Result<()> {
                         println!("{}: Invalid YAML syntax", "ERROR".red().bold());
                         println!("  {}", e);
                     }
-                    std::process::exit(1);
-                }
+                    anyhow::bail!("Invalid YAML syntax: {}", e);
+                },
             }
-        }
+        },
     }
 
     Ok(())

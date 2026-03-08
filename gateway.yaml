@@ -7,7 +7,7 @@ server:
 credentials:
   - id: anthropic-primary
     provider: anthropic
-    api_key: ${ANTropic_API_key}
+    api_key: ${ANTHROPIC_API_KEY}
     priority: 10
     allowed_models:
       - claude-3-opus

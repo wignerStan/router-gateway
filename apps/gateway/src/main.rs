@@ -20,8 +20,8 @@ use llm_tracing::{MemoryTraceCollector, TracingMiddleware};
 use model_registry::Registry as ModelRegistry;
 use smart_routing::{
     classification::{
-        detection::ToolDetector, FormatDetector, RequestClassifier,
-        StreamingExtractor, TokenEstimator, ContentTypeDetector,
+        detection::ToolDetector, ContentTypeDetector, FormatDetector, RequestClassifier,
+        StreamingExtractor, TokenEstimator,
     },
     config::HealthConfig,
     executor::{ExecutorConfig, RouteExecutor},
@@ -143,7 +143,7 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     // Load configuration
-    let config = load_config();
+    let config = load_config()?;
     tracing::info!(
         "Loaded configuration with {} credentials",
         config.credentials.len()
@@ -224,35 +224,36 @@ async fn main() -> anyhow::Result<()> {
 }
 
 /// Load configuration from file or environment
-fn load_config() -> GatewayConfig {
+fn load_config() -> anyhow::Result<GatewayConfig> {
     // Try to load from GATEWAY_CONFIG env var or default paths
-    let config_path = std::env::var("GATEWAY_CONFIG")
-        .ok()
-        .or_else(|| {
-            // Check for common config file locations
-            for path in ["./gateway.yaml", "./config/gateway.yaml", "./gateway.yml"] {
-                if std::path::Path::new(path).exists() {
-                    return Some(path.to_string());
-                }
+    let config_path = std::env::var("GATEWAY_CONFIG").ok().or_else(|| {
+        // Check for common config file locations
+        for path in ["./gateway.yaml", "./config/gateway.yaml", "./gateway.yml"] {
+            if std::path::Path::new(path).exists() {
+                return Some(path.to_string());
             }
-            None
-        });
+        }
+        None
+    });
 
     match config_path {
         Some(path) => {
             tracing::info!("Loading configuration from {}", path);
             match GatewayConfig::from_file(&path) {
-                Ok(config) => config,
+                Ok(config) => Ok(config),
                 Err(e) => {
-                    tracing::warn!("Failed to load config from {}: {}. Using defaults.", path, e);
-                    GatewayConfig::default()
-                }
+                    anyhow::bail!(
+                        "Failed to load config from {}: {}. Please fix the configuration file.",
+                        path,
+                        e
+                    );
+                },
             }
-        }
+        },
         None => {
             tracing::info!("No configuration file found, using defaults");
-            GatewayConfig::default()
-        }
+            Ok(GatewayConfig::default())
+        },
     }
 }
 
@@ -298,17 +299,33 @@ async fn health_check(State(state): State<AppState>) -> Json<HealthStatus> {
 
 async fn list_models(State(state): State<AppState>) -> Json<Value> {
     // Build model list from configured credentials
+    // Note: When allowed_models is empty, it means all provider models are allowed
+    // In a full implementation, we would query the ModelRegistry for provider models
     let models: Vec<ModelInfo> = state
         .config
         .credentials
         .iter()
         .flat_map(|cred| {
-            cred.allowed_models.iter().map(|model_id| ModelInfo {
-                id: model_id.clone(),
-                provider: cred.provider.clone(),
-                capabilities: vec![], // Would be populated from model registry
-                context_window: 128_000, // Default, would come from registry
-            })
+            if cred.allowed_models.is_empty() {
+                // Empty allowed_models means all models for this provider
+                // TODO: Query ModelRegistry for all provider models
+                vec![ModelInfo {
+                    id: format!("{}:*", cred.provider),
+                    provider: cred.provider.clone(),
+                    capabilities: vec!["all".to_string()],
+                    context_window: 128_000,
+                }]
+            } else {
+                cred.allowed_models
+                    .iter()
+                    .map(|model_id| ModelInfo {
+                        id: model_id.clone(),
+                        provider: cred.provider.clone(),
+                        capabilities: vec![], // Would be populated from model registry
+                        context_window: 128_000, // Default, would come from registry
+                    })
+                    .collect()
+            }
         })
         .collect();
 
@@ -360,7 +377,7 @@ async fn route_request(State(state): State<AppState>) -> Json<Value> {
             "utility": primary.utility,
             "weight": primary.weight,
         }),
-        None => json!(null)
+        None => json!(null),
     };
 
     // Format fallbacks
@@ -415,14 +432,14 @@ async fn chat_completions(
     let classified = state.classifier.classify(&request);
 
     // Step 2: Extract model from request
-    let model_id = request.get("model")
+    let model_id = request
+        .get("model")
         .and_then(|m| m.as_str())
         .unwrap_or("unknown");
 
     // Step 3: Plan routes
     let auths = state.credentials.clone();
-    let session_id = request.get("session_id")
-        .and_then(|s| s.as_str());
+    let session_id = request.get("session_id").and_then(|s| s.as_str());
     let route_plan = state.router.plan(&classified, auths, session_id).await;
 
     // Step 4: Get primary route
@@ -436,13 +453,15 @@ async fn chat_completions(
                         "type": "no_route_available",
                         "message": "No suitable routes found. Configure credentials in gateway.yaml"
                     }
-                }))
+                })),
             ));
-        }
+        },
     };
 
     // Step 5: Find credential config for this route
-    let credential = state.config.credentials
+    let credential = state
+        .config
+        .credentials
         .iter()
         .find(|c| c.id == primary.credential_id);
 
@@ -456,9 +475,9 @@ async fn chat_completions(
                         "type": "credential_not_found",
                         "message": format!("Credential {} not found in configuration", primary.credential_id)
                     }
-                }))
+                })),
             ));
-        }
+        },
     };
 
     // Step 6: Select provider adapter
@@ -473,14 +492,30 @@ async fn chat_completions(
     let _transformed = adapter.transform_request(&providers::types::ProviderRequest {
         messages: vec![], // Would parse from request
         model: model_id.to_string(),
-        max_tokens: request.get("max_tokens").and_then(|m| m.as_u64()).map(|v| v as u32),
-        temperature: request.get("temperature").and_then(|t| t.as_f64()).map(|v| v as f32),
-        top_p: request.get("top_p").and_then(|t| t.as_f64()).map(|v| v as f32),
+        max_tokens: request
+            .get("max_tokens")
+            .and_then(|m| m.as_u64())
+            .map(|v| v as u32),
+        temperature: request
+            .get("temperature")
+            .and_then(|t| t.as_f64())
+            .map(|v| v as f32),
+        top_p: request
+            .get("top_p")
+            .and_then(|t| t.as_f64())
+            .map(|v| v as f32),
         stop: request.get("stop").and_then(|s| s.as_array()).map(|arr| {
-            arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
         }),
-        stream: request.get("stream").and_then(|s| s.as_bool()).unwrap_or(false),
-        system: request.get("system").and_then(|s| s.as_str().map(String::from)),
+        stream: request
+            .get("stream")
+            .and_then(|s| s.as_bool())
+            .unwrap_or(false),
+        system: request
+            .get("system")
+            .and_then(|s| s.as_str().map(String::from)),
         tools: None,
         tool_choice: None,
     });
@@ -490,11 +525,7 @@ async fn chat_completions(
 
     // For now, return a mock response (actual HTTP call would go here)
     // TODO: Implement actual upstream HTTP call with reqwest
-    tracing::info!(
-        "Proxying request to {} at {}",
-        provider,
-        endpoint
-    );
+    tracing::info!("Proxying request to {} at {}", provider, endpoint);
 
     // Return mock response for now
     Ok(Json(json!({
