@@ -111,7 +111,10 @@ impl RouteExecutor {
             used_credentials.insert(primary_route.credential_id.clone());
 
             match self.attempt_route(primary_route, &mut execute_fn).await {
-                AttemptResult::Success { status_code, latency } => {
+                AttemptResult::Success {
+                    status_code,
+                    latency,
+                } => {
                     // Record success
                     self.metrics
                         .record_result(&primary_route.credential_id, true, latency, status_code)
@@ -129,7 +132,7 @@ impl RouteExecutor {
                         status_code: Some(status_code),
                         error: None,
                     };
-                }
+                },
                 AttemptResult::RetryableError {
                     status_code,
                     latency,
@@ -161,7 +164,7 @@ impl RouteExecutor {
                             error: Some(error),
                         };
                     }
-                }
+                },
             }
         }
 
@@ -202,7 +205,10 @@ impl RouteExecutor {
             used_credentials.insert(route_item.credential_id.clone());
 
             match self.attempt_route(&route_item, &mut execute_fn).await {
-                AttemptResult::Success { status_code, latency } => {
+                AttemptResult::Success {
+                    status_code,
+                    latency,
+                } => {
                     // Record success
                     self.metrics
                         .record_result(&route_item.credential_id, true, latency, status_code)
@@ -222,7 +228,7 @@ impl RouteExecutor {
                         status_code: Some(status_code),
                         error: None,
                     };
-                }
+                },
                 AttemptResult::RetryableError {
                     status_code,
                     latency,
@@ -253,7 +259,7 @@ impl RouteExecutor {
                         };
                     }
                     // Continue to next fallback
-                }
+                },
             }
         }
 
@@ -283,7 +289,10 @@ impl RouteExecutor {
         match execute_fn(route).await {
             Ok((status_code, latency)) => {
                 if (200..300).contains(&status_code) {
-                    AttemptResult::Success { status_code, latency }
+                    AttemptResult::Success {
+                        status_code,
+                        latency,
+                    }
                 } else {
                     AttemptResult::RetryableError {
                         status_code,
@@ -291,7 +300,7 @@ impl RouteExecutor {
                         error: format!("HTTP {}", status_code),
                     }
                 }
-            }
+            },
             Err(error) => AttemptResult::RetryableError {
                 status_code: 0,
                 latency: 0.0,
@@ -339,7 +348,10 @@ impl RouteExecutor {
 
 /// Internal attempt result
 enum AttemptResult {
-    Success { status_code: i32, latency: f64 },
+    Success {
+        status_code: i32,
+        latency: f64,
+    },
     RetryableError {
         status_code: i32,
         latency: f64,
@@ -384,9 +396,7 @@ mod tests {
         let fallbacks = vec![];
 
         let result = executor
-            .execute(primary, fallbacks, |_route| async {
-                Ok((200, 100.0))
-            })
+            .execute(primary, fallbacks, |_route| async { Ok((200, 100.0)) })
             .await;
 
         assert!(result.success);
@@ -559,7 +569,7 @@ mod tests {
         let primary = Some(create_test_route("cred-1", "anthropic"));
         let fallbacks = vec![
             create_test_fallback("cred-2", "anthropic", 0), // Same provider as primary
-            create_test_fallback("cred-3", "openai", 1),     // Different provider
+            create_test_fallback("cred-3", "openai", 1),    // Different provider
         ];
 
         let result = executor
@@ -635,9 +645,7 @@ mod tests {
 
         // Fallback succeeds (returns 200)
         let result = executor
-            .execute(primary, fallbacks, |_route| async {
-                Ok((200, 100.0))
-            })
+            .execute(primary, fallbacks, |_route| async { Ok((200, 100.0)) })
             .await;
 
         // When there's no primary, fallbacks are tried

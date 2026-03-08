@@ -167,7 +167,7 @@ impl Registry {
                             );
                             Ok(Some(info))
                         }
-                    }
+                    },
                     Ok(None) => Ok(None),
                     Err(e) => Err(e.to_string()),
                 };
@@ -218,13 +218,11 @@ impl Registry {
                         continue;
                     }
                 }
-                
+
                 // Need to fetch this model
                 let registry = self.clone();
                 let id = model_id.clone();
-                set.spawn(async move {
-                    (id.clone(), registry.get(&id).await)
-                });
+                set.spawn(async move { (id.clone(), registry.get(&id).await) });
             }
         }
 

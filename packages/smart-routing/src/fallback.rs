@@ -1,6 +1,6 @@
-use crate::weight::{AuthInfo, WeightCalculator};
 use crate::health::HealthManager;
 use crate::metrics::MetricsCollector;
+use crate::weight::{AuthInfo, WeightCalculator};
 use std::collections::HashSet;
 
 /// Fallback route with ordering information
@@ -84,7 +84,9 @@ impl FallbackPlanner {
         }
 
         // Calculate weights for all available auths
-        let mut weighted_auths = self.calculate_weights(auths, calculator, metrics, health).await;
+        let mut weighted_auths = self
+            .calculate_weights(auths, calculator, metrics, health)
+            .await;
 
         // Filter to only available (positive weight) auths
         weighted_auths.retain(|w| w.weight > 0.0);
@@ -204,7 +206,11 @@ impl FallbackPlanner {
     }
 
     /// Ensure the primary auth is first in the list
-    fn ensure_primary_first(&self, mut auths: Vec<WeightedAuth>, primary_id: &str) -> Vec<WeightedAuth> {
+    fn ensure_primary_first(
+        &self,
+        mut auths: Vec<WeightedAuth>,
+        primary_id: &str,
+    ) -> Vec<WeightedAuth> {
         // Find and remove primary
         let primary_pos = auths.iter().position(|w| w.id == primary_id);
 
@@ -496,10 +502,22 @@ mod tests {
         let planner = FallbackPlanner::new();
 
         // Test various formats
-        assert_eq!(planner.extract_provider("anthropic-key"), Some("anthropic".to_string()));
-        assert_eq!(planner.extract_provider("openai-key-123"), Some("openai".to_string()));
-        assert_eq!(planner.extract_provider("google_model_key"), Some("google".to_string()));
-        assert_eq!(planner.extract_provider("cohere:key"), Some("cohere".to_string()));
+        assert_eq!(
+            planner.extract_provider("anthropic-key"),
+            Some("anthropic".to_string())
+        );
+        assert_eq!(
+            planner.extract_provider("openai-key-123"),
+            Some("openai".to_string())
+        );
+        assert_eq!(
+            planner.extract_provider("google_model_key"),
+            Some("google".to_string())
+        );
+        assert_eq!(
+            planner.extract_provider("cohere:key"),
+            Some("cohere".to_string())
+        );
         assert_eq!(planner.extract_provider(""), None);
     }
 

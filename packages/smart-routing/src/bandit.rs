@@ -34,8 +34,8 @@ pub struct RouteStats {
 impl Default for RouteStats {
     fn default() -> Self {
         Self {
-            successes: 1.0,  // Optimistic prior
-            failures: 1.0,   // Neutral prior
+            successes: 1.0, // Optimistic prior
+            failures: 1.0,  // Neutral prior
             pulls: 0,
             last_utility: 0.5,
             diversity_penalty: 0.0,
@@ -186,7 +186,7 @@ impl BanditPolicy {
                 let alpha = self.config.prior_successes;
                 let beta = self.config.prior_failures;
                 self.sample_beta(alpha, beta)
-            }
+            },
             Some(s) => {
                 if s.pulls < self.config.min_samples_for_thompson {
                     // Not enough samples: use optimistic prior
@@ -203,7 +203,7 @@ impl BanditPolicy {
                     let penalty = s.diversity_penalty * self.config.diversity_weight;
                     (base_sample - penalty).max(0.0)
                 }
-            }
+            },
         }
     }
 
@@ -282,10 +282,7 @@ impl BanditPolicy {
 
     /// Record route selection result
     pub fn record_result(&mut self, route_id: &str, success: bool, utility: f64) {
-        let stats = self
-            .route_stats
-            .entry(route_id.to_string())
-            .or_default();
+        let stats = self.route_stats.entry(route_id.to_string()).or_default();
 
         // Update statistics
         if success {
@@ -306,10 +303,7 @@ impl BanditPolicy {
 
     /// Set diversity penalty for correlated routes
     pub fn set_diversity_penalty(&mut self, route_id: &str, penalty: f64) {
-        let stats = self
-            .route_stats
-            .entry(route_id.to_string())
-            .or_default();
+        let stats = self.route_stats.entry(route_id.to_string()).or_default();
         stats.diversity_penalty = penalty.clamp(0.0, 1.0);
     }
 
@@ -365,7 +359,11 @@ mod tests {
     #[test]
     fn test_bandit_select_route_multiple() {
         let policy = BanditPolicy::new();
-        let routes = vec!["route1".to_string(), "route2".to_string(), "route3".to_string()];
+        let routes = vec![
+            "route1".to_string(),
+            "route2".to_string(),
+            "route3".to_string(),
+        ];
 
         let result = policy.select_route(&routes);
         assert!(result.is_some());
@@ -426,7 +424,7 @@ mod tests {
     fn test_bandit_diversity_penalty() {
         // Use a higher diversity_weight and lower min_samples to ensure penalty is applied
         let config = BanditConfig {
-            diversity_weight: 0.5,      // Higher weight for more pronounced penalty effect
+            diversity_weight: 0.5,       // Higher weight for more pronounced penalty effect
             min_samples_for_thompson: 1, // Ensure penalty is applied after first result
             ..Default::default()
         };
@@ -454,7 +452,11 @@ mod tests {
 
         // With penalty of 1.0 and diversity_weight of 0.5, route2 gets a 0.5 penalty
         // This should give route1 a measurable advantage (>55% selection rate)
-        assert!(count1 > 275, "route1 selected {} out of 500 times, expected > 275", count1);
+        assert!(
+            count1 > 275,
+            "route1 selected {} out of 500 times, expected > 275",
+            count1
+        );
     }
 
     #[test]
@@ -472,9 +474,7 @@ mod tests {
 
         let mut count2 = 0;
         for _ in 0..50 {
-            if policy.select_route_with_utility(&routes, &utilities)
-                == Some("route2".to_string())
-            {
+            if policy.select_route_with_utility(&routes, &utilities) == Some("route2".to_string()) {
                 count2 += 1;
             }
         }

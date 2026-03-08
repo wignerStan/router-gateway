@@ -38,7 +38,10 @@ impl ErrorClass {
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
-            ErrorClass::RateLimit | ErrorClass::ServerError | ErrorClass::Timeout | ErrorClass::Network
+            ErrorClass::RateLimit
+                | ErrorClass::ServerError
+                | ErrorClass::Timeout
+                | ErrorClass::Network
         )
     }
 
@@ -187,7 +190,11 @@ impl OutcomeRecorder {
     pub fn with_limit(max_outcomes: usize) -> Self {
         Self {
             outcomes: Vec::new(),
-            max_outcomes: if max_outcomes > 0 { max_outcomes } else { 10_000 },
+            max_outcomes: if max_outcomes > 0 {
+                max_outcomes
+            } else {
+                10_000
+            },
         }
     }
 
@@ -310,13 +317,31 @@ mod tests {
     fn test_error_class_from_status_code() {
         assert_eq!(ErrorClass::from_status_code(401), Some(ErrorClass::Auth));
         assert_eq!(ErrorClass::from_status_code(403), Some(ErrorClass::Auth));
-        assert_eq!(ErrorClass::from_status_code(429), Some(ErrorClass::RateLimit));
-        assert_eq!(ErrorClass::from_status_code(500), Some(ErrorClass::ServerError));
-        assert_eq!(ErrorClass::from_status_code(502), Some(ErrorClass::ServerError));
-        assert_eq!(ErrorClass::from_status_code(503), Some(ErrorClass::ServerError));
-        assert_eq!(ErrorClass::from_status_code(504), Some(ErrorClass::ServerError));
+        assert_eq!(
+            ErrorClass::from_status_code(429),
+            Some(ErrorClass::RateLimit)
+        );
+        assert_eq!(
+            ErrorClass::from_status_code(500),
+            Some(ErrorClass::ServerError)
+        );
+        assert_eq!(
+            ErrorClass::from_status_code(502),
+            Some(ErrorClass::ServerError)
+        );
+        assert_eq!(
+            ErrorClass::from_status_code(503),
+            Some(ErrorClass::ServerError)
+        );
+        assert_eq!(
+            ErrorClass::from_status_code(504),
+            Some(ErrorClass::ServerError)
+        );
         assert_eq!(ErrorClass::from_status_code(408), Some(ErrorClass::Timeout));
-        assert_eq!(ErrorClass::from_status_code(400), Some(ErrorClass::ClientError));
+        assert_eq!(
+            ErrorClass::from_status_code(400),
+            Some(ErrorClass::ClientError)
+        );
         assert_eq!(ErrorClass::from_status_code(200), None);
         assert_eq!(ErrorClass::from_status_code(201), None);
     }
@@ -373,7 +398,10 @@ mod tests {
         assert!(!outcome.success);
         assert_eq!(outcome.route_id, "route-fallback");
         assert!(outcome.used_fallback);
-        assert_eq!(outcome.original_route_id, Some("route-original".to_string()));
+        assert_eq!(
+            outcome.original_route_id,
+            Some("route-original".to_string())
+        );
         assert_eq!(outcome.effective_route(), "route-original");
     }
 

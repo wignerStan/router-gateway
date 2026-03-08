@@ -188,10 +188,22 @@ mod tests {
 
     #[test]
     fn test_reasoning_capability_levels() {
-        assert_eq!(ReasoningInference::capability_level(ReasoningCapability::None), 0);
-        assert_eq!(ReasoningInference::capability_level(ReasoningCapability::Basic), 1);
-        assert_eq!(ReasoningInference::capability_level(ReasoningCapability::Extended), 2);
-        assert_eq!(ReasoningInference::capability_level(ReasoningCapability::High), 3);
+        assert_eq!(
+            ReasoningInference::capability_level(ReasoningCapability::None),
+            0
+        );
+        assert_eq!(
+            ReasoningInference::capability_level(ReasoningCapability::Basic),
+            1
+        );
+        assert_eq!(
+            ReasoningInference::capability_level(ReasoningCapability::Extended),
+            2
+        );
+        assert_eq!(
+            ReasoningInference::capability_level(ReasoningCapability::High),
+            3
+        );
     }
 
     #[tokio::test]

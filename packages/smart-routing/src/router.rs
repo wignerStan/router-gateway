@@ -132,7 +132,8 @@ impl Router {
 
     /// Add a credential with its associated models
     pub fn add_credential(&mut self, credential_id: String, model_ids: Vec<String>) -> &mut Self {
-        self.candidate_builder.add_credential(credential_id, model_ids);
+        self.candidate_builder
+            .add_credential(credential_id, model_ids);
         self
     }
 
@@ -192,7 +193,8 @@ impl Router {
         // Step 4: Check session affinity
         let selected = if self.config.enable_session_affinity {
             if let Some(sid) = session_id {
-                self.select_with_affinity(&candidates_with_utility, sid).await
+                self.select_with_affinity(&candidates_with_utility, sid)
+                    .await
             } else {
                 self.select_best(&candidates_with_utility).await
             }
@@ -206,7 +208,10 @@ impl Router {
             .into_iter()
             .filter_map(|auth| {
                 // Only include auths that match our candidates
-                filtered.iter().find(|c| c.credential_id == auth.id).map(|_| auth)
+                filtered
+                    .iter()
+                    .find(|c| c.credential_id == auth.id)
+                    .map(|_| auth)
             })
             .collect();
 
@@ -230,7 +235,10 @@ impl Router {
     }
 
     /// Calculate utility for all candidates
-    async fn calculate_utilities(&self, candidates: &[RouteCandidate]) -> Vec<(RouteCandidate, f64)> {
+    async fn calculate_utilities(
+        &self,
+        candidates: &[RouteCandidate],
+    ) -> Vec<(RouteCandidate, f64)> {
         let mut results = Vec::new();
 
         for candidate in candidates {
@@ -252,7 +260,11 @@ impl Router {
         session_id: &str,
     ) -> Option<RoutePlanItem> {
         // Check if session has preferred provider
-        if let Some(preferred_provider) = self.session_manager.get_preferred_provider(session_id).await {
+        if let Some(preferred_provider) = self
+            .session_manager
+            .get_preferred_provider(session_id)
+            .await
+        {
             // Try to find a candidate from the preferred provider
             for (candidate, utility) in candidates {
                 if candidate.provider == preferred_provider {
@@ -270,7 +282,8 @@ impl Router {
 
                     let weight_config = self.selector.config().weight.clone();
                     let calculator = crate::weight::DefaultWeightCalculator::new(weight_config);
-                    let calculated_weight = calculator.calculate(&auth_info, metrics.as_ref(), health);
+                    let calculated_weight =
+                        calculator.calculate(&auth_info, metrics.as_ref(), health);
 
                     return Some(RoutePlanItem {
                         credential_id: candidate.credential_id.clone(),
@@ -302,8 +315,14 @@ impl Router {
 
     /// Select using bandit policy
     async fn select_bandit(&self, candidates: &[(RouteCandidate, f64)]) -> Option<RoutePlanItem> {
-        let credential_ids: Vec<String> = candidates.iter().map(|(c, _)| c.credential_id.clone()).collect();
-        let utilities: HashMap<String, f64> = candidates.iter().map(|(c, u)| (c.credential_id.clone(), *u)).collect();
+        let credential_ids: Vec<String> = candidates
+            .iter()
+            .map(|(c, _)| c.credential_id.clone())
+            .collect();
+        let utilities: HashMap<String, f64> = candidates
+            .iter()
+            .map(|(c, u)| (c.credential_id.clone(), *u))
+            .collect();
 
         let bandit = self.bandit_policy.lock().await;
         let selected_id = bandit.select_route_with_utility(&credential_ids, &utilities)?;
@@ -387,10 +406,16 @@ impl Router {
         utility: f64,
     ) {
         // Record in metrics
-        self.selector.metrics().record_result(credential_id, success, latency_ms, status_code).await;
+        self.selector
+            .metrics()
+            .record_result(credential_id, success, latency_ms, status_code)
+            .await;
 
         // Record in health manager
-        self.selector.health().update_from_result(credential_id, success, status_code).await;
+        self.selector
+            .health()
+            .update_from_result(credential_id, success, status_code)
+            .await;
 
         // Record in bandit policy
         let mut bandit_policy = self.bandit_policy.lock().await;
@@ -514,14 +539,20 @@ mod tests {
     async fn test_router_add_credential() {
         let mut router = Router::new();
         router.add_credential("cred-1".to_string(), vec!["claude-3-opus".to_string()]);
-        router.set_model("claude-3-opus".to_string(), create_test_model("claude-3-opus", "anthropic", 200000));
+        router.set_model(
+            "claude-3-opus".to_string(),
+            create_test_model("claude-3-opus", "anthropic", 200000),
+        );
     }
 
     #[tokio::test]
     async fn test_router_plan_with_valid_candidates() {
         let mut router = Router::new();
         router.add_credential("cred-1".to_string(), vec!["claude-3-opus".to_string()]);
-        router.set_model("claude-3-opus".to_string(), create_test_model("claude-3-opus", "anthropic", 200000));
+        router.set_model(
+            "claude-3-opus".to_string(),
+            create_test_model("claude-3-opus", "anthropic", 200000),
+        );
 
         let request = create_test_request(1000);
         let auths = vec![create_test_auth("cred-1")];
@@ -555,7 +586,10 @@ mod tests {
         let mut router = Router::new();
         router.add_credential("cred-1".to_string(), vec!["gpt-4".to_string()]);
         // Set a model with small context window
-        router.set_model("gpt-4".to_string(), create_test_model("gpt-4", "openai", 10000));
+        router.set_model(
+            "gpt-4".to_string(),
+            create_test_model("gpt-4", "openai", 10000),
+        );
 
         // Request exceeds context window
         let request = create_test_request(50000);
@@ -574,8 +608,14 @@ mod tests {
         let mut router = Router::new();
         router.add_credential("cred-1".to_string(), vec!["claude-3-opus".to_string()]);
         router.add_credential("cred-2".to_string(), vec!["gpt-4".to_string()]);
-        router.set_model("claude-3-opus".to_string(), create_test_model("claude-3-opus", "anthropic", 200000));
-        router.set_model("gpt-4".to_string(), create_test_model("gpt-4", "openai", 128000));
+        router.set_model(
+            "claude-3-opus".to_string(),
+            create_test_model("claude-3-opus", "anthropic", 200000),
+        );
+        router.set_model(
+            "gpt-4".to_string(),
+            create_test_model("gpt-4", "openai", 128000),
+        );
 
         let request = create_test_request(1000);
         let auths = vec![create_test_auth("cred-1"), create_test_auth("cred-2")];
@@ -594,14 +634,20 @@ mod tests {
     async fn test_router_clone_independence() {
         let mut router1 = Router::new();
         router1.add_credential("cred-1".to_string(), vec!["claude-3-opus".to_string()]);
-        router1.set_model("claude-3-opus".to_string(), create_test_model("claude-3-opus", "anthropic", 200000));
+        router1.set_model(
+            "claude-3-opus".to_string(),
+            create_test_model("claude-3-opus", "anthropic", 200000),
+        );
 
         let mut router2 = router1.clone();
 
         // Both should be valid independent instances, but clone creates fresh state
         // So we need to register credentials on router2 as well
         router2.add_credential("cred-1".to_string(), vec!["claude-3-opus".to_string()]);
-        router2.set_model("claude-3-opus".to_string(), create_test_model("claude-3-opus", "anthropic", 200000));
+        router2.set_model(
+            "claude-3-opus".to_string(),
+            create_test_model("claude-3-opus", "anthropic", 200000),
+        );
 
         let request = create_test_request(1000);
         let auths = vec![create_test_auth("cred-1")];
@@ -636,7 +682,10 @@ mod tests {
         let mut router = Router::new();
         router.add_disabled_provider("blocked-provider".to_string());
         router.add_credential("cred-1".to_string(), vec!["model-1".to_string()]);
-        router.set_model("model-1".to_string(), create_test_model("model-1", "blocked-provider", 200000));
+        router.set_model(
+            "model-1".to_string(),
+            create_test_model("model-1", "blocked-provider", 200000),
+        );
 
         let request = create_test_request(1000);
         let auths = vec![create_test_auth("cred-1")];
@@ -651,7 +700,10 @@ mod tests {
     async fn test_route_plan_item_fields() {
         let mut router = Router::new();
         router.add_credential("cred-1".to_string(), vec!["claude-3-opus".to_string()]);
-        router.set_model("claude-3-opus".to_string(), create_test_model("claude-3-opus", "anthropic", 200000));
+        router.set_model(
+            "claude-3-opus".to_string(),
+            create_test_model("claude-3-opus", "anthropic", 200000),
+        );
 
         let request = create_test_request(1000);
         let auths = vec![create_test_auth("cred-1")];
@@ -700,9 +752,18 @@ mod tests {
         router.add_credential("cred-1".to_string(), vec!["claude-3-opus".to_string()]);
         router.add_credential("cred-2".to_string(), vec!["gpt-4".to_string()]);
         router.add_credential("cred-3".to_string(), vec!["gemini-pro".to_string()]);
-        router.set_model("claude-3-opus".to_string(), create_test_model("claude-3-opus", "anthropic", 200000));
-        router.set_model("gpt-4".to_string(), create_test_model("gpt-4", "openai", 128000));
-        router.set_model("gemini-pro".to_string(), create_test_model("gemini-pro", "google", 128000));
+        router.set_model(
+            "claude-3-opus".to_string(),
+            create_test_model("claude-3-opus", "anthropic", 200000),
+        );
+        router.set_model(
+            "gpt-4".to_string(),
+            create_test_model("gpt-4", "openai", 128000),
+        );
+        router.set_model(
+            "gemini-pro".to_string(),
+            create_test_model("gemini-pro", "google", 128000),
+        );
 
         let request = create_test_request(1000);
         let auths = vec![

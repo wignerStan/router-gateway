@@ -1,5 +1,5 @@
-use serde_json::Value;
 use crate::classification::RequestFormat;
+use serde_json::Value;
 
 /// Detector for LLM request format/protocol
 ///
@@ -38,17 +38,13 @@ impl FormatDetector {
 
     /// Check if request uses OpenAI format
     fn is_openai_format(request: &Value) -> bool {
-        request.get("messages")
-            .and_then(|m| m.as_array())
-            .is_some()
+        request.get("messages").and_then(|m| m.as_array()).is_some()
     }
 
     /// Check if request uses Anthropic format
     fn is_anthropic_format(request: &Value) -> bool {
         // Anthropic has messages AND a separate system field
-        let has_messages = request.get("messages")
-            .and_then(|m| m.as_array())
-            .is_some();
+        let has_messages = request.get("messages").and_then(|m| m.as_array()).is_some();
 
         let has_system = request.get("system").is_some();
 
@@ -58,9 +54,7 @@ impl FormatDetector {
     /// Check if request uses Gemini format
     fn is_gemini_format(request: &Value) -> bool {
         // Gemini uses `contents` array instead of `messages`
-        request.get("contents")
-            .and_then(|c| c.as_array())
-            .is_some()
+        request.get("contents").and_then(|c| c.as_array()).is_some()
     }
 }
 
@@ -140,7 +134,10 @@ mod tests {
         });
 
         // Without system field, it's detected as OpenAI (has messages)
-        assert_eq!(FormatDetector::detect(&request_without_system), RequestFormat::OpenAI);
+        assert_eq!(
+            FormatDetector::detect(&request_without_system),
+            RequestFormat::OpenAI
+        );
 
         let request_with_system = json!({
             "messages": [
@@ -150,7 +147,10 @@ mod tests {
             "model": "claude-3-opus"
         });
 
-        assert_eq!(FormatDetector::detect(&request_with_system), RequestFormat::Anthropic);
+        assert_eq!(
+            FormatDetector::detect(&request_with_system),
+            RequestFormat::Anthropic
+        );
     }
 
     #[test]

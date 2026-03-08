@@ -280,7 +280,10 @@ pub struct ProviderResponse {
 impl ProviderResponse {
     /// Check if this is a tool call response
     pub fn has_tool_calls(&self) -> bool {
-        self.tool_calls.as_ref().map(|t| !t.is_empty()).unwrap_or(false)
+        self.tool_calls
+            .as_ref()
+            .map(|t| !t.is_empty())
+            .unwrap_or(false)
     }
 }
 
@@ -395,21 +398,18 @@ mod tests {
         let text = MessageContent::text("Hello");
         assert_eq!(text.as_text(), Some("Hello"));
 
-        let parts = MessageContent::Parts(vec![
-            ContentPart::text("Part 1"),
-        ]);
+        let parts = MessageContent::Parts(vec![ContentPart::text("Part 1")]);
         assert!(parts.as_text().is_none());
     }
 
     #[test]
     fn test_tool_builder() {
-        let tool = Tool::function("get_weather", "Get current weather")
-            .with_parameters(json!({
-                "type": "object",
-                "properties": {
-                    "location": {"type": "string"}
-                }
-            }));
+        let tool = Tool::function("get_weather", "Get current weather").with_parameters(json!({
+            "type": "object",
+            "properties": {
+                "location": {"type": "string"}
+            }
+        }));
 
         assert_eq!(tool.function.name, "get_weather");
         assert!(tool.function.parameters.is_some());

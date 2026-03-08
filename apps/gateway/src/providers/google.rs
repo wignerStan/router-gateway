@@ -51,18 +51,16 @@ impl ProviderAdapter for GoogleAdapter {
                         system_instruction = Some(json!({
                             "parts": [{"text": text}]
                         }));
-                    }
+                    },
                     MessageContent::Parts(parts) => {
                         let texts: Vec<Value> = parts
                             .iter()
-                            .filter_map(|p| {
-                                p.text.as_ref().map(|t| json!({"text": t}))
-                            })
+                            .filter_map(|p| p.text.as_ref().map(|t| json!({"text": t})))
                             .collect();
                         if !texts.is_empty() {
                             system_instruction = Some(json!({"parts": texts}));
                         }
-                    }
+                    },
                 }
                 continue;
             }
@@ -77,7 +75,7 @@ impl ProviderAdapter for GoogleAdapter {
             let parts = match &msg.content {
                 MessageContent::Text(text) => {
                     vec![json!({"text": text})]
-                }
+                },
                 MessageContent::Parts(parts) => {
                     parts
                         .iter()
@@ -97,7 +95,7 @@ impl ProviderAdapter for GoogleAdapter {
                             }
                         })
                         .collect()
-                }
+                },
             };
 
             contents.push(json!({
@@ -129,9 +127,11 @@ impl ProviderAdapter for GoogleAdapter {
         });
 
         // Add system instruction if present
-        if let Some(sys) = system_instruction.or(request.system.as_ref().map(|s| {
-            json!({"parts": [{"text": s}]})
-        })) {
+        if let Some(sys) = system_instruction.or(request
+            .system
+            .as_ref()
+            .map(|s| json!({"parts": [{"text": s}]})))
+        {
             gemini_request["systemInstruction"] = sys;
         }
 
@@ -157,7 +157,7 @@ impl ProviderAdapter for GoogleAdapter {
     }
 
     fn transform_response(&self, response: Value) -> Result<ProviderResponse> {
-        use super::types::{TokenUsage, ToolCall, FunctionCall};
+        use super::types::{FunctionCall, TokenUsage, ToolCall};
 
         // Extract content from Gemini response
         let candidates = response["candidates"]
@@ -195,9 +195,8 @@ impl ProviderAdapter for GoogleAdapter {
         };
 
         // Extract tool calls if present
-        let tool_calls: Option<Vec<ToolCall>> = first_candidate["content"]["parts"]
-            .as_array()
-            .map(|parts| {
+        let tool_calls: Option<Vec<ToolCall>> =
+            first_candidate["content"]["parts"].as_array().map(|parts| {
                 parts
                     .iter()
                     .filter(|p| p.get("functionCall").is_some())
@@ -217,7 +216,8 @@ impl ProviderAdapter for GoogleAdapter {
 
         Ok(ProviderResponse {
             id: format!("gemini-{}", uuid::Uuid::new_v4()),
-            model: response.get("modelVersion")
+            model: response
+                .get("modelVersion")
                 .and_then(|m| m.as_str())
                 .unwrap_or("gemini")
                 .to_string(),
@@ -249,13 +249,11 @@ mod tests {
     fn test_transform_simple_request() {
         let adapter = GoogleAdapter::new();
         let request = ProviderRequest {
-            messages: vec![
-                super::super::types::Message {
-                    role: "user".to_string(),
-                    content: super::super::types::MessageContent::Text("Hello".to_string()),
-                    name: None,
-                }
-            ],
+            messages: vec![super::super::types::Message {
+                role: "user".to_string(),
+                content: super::super::types::MessageContent::Text("Hello".to_string()),
+                name: None,
+            }],
             model: "gemini-pro".to_string(),
             max_tokens: Some(1024),
             temperature: Some(0.7),

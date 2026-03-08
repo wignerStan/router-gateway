@@ -51,14 +51,12 @@ impl ProviderAdapter for AnthropicAdapter {
                 match &msg.content {
                     MessageContent::Text(text) => system = Some(text.clone()),
                     MessageContent::Parts(parts) => {
-                        let texts: Vec<&str> = parts
-                            .iter()
-                            .filter_map(|p| p.text.as_deref())
-                            .collect();
+                        let texts: Vec<&str> =
+                            parts.iter().filter_map(|p| p.text.as_deref()).collect();
                         if !texts.is_empty() {
                             system = Some(texts.join("\n"));
                         }
-                    }
+                    },
                 }
                 continue;
             }
@@ -66,7 +64,7 @@ impl ProviderAdapter for AnthropicAdapter {
             let content = match &msg.content {
                 MessageContent::Text(text) => {
                     json!([{ "type": "text", "text": text }])
-                }
+                },
                 MessageContent::Parts(parts) => {
                     let anthropic_parts: Vec<Value> = parts
                         .iter()
@@ -92,7 +90,7 @@ impl ProviderAdapter for AnthropicAdapter {
                         })
                         .collect();
                     json!(anthropic_parts)
-                }
+                },
             };
 
             messages.push(json!({
@@ -157,7 +155,7 @@ impl ProviderAdapter for AnthropicAdapter {
     }
 
     fn transform_response(&self, response: Value) -> Result<ProviderResponse> {
-        use super::types::{TokenUsage, ToolCall, FunctionCall};
+        use super::types::{FunctionCall, TokenUsage, ToolCall};
 
         let id = response["id"].as_str().unwrap_or("unknown").to_string();
         let model = response["model"].as_str().unwrap_or("unknown").to_string();
@@ -243,13 +241,11 @@ mod tests {
     fn test_transform_simple_request() {
         let adapter = AnthropicAdapter::new();
         let request = ProviderRequest {
-            messages: vec![
-                super::super::types::Message {
-                    role: "user".to_string(),
-                    content: super::super::types::MessageContent::Text("Hello".to_string()),
-                    name: None,
-                }
-            ],
+            messages: vec![super::super::types::Message {
+                role: "user".to_string(),
+                content: super::super::types::MessageContent::Text("Hello".to_string()),
+                name: None,
+            }],
             model: "claude-3-opus".to_string(),
             max_tokens: Some(1024),
             temperature: None,

@@ -101,8 +101,8 @@ impl ContentTypeDetector {
 
         // Common image file extensions
         let image_extensions = [
-            ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg",
-            ".tiff", ".ico", ".heic", ".avif",
+            ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".tiff", ".ico", ".heic",
+            ".avif",
         ];
 
         // Data URI pattern for images
@@ -167,15 +167,21 @@ impl ToolDetector {
         if let Some(messages) = request.get("messages").and_then(|m| m.as_array()) {
             for msg in messages {
                 // OpenAI format: tool_calls in message
-                if msg.get("tool_calls").and_then(|t| t.as_array()).map(|a| !a.is_empty()).unwrap_or(false) {
+                if msg
+                    .get("tool_calls")
+                    .and_then(|t| t.as_array())
+                    .map(|a| !a.is_empty())
+                    .unwrap_or(false)
+                {
                     return true;
                 }
 
                 // Anthropic format: tool_use content block
                 if let Some(content) = msg.get("content").and_then(|c| c.as_array()) {
-                    if content.iter().any(|block| {
-                        block.get("type").and_then(|t| t.as_str()) == Some("tool_use")
-                    }) {
+                    if content
+                        .iter()
+                        .any(|block| block.get("type").and_then(|t| t.as_str()) == Some("tool_use"))
+                    {
                         return true;
                     }
                 }

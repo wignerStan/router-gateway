@@ -160,7 +160,10 @@ mod bdd_integration {
             "max_tokens": 500
         });
         let tokens = TokenEstimator::estimate(&request);
-        assert!(tokens > 1400 && tokens < 1600, "Total should combine input and output");
+        assert!(
+            tokens > 1400 && tokens < 1600,
+            "Total should combine input and output"
+        );
     }
 
     #[tokio::test]
@@ -200,8 +203,8 @@ mod bdd_integration {
 
     #[tokio::test]
     async fn test_bdd_health_rate_limit_triggers_degraded() {
-        use smart_routing::health::{HealthManager, HealthStatus};
         use smart_routing::config::HealthConfig;
+        use smart_routing::health::{HealthManager, HealthStatus};
 
         let config = HealthConfig {
             status_codes: smart_routing::config::StatusCodeHealthConfig {
@@ -216,13 +219,16 @@ mod bdd_integration {
         // Scenario: Rate limit triggers degraded state
         assert_eq!(manager.get_status("test-auth").await, HealthStatus::Healthy);
         manager.update_from_result("test-auth", false, 429).await;
-        assert_eq!(manager.get_status("test-auth").await, HealthStatus::Degraded);
+        assert_eq!(
+            manager.get_status("test-auth").await,
+            HealthStatus::Degraded
+        );
     }
 
     #[tokio::test]
     async fn test_bdd_health_consecutive_failures_trigger_unhealthy() {
-        use smart_routing::health::{HealthManager, HealthStatus};
         use smart_routing::config::HealthConfig;
+        use smart_routing::health::{HealthManager, HealthStatus};
 
         let config = HealthConfig {
             unhealthy_threshold: 5,
@@ -235,13 +241,16 @@ mod bdd_integration {
         for _ in 0..5 {
             manager.update_from_result("test-auth", false, 500).await;
         }
-        assert_eq!(manager.get_status("test-auth").await, HealthStatus::Unhealthy);
+        assert_eq!(
+            manager.get_status("test-auth").await,
+            HealthStatus::Unhealthy
+        );
     }
 
     #[tokio::test]
     async fn test_bdd_health_success_streak_recovers_degraded() {
-        use smart_routing::health::{HealthManager, HealthStatus};
         use smart_routing::config::HealthConfig;
+        use smart_routing::health::{HealthManager, HealthStatus};
 
         let config = HealthConfig {
             healthy_threshold: 3,
@@ -256,7 +265,10 @@ mod bdd_integration {
 
         // Scenario: Success streak recovers degraded credential
         manager.update_from_result("test-auth", false, 429).await;
-        assert_eq!(manager.get_status("test-auth").await, HealthStatus::Degraded);
+        assert_eq!(
+            manager.get_status("test-auth").await,
+            HealthStatus::Degraded
+        );
 
         for _ in 0..3 {
             manager.update_from_result("test-auth", true, 200).await;
@@ -266,8 +278,8 @@ mod bdd_integration {
 
     #[tokio::test]
     async fn test_bdd_health_unhealthy_blocked_from_selection() {
-        use smart_routing::health::{HealthManager, HealthStatus};
         use smart_routing::config::HealthConfig;
+        use smart_routing::health::{HealthManager, HealthStatus};
 
         let config = HealthConfig {
             unhealthy_threshold: 2,
@@ -280,14 +292,17 @@ mod bdd_integration {
         for _ in 0..2 {
             manager.update_from_result("test-auth", false, 500).await;
         }
-        assert_eq!(manager.get_status("test-auth").await, HealthStatus::Unhealthy);
+        assert_eq!(
+            manager.get_status("test-auth").await,
+            HealthStatus::Unhealthy
+        );
         assert!(!manager.is_available("test-auth").await);
     }
 
     #[tokio::test]
     async fn test_bdd_health_cooldown_expiration_allows_recovery() {
-        use smart_routing::health::{HealthManager, HealthStatus};
         use smart_routing::config::HealthConfig;
+        use smart_routing::health::{HealthManager, HealthStatus};
 
         let config = HealthConfig {
             unhealthy_threshold: 2,
@@ -300,21 +315,26 @@ mod bdd_integration {
         for _ in 0..2 {
             manager.update_from_result("test-auth", false, 500).await;
         }
-        assert_eq!(manager.get_status("test-auth").await, HealthStatus::Unhealthy);
+        assert_eq!(
+            manager.get_status("test-auth").await,
+            HealthStatus::Unhealthy
+        );
         assert!(!manager.is_available("test-auth").await);
 
         // Wait for cooldown to expire
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
         // Cooldown expired, but still unhealthy status
-        assert_eq!(manager.get_status("test-auth").await, HealthStatus::Unhealthy);
+        assert_eq!(
+            manager.get_status("test-auth").await,
+            HealthStatus::Unhealthy
+        );
     }
 
     #[tokio::test]
     async fn test_bdd_all_request_classification_scenarios() {
         use smart_routing::classification::{
-            ContentTypeDetector, FormatDetector, StreamingExtractor,
-            ToolDetector, RequestFormat,
+            ContentTypeDetector, FormatDetector, RequestFormat, StreamingExtractor, ToolDetector,
         };
 
         // Scenario: All capabilities detected in complex request
@@ -338,8 +358,8 @@ mod bdd_integration {
 
     #[tokio::test]
     async fn test_bdd_all_health_state_transitions() {
-        use smart_routing::health::{HealthManager, HealthStatus};
         use smart_routing::config::HealthConfig;
+        use smart_routing::health::{HealthManager, HealthStatus};
 
         let config = HealthConfig {
             status_codes: smart_routing::config::StatusCodeHealthConfig {

@@ -69,7 +69,7 @@ impl ProviderAdapter for OpenAIAdapter {
                         })
                         .collect();
                     json!(openai_parts)
-                }
+                },
             };
 
             messages.push(json!({
@@ -124,7 +124,9 @@ impl ProviderAdapter for OpenAIAdapter {
                     ToolChoice::Auto => json!("auto"),
                     ToolChoice::None => json!("none"),
                     ToolChoice::Required => json!("required"),
-                    ToolChoice::Function { name } => json!({"type": "function", "function": {"name": name}}),
+                    ToolChoice::Function { name } => {
+                        json!({"type": "function", "function": {"name": name}})
+                    },
                 };
                 openai_request["tool_choice"] = openai_choice;
             }
@@ -134,7 +136,7 @@ impl ProviderAdapter for OpenAIAdapter {
     }
 
     fn transform_response(&self, response: Value) -> Result<ProviderResponse> {
-        use super::types::{TokenUsage, ToolCall, FunctionCall};
+        use super::types::{FunctionCall, TokenUsage, ToolCall};
 
         let id = response["id"].as_str().unwrap_or("unknown").to_string();
         let model = response["model"].as_str().unwrap_or("unknown").to_string();
@@ -217,13 +219,11 @@ mod tests {
     fn test_transform_simple_request() {
         let adapter = OpenAIAdapter::new();
         let request = ProviderRequest {
-            messages: vec![
-                super::super::types::Message {
-                    role: "user".to_string(),
-                    content: super::super::types::MessageContent::Text("Hello".to_string()),
-                    name: None,
-                }
-            ],
+            messages: vec![super::super::types::Message {
+                role: "user".to_string(),
+                content: super::super::types::MessageContent::Text("Hello".to_string()),
+                name: None,
+            }],
             model: "gpt-4".to_string(),
             max_tokens: Some(1024),
             temperature: Some(0.7),
@@ -240,7 +240,11 @@ mod tests {
         assert_eq!(transformed["max_tokens"], 1024);
         // Compare temperature with approximate equality due to f32 precision
         let temp = transformed["temperature"].as_f64().unwrap();
-        assert!((temp - 0.7).abs() < 0.001, "Expected temperature ~0.7, got {}", temp);
+        assert!(
+            (temp - 0.7).abs() < 0.001,
+            "Expected temperature ~0.7, got {}",
+            temp
+        );
     }
 
     #[test]

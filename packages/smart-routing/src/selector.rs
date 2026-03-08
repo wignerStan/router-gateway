@@ -359,7 +359,12 @@ impl Clone for SmartSelector {
 }
 
 impl WeightCalculator for SmartSelector {
-    fn calculate(&self, auth: &AuthInfo, metrics: Option<&AuthMetrics>, health: HealthStatus) -> f64 {
+    fn calculate(
+        &self,
+        auth: &AuthInfo,
+        metrics: Option<&AuthMetrics>,
+        health: HealthStatus,
+    ) -> f64 {
         self.calculator.calculate(auth, metrics, health)
     }
 
