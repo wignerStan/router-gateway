@@ -623,7 +623,7 @@ mod tests {
     fn test_attempt_history_selection_mode_distribution() {
         let mut history = AttemptHistory::new();
 
-        let modes = vec![
+        let modes = [
             SelectionMode::Weighted,
             SelectionMode::Thompson,
             SelectionMode::Weighted,

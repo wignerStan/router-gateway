@@ -303,8 +303,10 @@ mod tests {
 
     #[test]
     fn test_cost_sensitivity() {
-        let mut config = UtilityConfig::default();
-        config.cost_sensitivity = 2.0; // High sensitivity
+        let config = UtilityConfig {
+            cost_sensitivity: 2.0, // High sensitivity
+            ..UtilityConfig::default()
+        };
 
         let estimator = UtilityEstimator::with_config(config);
         let metrics = create_metrics(0.8, 500.0);
