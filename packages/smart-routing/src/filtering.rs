@@ -220,7 +220,7 @@ mod tests {
 
     #[test]
     fn test_filter_empty_list() {
-        let mut filter = ConstraintFilter::new();
+        let filter = ConstraintFilter::new();
         let request = create_test_request(1000, RequiredCapabilities::default());
 
         let result = filter.filter(Vec::new(), &request);
@@ -229,7 +229,7 @@ mod tests {
 
     #[test]
     fn test_filter_capability_mismatch() {
-        let mut filter = ConstraintFilter::new();
+        let filter = ConstraintFilter::new();
 
         // Create a model without vision
         let model = create_test_model("test", "test", 200000, false);
@@ -265,7 +265,7 @@ mod tests {
 
     #[test]
     fn test_filter_context_overflow() {
-        let mut filter = ConstraintFilter::new();
+        let filter = ConstraintFilter::new();
 
         let model = create_test_model("test", "test", 100000, true);
 
@@ -340,7 +340,7 @@ mod tests {
 
     #[test]
     fn test_filter_accepted_candidate() {
-        let mut filter = ConstraintFilter::new();
+        let filter = ConstraintFilter::new();
 
         let model = create_test_model("test", "test", 200000, true);
 
@@ -395,7 +395,7 @@ mod tests {
 
     #[test]
     fn test_filter_token_fit_unknown() {
-        let mut filter = ConstraintFilter::new();
+        let filter = ConstraintFilter::new();
 
         let model = create_test_model("test", "test", 200000, true);
 
@@ -417,7 +417,7 @@ mod tests {
 
     #[test]
     fn test_filter_context_exact_fit() {
-        let mut filter = ConstraintFilter::new();
+        let filter = ConstraintFilter::new();
 
         let model = create_test_model("test", "test", 100000, true);
 
@@ -467,7 +467,7 @@ mod tests {
 
     #[test]
     fn test_filter_capabilities_none_required() {
-        let mut filter = ConstraintFilter::new();
+        let filter = ConstraintFilter::new();
 
         // Model with minimal capabilities
         let mut model = create_test_model("test", "test", 200000, false);
