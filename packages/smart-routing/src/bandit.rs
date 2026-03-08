@@ -556,8 +556,10 @@ mod tests {
 
     #[test]
     fn test_sample_decay() {
-        let mut config = BanditConfig::default();
-        config.sample_decay = 0.9;
+        let config = BanditConfig {
+            sample_decay: 0.9,
+            ..Default::default()
+        };
 
         let mut policy = BanditPolicy::with_config(config);
 

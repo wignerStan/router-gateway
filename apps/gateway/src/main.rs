@@ -618,7 +618,7 @@ mod integration_tests {
         let health: HealthStatus = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(health.status, "healthy");
-        assert!(health.uptime_secs > 0 || health.uptime_secs == 0); // Can be 0 if very fast
+        // uptime_secs can be 0 if the server started very recently
     }
 
     #[tokio::test]

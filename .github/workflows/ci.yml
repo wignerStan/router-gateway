@@ -1,3 +1,6 @@
+# Rust CI Pipeline - Production Grade
+# Comprehensive quality gates for the gateway LLM routing project
+
 name: CI
 
 on:
@@ -9,46 +12,27 @@ on:
     inputs:
       version:
         description: 'Release version'
-        required: true
+        required: false
         type: string
 
+# Cancel redundant runs on same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+  # Minimum coverage threshold
+  COVERAGE_THRESHOLD: 80
+
 jobs:
-  test:
-    name: Run Tests
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        rust: [stable]
+  # ===========================================
+  # TIER 1: FAST QUALITY GATES (< 2 min)
+  # ===========================================
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ matrix.rust }}
-
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
-      - name: Install just
-        uses: extractions/setup-just@v2
-
-      - name: Run tests
-        run: just ci-test
-
-  lint:
-    name: Run Linters
+  fmt:
+    name: Format Check
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -57,27 +41,53 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  lint:
+    name: Clippy Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          key: lint
 
       - name: Install just
-        uses: extractions/setup-just@v2
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
 
-      - name: Run format check
-        run: just ci-fmt
-
-      - name: Run clippy
+      - name: Run clippy (strict)
         run: just ci-lint
+
+  msrv:
+    name: MSRV Check (1.75)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust 1.75
+        uses: dtolnay/rust-toolchain@1.75
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: msrv
+
+      - name: Verify MSRV compatibility
+        run: cargo check --all --all-features
 
   type-check:
     name: Type Check
@@ -90,28 +100,57 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          key: typecheck
 
       - name: Install just
-        uses: extractions/setup-just@v2
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
 
-      - name: Run type-check
+      - name: Run type check
         run: just ci-type-check
 
-  build:
-    name: Build Project
+  # ===========================================
+  # TIER 2: TESTS WITH COVERAGE
+  # ===========================================
+
+  test:
+    name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    needs: [fmt, lint, msrv]
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        rust: [stable]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: test-${{ matrix.os }}
+
+      - name: Install just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Run tests
+        run: just ci-test
+
+  coverage:
+    name: Test Coverage
+    runs-on: ubuntu-latest
+    needs: [fmt, lint]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -120,53 +159,45 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-release-
+          key: coverage
 
-      - name: Install just
-        uses: extractions/setup-just@v2
+      - name: Install tarpaulin
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-tarpaulin
 
-      - name: Build packages
-        run: just ci-build
+      - name: Generate coverage report
+        run: cargo tarpaulin --all --all-features --out Xml --output-dir coverage --timeout 300
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage/cobertura.xml
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: unittests
+          name: gateway-coverage
+
+      - name: Check coverage threshold
+        run: |
+          COVERAGE=$(cat coverage/cobertura.xml | grep -oP 'line-rate="\K[0-9.]+' | head -1 | awk '{print $1 * 100}')
+          echo "Coverage: ${COVERAGE}%"
+          if (( $(echo "$COVERAGE < $COVERAGE_THRESHOLD" | bc -l) )); then
+            echo "::error::Coverage ${COVERAGE}% is below threshold ${COVERAGE_THRESHOLD}%"
+            exit 1
+          fi
+          echo "::notice::Coverage ${COVERAGE}% meets threshold ${COVERAGE_THRESHOLD}%"
+
+  # ===========================================
+  # TIER 3: SECURITY & QUALITY
+  # ===========================================
 
   security-audit:
     name: Security Audit
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
-
-      - name: Run Security Audit
-        run: cargo audit
-
-  gitleaks:
-    name: Gitleaks Scan
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-
-  docs:
-    name: Build Documentation
-    runs-on: ubuntu-latest
+    needs: [fmt, lint]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -175,18 +206,169 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          key: audit
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      - name: Run security audit
+        run: cargo audit
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    needs: [fmt, lint]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          allow-licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Unicode-DFS-2016
+
+  # ===========================================
+  # TIER 4: BUILD ARTIFACTS
+  # ===========================================
+
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [test, coverage]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: gateway-linux-amd64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: gateway-macos-arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: gateway-windows-amd64.exe
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: build-${{ matrix.os }}
 
       - name: Install just
-        uses: extractions/setup-just@v2
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Build release
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Prepare artifact (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p artifacts
+          cp target/${{ matrix.target }}/release/gateway artifacts/${{ matrix.artifact }}
+          cp target/${{ matrix.target }}/release/cli artifacts/${{ matrix.artifact }}-cli
+
+      - name: Prepare artifact (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          mkdir artifacts
+          copy target\${{ matrix.target }}\release\gateway.exe artifacts\${{ matrix.artifact }}
+          copy target\${{ matrix.target }}\release\cli.exe artifacts\${{ matrix.artifact }}-cli
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: artifacts/*
+          retention-days: 7
+
+  # ===========================================
+  # TIER 5: DOCUMENTATION
+  # ===========================================
+
+  docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: docs
+
+      - name: Install just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
 
       - name: Build documentation
         run: just docs
+
+      - name: Upload documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: target/doc
+          retention-days: 7
+
+  # ===========================================
+  # QUALITY GATE: FINAL STATUS
+  # ===========================================
+
+  quality-gate:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    needs: [fmt, lint, msrv, type-check, test, coverage, security-audit, build]
+    if: always()
+    steps:
+      - name: Check all jobs passed
+        run: |
+          if [[ "${{ needs.fmt.result }}" != "success" ||
+                "${{ needs.lint.result }}" != "success" ||
+                "${{ needs.msrv.result }}" != "success" ||
+                "${{ needs.type-check.result }}" != "success" ||
+                "${{ needs.test.result }}" != "success" ||
+                "${{ needs.coverage.result }}" != "success" ||
+                "${{ needs.security-audit.result }}" != "success" ||
+                "${{ needs.build.result }}" != "success" ]]; then
+            echo "::error::Quality gate failed - one or more required jobs did not pass"
+            exit 1
+          fi
+          echo "::notice::All quality gates passed!"
+
+      - name: Summary
+        run: |
+          echo "## 🎉 Quality Gate Passed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Format | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| Lint | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| MSRV | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| Type Check | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| Coverage | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build | ✅ |" >> $GITHUB_STEP_SUMMARY

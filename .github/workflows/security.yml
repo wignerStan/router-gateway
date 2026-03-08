@@ -1,3 +1,6 @@
+# Security Pipeline - Rust Focused
+# Comprehensive security scanning for the gateway project
+
 name: Security
 
 on:
@@ -6,11 +9,21 @@ on:
   pull_request:
     branches: [main, develop]
   schedule:
-    - cron: '0 0 * * 0' # Weekly on Sunday
+    - cron: '0 6 * * 1'  # Weekly on Monday at 6 AM UTC
+  workflow_dispatch:
+
+# Cancel redundant runs
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  # ===========================================
+  # SECRET SCANNING
+  # ===========================================
+
   gitleaks:
-    name: Gitleaks Scan
+    name: Secret Scan (Gitleaks)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -20,19 +33,78 @@ jobs:
 
       - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  audit:
-    name: Audit Dependencies
+  trufflehog:
+    name: Secret Scan (TruffleHog)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          extra_args: --debug --only-verified
+
+  # ===========================================
+  # DEPENDENCY SECURITY
+  # ===========================================
+
+  cargo-audit:
+    name: Cargo Audit
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Audit dependencies
-        run: bun pm audit
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: security-audit
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      - name: Run cargo audit
+        run: cargo audit
+
+  cargo-deny:
+    name: Cargo Deny
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+
+      - name: Run cargo deny (advisories)
+        run: cargo deny check advisories
+
+      - name: Run cargo deny (licenses)
+        run: cargo deny check licenses
+
+      - name: Run cargo deny (bans)
+        run: cargo deny check bans
+
+      - name: Run cargo deny (sources)
+        run: cargo deny check sources
 
   dependency-review:
     name: Dependency Review
@@ -46,3 +118,68 @@ jobs:
         uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: high
+          allow-licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Unicode-DFS-2016
+
+  # ===========================================
+  # CODE SECURITY
+  # ===========================================
+
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: rust
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build for CodeQL
+        run: cargo build --release
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+  # ===========================================
+  # SECURITY SUMMARY
+  # ===========================================
+
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs: [gitleaks, trufflehog, cargo-audit, cargo-deny]
+    if: always()
+    steps:
+      - name: Check security status
+        run: |
+          FAILED=""
+          [[ "${{ needs.gitleaks.result }}" != "success" ]] && FAILED+="gitleaks "
+          [[ "${{ needs.trufflehog.result }}" != "success" ]] && FAILED+="trufflehog "
+          [[ "${{ needs.cargo-audit.result }}" != "success" ]] && FAILED+="cargo-audit "
+          [[ "${{ needs.cargo-deny.result }}" != "success" ]] && FAILED+="cargo-deny "
+
+          if [ -n "$FAILED" ]; then
+            echo "::error::Security checks failed: $FAILED"
+            exit 1
+          fi
+
+      - name: Summary
+        run: |
+          echo "## 🔒 Security Scan Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Scanner | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Gitleaks (Secrets) | ${{ needs.gitleaks.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| TruffleHog (Secrets) | ${{ needs.trufflehog.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Cargo Audit (CVEs) | ${{ needs.cargo-audit.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Cargo Deny (Policy) | ${{ needs.cargo-deny.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
