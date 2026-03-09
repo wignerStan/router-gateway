@@ -282,14 +282,14 @@ jobs:
         run: |
           mkdir -p artifacts
           cp target/${{ matrix.target }}/release/gateway artifacts/${{ matrix.artifact }}
-          cp target/${{ matrix.target }}/release/cli artifacts/${{ matrix.artifact }}-cli
+          cp target/${{ matrix.target }}/release/my-cli artifacts/${{ matrix.artifact }}-cli
 
       - name: Prepare artifact (Windows)
         if: runner.os == 'Windows'
         run: |
           mkdir artifacts
           copy target\${{ matrix.target }}\release\gateway.exe artifacts\${{ matrix.artifact }}
-          copy target\${{ matrix.target }}\release\cli.exe artifacts\${{ matrix.artifact }}-cli
+          copy target\${{ matrix.target }}\release\my-cli.exe artifacts\${{ matrix.artifact }}-cli
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

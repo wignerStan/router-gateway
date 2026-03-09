@@ -232,7 +232,7 @@ impl ProviderAdapter for GoogleAdapter {
         let base = base_url.unwrap_or(&self.default_base_url);
         // Sanitize model_id to prevent path traversal/SSRF attacks
         // Remove any path traversal characters
-        let sanitized_model_id = model_id.replace('/', "").replace('\\', "");
+        let sanitized_model_id = model_id.replace(['/', '\\'], "");
         format!("{}/models/{}:generateContent", base, sanitized_model_id)
     }
 
