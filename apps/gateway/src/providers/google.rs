@@ -230,7 +230,10 @@ impl ProviderAdapter for GoogleAdapter {
 
     fn get_endpoint(&self, base_url: Option<&str>, model_id: &str) -> String {
         let base = base_url.unwrap_or(&self.default_base_url);
-        format!("{}/models/{}:generateContent", base, model_id)
+        // Sanitize model_id to prevent path traversal/SSRF attacks
+        // Remove any path traversal characters
+        let sanitized_model_id = model_id.replace('/', "").replace('\\', "");
+        format!("{}/models/{}:generateContent", base, sanitized_model_id)
     }
 
     fn build_headers(&self, api_key: &str) -> Vec<(String, String)> {

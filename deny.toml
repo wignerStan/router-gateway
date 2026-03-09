@@ -1,19 +1,28 @@
 # Deny Configuration for Dependency Policy and Security
 # Production-ready settings for cargo-deny
 
-[advisories]
-# Security advisories from RustSec
-db-path = "~/.cargo/advisory-db"
-db-urls = ["https://github.com/rustsec/advisory-db"]
-vulnerability = "deny"
-unmaintained = "warn"
-unsound = "warn"
-yanked = "warn"
-notice = "warn"
+# Root options
+[graph]
+targets = []
+all-features = false
+no-default-features = false
 
+[output]
+feature-depth = 1
+
+# Advisories check configuration
+# More info: https://embarkstudios.github.io/cargo-deny/checks/advisories/cfg.html
+[advisories]
+db-path = "$CARGO_HOME/advisory-dbs"
+db-urls = ["https://github.com/rustsec/advisory-db"]
+# Ignore specific advisories if needed
+# RUSTSEC-2024-0370: proc-macro-error is unmaintained - transitive dep from tabled
+ignore = ["RUSTSEC-2024-0370"]
+
+# Licenses check configuration
+# More info: https://embarkstudios.github.io/cargo-deny/checks/licenses/cfg.html
 [licenses]
-# License compliance - OSI-approved licenses
-unlicensed = "deny"
+# List of explicitly allowed licenses
 allow = [
     "MIT",
     "Apache-2.0",
@@ -25,33 +34,37 @@ allow = [
     "0BSD",
     "CC0-1.0",
     "MPL-2.0",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
 ]
-deny = [
-    "GPL-2.0",
-    "GPL-3.0",
-    "LGPL-2.0",
-    "LGPL-2.1",
-    "LGPL-3.0",
-    "AGPL-3.0",
-    "SSPL-1.0",
-]
-copyleft = "warn"
-allow-osi-fsf-free = "both"
-default = "deny"
 confidence-threshold = 0.8
 
+[licenses.private]
+ignore = false
+registries = []
+
+# Bans check configuration
+# More info: https://embarkstudios.github.io/cargo-deny/checks/bans/cfg.html
 [bans]
-# Dependency restrictions
 multiple-versions = "warn"
 wildcards = "deny"
 highlight = "all"
-workspace-default-features = ["allow"]
-feature-default-features = ["allow"]
+workspace-default-features = "allow"
+external-default-features = "allow"
+allow = []
+deny = []
+skip = []
+skip-tree = []
 
-# Known good duplicates (allow with warning)
+# Sources check configuration
+# More info: https://embarkstudios.github.io/cargo-deny/checks/sources/cfg.html
 [sources]
-# Source restrictions
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = []
+
+[sources.allow-org]
+github = []
+gitlab = []
+bitbucket = []
