@@ -234,23 +234,26 @@ impl Router {
         }
     }
 
-    /// Calculate utility for all candidates
+    /// Calculate utility for all candidates in parallel
     async fn calculate_utilities(
         &self,
         candidates: &[RouteCandidate],
     ) -> Vec<(RouteCandidate, f64)> {
-        let mut results = Vec::new();
+        use futures::future::join_all;
 
-        for candidate in candidates {
-            // Get metrics for this credential
-            let metrics = self.metrics().get_metrics(&candidate.credential_id).await;
+        let futures: Vec<_> = candidates
+            .iter()
+            .map(|candidate| async {
+                // Get metrics for this credential
+                let metrics = self.metrics().get_metrics(&candidate.credential_id).await;
 
-            // Calculate utility
-            let utility = self.utility_estimator.estimate_utility(metrics.as_ref());
-            results.push((candidate.clone(), utility));
-        }
+                // Calculate utility
+                let utility = self.utility_estimator.estimate_utility(metrics.as_ref());
+                (candidate.clone(), utility)
+            })
+            .collect();
 
-        results
+        join_all(futures).await
     }
 
     /// Select best route with session affinity
