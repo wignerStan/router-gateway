@@ -382,7 +382,7 @@ async fn main() -> Result<()> {
                         }
                         println!("  Credentials: {} defined", config_value.credentials.len());
                         for cred in &config_value.credentials {
-                            print!(
+                            println!(
                                 "    - {} ({}): priority={}, models={}",
                                 cred.id,
                                 cred.provider,
