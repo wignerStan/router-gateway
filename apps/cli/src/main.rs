@@ -286,11 +286,13 @@ async fn main() -> Result<()> {
                     println!(
                         "{}",
                         serde_json::to_string_pretty(&serde_json::json!({
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
                             "valid": false,
                             "error": format!("File not found: {}", config.display())
                         }))?
                     );
-                } else {
                     println!(
                         "{}: File not found: {}",
                         "ERROR".red().bold(),
