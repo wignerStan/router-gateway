@@ -178,3 +178,4 @@ dist
 # OMC state directory
 .omc/
 *.rlib
+target/

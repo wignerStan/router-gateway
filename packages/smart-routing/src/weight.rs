@@ -104,9 +104,13 @@ impl DefaultWeightCalculator {
             // Sparse data -> Heuristic mode
             (DataAvailability::Sparse, _) => PlannerMode::Heuristic,
             // Missing state -> Safe weighted mode
-            (DataAvailability::Missing, _) => PlannerMode::SafeWeighted,
+            (DataAvailability::Missing, HealthStatus::Healthy | HealthStatus::Degraded) => {
+                PlannerMode::SafeWeighted
+            },
             // Unhealthy with full data -> Safe weighted (conservative)
             (DataAvailability::Full, HealthStatus::Unhealthy) => PlannerMode::SafeWeighted,
+            // Unhealthy with missing data -> Deterministic fallback
+            (DataAvailability::Missing, HealthStatus::Unhealthy) => PlannerMode::Deterministic,
         }
     }
 
