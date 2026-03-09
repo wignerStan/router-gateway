@@ -1,6 +1,7 @@
 pub mod config;
 pub mod providers;
 
+use anyhow::Context;
 use axum::{
     extract::State,
     routing::{get, post},
@@ -153,9 +154,19 @@ async fn main() -> anyhow::Result<()> {
     let registry = ModelRegistry::default();
     tracing::info!("Model registry initialized");
 
-    // Initialize smart router
-    let smart_router = SmartRouter::new();
-    tracing::info!("Smart router initialized");
+    // Initialize smart router and populate from config
+    let mut smart_router = SmartRouter::new();
+
+    // Populate router with credentials and models from config
+    for cred in &config.credentials {
+        // Add credential with its allowed models to the router
+        smart_router.add_credential(cred.id.clone(), cred.allowed_models.clone());
+    }
+
+    tracing::info!(
+        "Smart router initialized with {} credentials",
+        config.credentials.len()
+    );
 
     // Initialize metrics and health for executor
     let metrics = MetricsCollector::new();
@@ -198,18 +209,33 @@ async fn main() -> anyhow::Result<()> {
         credentials,
     };
 
-    // Get port from config before moving state
+    // Get host and port from config before moving state
     let port = state.config.server.port;
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    let host = &state.config.server.host;
+    let addr: SocketAddr = format!("{}:{}", host, port)
+        .parse()
+        .context("Invalid host/port configuration")?;
     tracing::info!("Gateway listening on {}", addr);
 
     // Build our application with routes
-    let app = Router::new()
+    // Public routes (no authentication required)
+    let public_routes = Router::new()
         .route("/", get(root))
-        .route("/health", get(health_check))
+        .route("/health", get(health_check));
+
+    // Protected routes (require authentication if auth_tokens configured)
+    let protected_routes = Router::new()
         .route("/api/models", get(list_models))
         .route("/api/route", get(route_request))
         .route("/v1/chat/completions", post(chat_completions))
+        .route_layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
+        ));
+
+    let app = Router::new()
+        .merge(public_routes)
+        .merge(protected_routes)
         .layer(axum::middleware::from_fn_with_state(
             tracing_middleware,
             llm_tracing::tracing_middleware,
@@ -274,6 +300,59 @@ async fn root() -> Json<Value> {
             "route": "/api/route"
         }
     }))
+}
+
+/// Authentication middleware for protected routes
+/// Validates Bearer token against configured auth_tokens
+/// If auth_tokens is empty, authentication is skipped (not recommended for production)
+async fn auth_middleware(
+    State(state): State<AppState>,
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> std::result::Result<axum::response::Response, (axum::http::StatusCode, Json<Value>)> {
+    use axum::http::header::AUTHORIZATION;
+    use axum::http::StatusCode;
+
+    // Skip auth if no tokens configured (development mode)
+    if state.config.server.auth_tokens.is_empty() {
+        return Ok(next.run(req).await);
+    }
+
+    // Extract Authorization header
+    let auth_header = req
+        .headers()
+        .get(AUTHORIZATION)
+        .and_then(|h| h.to_str().ok());
+
+    match auth_header {
+        Some(header) => {
+            // Check Bearer token format
+            if let Some(token) = header.strip_prefix("Bearer ") {
+                // Validate against configured tokens
+                if state.config.server.auth_tokens.iter().any(|t| t == token) {
+                    return Ok(next.run(req).await);
+                }
+            }
+            Err((
+                StatusCode::UNAUTHORIZED,
+                Json(json!({
+                    "error": {
+                        "type": "invalid_request_error",
+                        "message": "Invalid or expired API token"
+                    }
+                })),
+            ))
+        },
+        None => Err((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "error": {
+                    "type": "invalid_request_error",
+                    "message": "Missing Authorization header. Use: Authorization: Bearer <token>"
+                }
+            })),
+        )),
+    }
 }
 
 async fn health_check(State(state): State<AppState>) -> Json<HealthStatus> {

@@ -42,6 +42,11 @@ pub struct ServerConfig {
     /// Request timeout in seconds
     #[serde(default = "default_timeout")]
     pub timeout_secs: u64,
+
+    /// Authentication tokens for API access (Bearer tokens)
+    /// If empty, authentication is disabled (not recommended for production)
+    #[serde(default)]
+    pub auth_tokens: Vec<String>,
 }
 
 impl Default for ServerConfig {
@@ -50,6 +55,7 @@ impl Default for ServerConfig {
             port: default_port(),
             host: default_host(),
             timeout_secs: default_timeout(),
+            auth_tokens: Vec::new(),
         }
     }
 }
@@ -222,8 +228,14 @@ impl GatewayConfig {
             }
         }
 
-        // Validate routing strategy
-        let valid_strategies = ["weighted", "adaptive", "round_robin"];
+        // Validate routing strategy - must match smart-routing strategies
+        let valid_strategies = [
+            "weighted",
+            "time_aware",
+            "quota_aware",
+            "adaptive",
+            "policy_aware",
+        ];
         if !valid_strategies.contains(&self.routing.strategy.as_str()) {
             anyhow::bail!(
                 "Invalid routing strategy: {}. Valid options: {:?}",

@@ -75,15 +75,23 @@ impl ProviderAdapter for AnthropicAdapter {
                                     "text": p.text.as_ref().unwrap_or(&String::new())
                                 })
                             } else if p.part_type == "image_url" {
-                                let url = &p.image_url.as_ref().unwrap().url;
-                                // Anthropic expects base64 or URL in specific format
-                                json!({
-                                    "type": "image",
-                                    "source": {
-                                        "type": "url",
-                                        "url": url
-                                    }
-                                })
+                                // Safe handling: check if image_url exists before accessing
+                                if let Some(image_url) = &p.image_url {
+                                    // Anthropic expects base64 or URL in specific format
+                                    json!({
+                                        "type": "image",
+                                        "source": {
+                                            "type": "url",
+                                            "url": &image_url.url
+                                        }
+                                    })
+                                } else {
+                                    // Skip malformed image_url content - log as text placeholder
+                                    json!({
+                                        "type": "text",
+                                        "text": "[malformed image content]"
+                                    })
+                                }
                             } else {
                                 json!({ "type": &p.part_type })
                             }

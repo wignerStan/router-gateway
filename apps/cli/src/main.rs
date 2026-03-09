@@ -285,12 +285,10 @@ async fn main() -> Result<()> {
                 if format_json {
                     println!(
                         "{}",
-                        serde_json::to_string_pretty(
-                            &serde_json::json!({
-                                "valid": false,
-                                "error": format!("File not found: {}", config.display())
-                            })
-                        )?
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "valid": false,
+                            "error": format!("File not found: {}", config.display())
+                        }))?
                     );
                 } else {
                     println!(
@@ -426,12 +424,10 @@ async fn main() -> Result<()> {
                     if format_json {
                         println!(
                             "{}",
-                            serde_json::to_string_pretty(
-                                &serde_json::json!({
-                                    "valid": false,
-                                    "error": e.to_string()
-                                })
-                            )?
+                            serde_json::to_string_pretty(&serde_json::json!({
+                                "valid": false,
+                                "error": e.to_string()
+                            }))?
                         );
                     } else {
                         println!("{}: Invalid YAML syntax", "ERROR".red().bold());
