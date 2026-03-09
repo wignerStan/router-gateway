@@ -340,8 +340,7 @@ async fn main() -> Result<()> {
 
                     // Validate routing strategy
                     if let Some(ref routing) = config_value.routing {
-                        let valid_strategies = ["weighted", "adaptive", "round_robin"];
-                        if !valid_strategies.contains(&routing.strategy.as_str()) {
+                        let valid_strategies = ["weighted", "adaptive", "round_robin", "time_aware", "quota_aware", "policy_aware"];
                             errors.push(format!(
                                 "Invalid routing strategy: '{}'. Valid options: {:?}",
                                 routing.strategy, valid_strategies
