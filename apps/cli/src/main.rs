@@ -286,13 +286,11 @@ async fn main() -> Result<()> {
                     println!(
                         "{}",
                         serde_json::to_string_pretty(&serde_json::json!({
-                    println!(
-                        "{}",
-                        serde_json::to_string_pretty(&serde_json::json!({
                             "valid": false,
                             "error": format!("File not found: {}", config.display())
                         }))?
                     );
+                } else {
                     println!(
                         "{}: File not found: {}",
                         "ERROR".red().bold(),
@@ -342,7 +340,15 @@ async fn main() -> Result<()> {
 
                     // Validate routing strategy
                     if let Some(ref routing) = config_value.routing {
-                        let valid_strategies = ["weighted", "adaptive", "round_robin", "time_aware", "quota_aware", "policy_aware"];
+                        let valid_strategies = [
+                            "weighted",
+                            "adaptive",
+                            "round_robin",
+                            "time_aware",
+                            "quota_aware",
+                            "policy_aware",
+                        ];
+                        if !valid_strategies.contains(&routing.strategy.as_str()) {
                             errors.push(format!(
                                 "Invalid routing strategy: '{}'. Valid options: {:?}",
                                 routing.strategy, valid_strategies
