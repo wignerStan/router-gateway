@@ -145,7 +145,7 @@ jobs:
           tool: just
 
       - name: Run tests
-        run: just ci-test
+        run: cargo test --all --all-features
 
   coverage:
     name: Test Coverage
