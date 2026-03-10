@@ -15,12 +15,12 @@ The gateway uses a multi-dimensional classification system for intelligent routi
 
 Defines functional capabilities supported by a model.
 
-| Category | Description | Example Models |
-|----------|-------------|----------------|
-| `Vision` | Image/vision input support | claude-sonnet-4, gpt-4o, gemini-2.5-pro |
-| `Tools` | Function calling support | Most modern models |
-| `Streaming` | Streaming response support | All models |
-| `Thinking` | Extended thinking/reasoning | claude-sonnet-4, o1, gemini-2.5-flash |
+| Category    | Description                 | Example Models                          |
+| ----------- | --------------------------- | --------------------------------------- |
+| `Vision`    | Image/vision input support  | claude-sonnet-4, gpt-4o, gemini-2.5-pro |
+| `Tools`     | Function calling support    | Most modern models                      |
+| `Streaming` | Streaming response support  | All models                              |
+| `Thinking`  | Extended thinking/reasoning | claude-sonnet-4, o1, gemini-2.5-flash   |
 
 **Implementation:** `packages/model-registry/src/categories.rs:6-22`
 
@@ -37,11 +37,11 @@ pub enum CapabilityCategory {
 
 Quality/performance tier for model selection.
 
-| Tier | Description | Criteria | Examples |
-|------|-------------|----------|----------|
-| `Flagship` | Highest quality, highest cost | Price ≥$15/1M or known flagship ID | claude-opus-4, gpt-4-turbo, gemini-2.5-pro |
-| `Standard` | Balanced quality/cost | Default | claude-sonnet-4, gpt-4o |
-| `Fast` | Lowest cost, highest speed | Price ≤$1/1M or known fast ID | claude-haiku-4, gpt-4o-mini, gemini-2.5-flash |
+| Tier       | Description                   | Criteria                           | Examples                                      |
+| ---------- | ----------------------------- | ---------------------------------- | --------------------------------------------- |
+| `Flagship` | Highest quality, highest cost | Price ≥$15/1M or known flagship ID | claude-opus-4, gpt-4-turbo, gemini-2.5-pro    |
+| `Standard` | Balanced quality/cost         | Default                            | claude-sonnet-4, gpt-4o                       |
+| `Fast`     | Lowest cost, highest speed    | Price ≤$1/1M or known fast ID      | claude-haiku-4, gpt-4o-mini, gemini-2.5-flash |
 
 **Implementation:** `packages/model-registry/src/categories.rs:25-43`
 
@@ -57,12 +57,12 @@ pub enum TierCategory {
 
 Pricing band based on input price per million tokens.
 
-| Category | Price Range | Examples |
-|----------|-------------|----------|
-| `UltraPremium` | ≥$50/1M | High-end enterprise models |
-| `Premium` | $10-50/1M | claude-opus-4 |
-| `Standard` | $1-10/1M | claude-sonnet-4, gpt-4o |
-| `Economy` | <$1/1M | claude-haiku-4, gpt-4o-mini |
+| Category       | Price Range | Examples                    |
+| -------------- | ----------- | --------------------------- |
+| `UltraPremium` | ≥$50/1M     | High-end enterprise models  |
+| `Premium`      | $10-50/1M   | claude-opus-4               |
+| `Standard`     | $1-10/1M    | claude-sonnet-4, gpt-4o     |
+| `Economy`      | <$1/1M      | claude-haiku-4, gpt-4o-mini |
 
 **Implementation:** `packages/model-registry/src/categories.rs:46-67`
 
@@ -79,12 +79,12 @@ pub enum CostCategory {
 
 Context size band for request fitting.
 
-| Category | Token Range | Examples |
-|----------|-------------|----------|
-| `Small` | <32K | Legacy models |
-| `Medium` | 32K-128K | gpt-4, claude-instant |
-| `Large` | 128K-500K | claude-sonnet-4, gpt-4o, gemini-2.5-pro |
-| `Ultra` | ≥500K | gemini-2.5-flash (1M), gemini-1.5-pro (2M) |
+| Category | Token Range | Examples                                   |
+| -------- | ----------- | ------------------------------------------ |
+| `Small`  | <32K        | Legacy models                              |
+| `Medium` | 32K-128K    | gpt-4, claude-instant                      |
+| `Large`  | 128K-500K   | claude-sonnet-4, gpt-4o, gemini-2.5-pro    |
+| `Ultra`  | ≥500K       | gemini-2.5-flash (1M), gemini-1.5-pro (2M) |
 
 **Implementation:** `packages/model-registry/src/categories.rs:70-91`
 
@@ -140,26 +140,26 @@ pub enum ProviderCategory {
 }
 ```
 
-| Provider | Display Name | Aliases |
-|----------|--------------|---------|
-| `Anthropic` | Anthropic | - |
-| `OpenAI` | OpenAI | - |
-| `Google` | Google | gemini |
-| `XAI` | xAI | x-ai, grok |
-| `DeepSeek` | DeepSeek | - |
-| `Mistral` | Mistral AI | mistralai |
-| `Cohere` | Cohere | - |
-| `Perplexity` | Perplexity | - |
-| `Alibaba` | Alibaba (Qwen) | qwen, tongyi |
-| `Zhipu` | Zhipu AI (GLM) | glm, chatglm |
-| `Baidu` | Baidu (ERNIE) | ernie, wenxin |
-| `Moonshot` | Moonshot (Kimi) | kimi |
-| `ByteDance` | ByteDance (Doubao) | doubao |
-| `Meta` | Meta | - |
-| `MetaLlama` | Meta (Llama) | llama |
-| `Amazon` | Amazon Bedrock | bedrock, aws |
-| `Azure` | Azure OpenAI | - |
-| `VertexAI` | Google Vertex AI | vertex |
+| Provider     | Display Name       | Aliases       |
+| ------------ | ------------------ | ------------- |
+| `Anthropic`  | Anthropic          | -             |
+| `OpenAI`     | OpenAI             | -             |
+| `Google`     | Google             | gemini        |
+| `XAI`        | xAI                | x-ai, grok    |
+| `DeepSeek`   | DeepSeek           | -             |
+| `Mistral`    | Mistral AI         | mistralai     |
+| `Cohere`     | Cohere             | -             |
+| `Perplexity` | Perplexity         | -             |
+| `Alibaba`    | Alibaba (Qwen)     | qwen, tongyi  |
+| `Zhipu`      | Zhipu AI (GLM)     | glm, chatglm  |
+| `Baidu`      | Baidu (ERNIE)      | ernie, wenxin |
+| `Moonshot`   | Moonshot (Kimi)    | kimi          |
+| `ByteDance`  | ByteDance (Doubao) | doubao        |
+| `Meta`       | Meta               | -             |
+| `MetaLlama`  | Meta (Llama)       | llama         |
+| `Amazon`     | Amazon Bedrock     | bedrock, aws  |
+| `Azure`      | Azure OpenAI       | -             |
+| `VertexAI`   | Google Vertex AI   | vertex        |
 
 ---
 
@@ -167,14 +167,14 @@ pub enum ProviderCategory {
 
 Input/output modality types for multi-modal routing.
 
-| Modality | Description |
-|----------|-------------|
-| `Text` | Text input/output |
-| `Image` | Image input |
-| `Audio` | Audio input/output |
-| `Video` | Video input |
-| `Embedding` | Embedding output |
-| `Code` | Code generation |
+| Modality    | Description        |
+| ----------- | ------------------ |
+| `Text`      | Text input/output  |
+| `Image`     | Image input        |
+| `Audio`     | Audio input/output |
+| `Video`     | Video input        |
+| `Embedding` | Embedding output   |
+| `Code`      | Code generation    |
 
 ---
 
@@ -213,25 +213,25 @@ pub struct PolicyFilters {
 
 ### Policy Actions
 
-| Action | Description |
-|--------|-------------|
-| `prefer` | Boost weight of matching models |
-| `avoid` | Reduce weight of matching models |
-| `block` | Exclude matching models |
-| `weight` | Apply custom weight factor |
+| Action   | Description                      |
+| -------- | -------------------------------- |
+| `prefer` | Boost weight of matching models  |
+| `avoid`  | Reduce weight of matching models |
+| `block`  | Exclude matching models          |
+| `weight` | Apply custom weight factor       |
 
 ### Policy Conditions
 
 Time and context-based conditions:
 
-| Condition Type | Description | Example |
-|----------------|-------------|---------|
-| `TimeOfDay` | Hour of day (0-23) | Off-peak routing |
-| `DayOfWeek` | Day of week (0-6) | Weekend policies |
-| `TokenCount` | Request token count | Large context routing |
-| `TenantId` | User/tenant ID | Per-tenant policies |
-| `ModelFamily` | Model family name | Family-specific rules |
-| `Custom` | Custom metadata | Flexible extensions |
+| Condition Type | Description         | Example               |
+| -------------- | ------------------- | --------------------- |
+| `TimeOfDay`    | Hour of day (0-23)  | Off-peak routing      |
+| `DayOfWeek`    | Day of week (0-6)   | Weekend policies      |
+| `TokenCount`   | Request token count | Large context routing |
+| `TenantId`     | User/tenant ID      | Per-tenant policies   |
+| `ModelFamily`  | Model family name   | Family-specific rules |
+| `Custom`       | Custom metadata     | Flexible extensions   |
 
 ### Example Policies
 
@@ -325,17 +325,20 @@ async fn find_best_fit(tokens: usize) -> Option<ModelInfo>
 Tier is determined by both explicit model IDs and price thresholds:
 
 ### Flagship Models (by ID)
+
 - `claude-opus-4`, `claude-opus-4-20250514`
 - `gpt-4`, `gpt-4-turbo`, `gpt-4-0314`
 - `gemini-2.5-pro`
 
 ### Fast Models (by ID)
+
 - `claude-haiku-4`, `claude-haiku-4-20250514`
 - `gpt-4o-mini`, `gpt-4o-mini-2024-07-18`
 - `gemini-2.0-flash-exp`, `gemini-2.5-flash`, `gemini-2.5-flash-exp`
 - `gemini-1.5-flash`, `gemini-1.5-flash-8b`, `gemini-1.5-flash-exp`
 
 ### Price-Based Fallback
+
 - `input_price_per_million >= 15.0` → Flagship
 - `input_price_per_million <= 1.0` → Fast
 - Otherwise → Standard
@@ -394,10 +397,10 @@ pub struct ModelInfo {
 
 ## Summary
 
-| Dimension | Categories | Primary Use |
-|-----------|------------|-------------|
-| Capability | 4 (Vision, Tools, Streaming, Thinking) | Feature filtering |
-| Tier | 3 (Flagship, Standard, Fast) | Quality/speed selection |
-| Cost | 4 (UltraPremium → Economy) | Budget optimization |
-| Context | 4 (Small → Ultra) | Request fitting |
-| Provider | 3 (Anthropic, OpenAI, Google) | Provider routing |
+| Dimension  | Categories                             | Primary Use             |
+| ---------- | -------------------------------------- | ----------------------- |
+| Capability | 4 (Vision, Tools, Streaming, Thinking) | Feature filtering       |
+| Tier       | 3 (Flagship, Standard, Fast)           | Quality/speed selection |
+| Cost       | 4 (UltraPremium → Economy)             | Budget optimization     |
+| Context    | 4 (Small → Ultra)                      | Request fitting         |
+| Provider   | 3 (Anthropic, OpenAI, Google)          | Provider routing        |

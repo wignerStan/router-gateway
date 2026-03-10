@@ -540,4 +540,3 @@ credentials:
         assert!(warnings[0].contains("environment variable 'NON_EXISTENT_VAR_123' not set"));
     }
 }
-
