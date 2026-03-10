@@ -785,4 +785,285 @@ mod tests {
         assert_eq!(plan.total_candidates, 3);
         assert!(plan.filtered_candidates >= 1);
     }
+
+    // ============================================================
+    // Edge Case Tests for Router Orchestration
+    // ============================================================
+
+    #[tokio::test]
+    async fn test_router_session_affinity_disabled_uses_normal_selection() {
+        let config = RouterConfig {
+            enable_session_affinity: false,
+            use_bandit: false, // Use weighted for deterministic testing
+            ..Default::default()
+        };
+        let mut router = Router::with_config(config);
+        router.add_credential("cred-1".to_string(), vec!["claude-3-opus".to_string()]);
+        router.add_credential("cred-2".to_string(), vec!["gpt-4".to_string()]);
+        router.set_model(
+            "claude-3-opus".to_string(),
+            create_test_model("claude-3-opus", "anthropic", 200000),
+        );
+        router.set_model(
+            "gpt-4".to_string(),
+            create_test_model("gpt-4", "openai", 128000),
+        );
+
+        let request = create_test_request(1000);
+        let auths = vec![create_test_auth("cred-1"), create_test_auth("cred-2")];
+
+        for auth in &auths {
+            router.metrics().initialize_auth(&auth.id).await;
+        }
+
+        // Plan with session_id - should be ignored since affinity disabled
+        let plan = router
+            .plan(&request, auths.clone(), Some("test-session"))
+            .await;
+
+        assert!(
+            plan.primary.is_some(),
+            "Should select a route even with session affinity disabled"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_router_bandit_disabled_uses_weighted_selection() {
+        let config = RouterConfig {
+            use_bandit: false,
+            ..Default::default()
+        };
+        let mut router = Router::with_config(config);
+        router.add_credential("cred-1".to_string(), vec!["claude-3-opus".to_string()]);
+        router.set_model(
+            "claude-3-opus".to_string(),
+            create_test_model("claude-3-opus", "anthropic", 200000),
+        );
+
+        let request = create_test_request(1000);
+        let auths = vec![create_test_auth("cred-1")];
+
+        router.metrics().initialize_auth("cred-1").await;
+
+        let plan = router.plan(&request, auths, None).await;
+
+        assert!(
+            plan.primary.is_some(),
+            "Should select route with bandit disabled"
+        );
+        let primary = plan.primary.unwrap();
+        // With weighted selection (no bandit), utility determines selection
+        assert!(primary.utility >= 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_router_generates_correct_number_of_fallbacks() {
+        let config = RouterConfig {
+            max_fallbacks: 3,
+            min_fallbacks: 2,
+            ..Default::default()
+        };
+        let mut router = Router::with_config(config);
+        router.add_credential("cred-1".to_string(), vec!["claude-3-opus".to_string()]);
+        router.add_credential("cred-2".to_string(), vec!["gpt-4".to_string()]);
+        router.add_credential("cred-3".to_string(), vec!["gemini-pro".to_string()]);
+        router.add_credential("cred-4".to_string(), vec!["llama-3".to_string()]);
+        router.set_model(
+            "claude-3-opus".to_string(),
+            create_test_model("claude-3-opus", "anthropic", 200000),
+        );
+        router.set_model(
+            "gpt-4".to_string(),
+            create_test_model("gpt-4", "openai", 128000),
+        );
+        router.set_model(
+            "gemini-pro".to_string(),
+            create_test_model("gemini-pro", "google", 128000),
+        );
+        router.set_model(
+            "llama-3".to_string(),
+            create_test_model("llama-3", "meta", 128000),
+        );
+
+        let request = create_test_request(1000);
+        let auths = vec![
+            create_test_auth("cred-1"),
+            create_test_auth("cred-2"),
+            create_test_auth("cred-3"),
+            create_test_auth("cred-4"),
+        ];
+
+        for auth in &auths {
+            router.metrics().initialize_auth(&auth.id).await;
+        }
+
+        let plan = router.plan(&request, auths, None).await;
+
+        assert!(plan.primary.is_some());
+        // Fallbacks should be <= max_fallbacks (3)
+        assert!(
+            plan.fallbacks.len() <= 3,
+            "Fallbacks should not exceed max_fallbacks"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_router_handles_credential_model_mismatch_gracefully() {
+        let mut router = Router::new();
+        // Register credential with one model
+        router.add_credential("cred-1".to_string(), vec!["claude-3-opus".to_string()]);
+        // But don't register the model info - this simulates mismatch
+
+        let request = create_test_request(1000);
+        // Auth references non-existent model
+        let auths = vec![create_test_auth("cred-1")];
+
+        let plan = router.plan(&request, auths, None).await;
+
+        // Should handle gracefully - either no route or empty plan
+        // The candidate builder will create no candidates without model info
+        assert_eq!(plan.total_candidates, 0);
+    }
+
+    #[tokio::test]
+    async fn test_router_record_result_updates_all_subsystems() {
+        let router = Router::new();
+
+        // Initialize the credential in metrics first
+        router.metrics().initialize_auth("cred-1").await;
+
+        // Record a result
+        router
+            .record_result("cred-1", true, 150.0, 200, 0.9)
+            .await;
+
+        // Verify metrics were updated
+        let metrics = router.metrics().get_metrics("cred-1").await;
+        assert!(
+            metrics.is_some(),
+            "Metrics should be recorded"
+        );
+        let m = metrics.unwrap();
+        assert_eq!(m.total_requests, 1);
+        assert_eq!(m.success_count, 1);
+        assert_eq!(m.avg_latency_ms, 150.0);
+
+        // Verify health was updated (should be healthy)
+        let health_status = router.health().get_status("cred-1").await;
+        assert_eq!(
+            health_status,
+            crate::health::HealthStatus::Healthy,
+            "Health should be healthy after success"
+        );
+
+        // Verify bandit policy was updated
+        let bandit = router.bandit_policy().lock().await;
+        let stats = bandit.get_stats("cred-1");
+        assert!(
+            stats.is_some(),
+            "Bandit stats should be recorded"
+        );
+        let s = stats.unwrap();
+        assert_eq!(s.pulls, 1);
+        assert_eq!(s.last_utility, 0.9);
+    }
+
+    #[tokio::test]
+    async fn test_router_plan_with_all_credentials_unavailable() {
+        let mut router = Router::new();
+        router.add_credential("cred-1".to_string(), vec!["claude-3-opus".to_string()]);
+        router.set_model(
+            "claude-3-opus".to_string(),
+            create_test_model("claude-3-opus", "anthropic", 200000),
+        );
+
+        let request = create_test_request(1000);
+        // Create unavailable auth
+        let mut auth = create_test_auth("cred-1");
+        auth.unavailable = true;
+        let auths = vec![auth];
+
+        router.metrics().initialize_auth("cred-1").await;
+
+        let plan = router.plan(&request, auths, None).await;
+
+        // Should still get a primary candidate (unavailable affects weight, not filtering)
+        // The candidate builder doesn't filter by unavailable status
+        assert!(
+            plan.primary.is_some() || plan.filtered_candidates == 0,
+            "Router should handle unavailable auths"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_router_with_zero_max_fallbacks() {
+        let config = RouterConfig {
+            max_fallbacks: 0,
+            min_fallbacks: 0,
+            ..Default::default()
+        };
+        let mut router = Router::with_config(config);
+        router.add_credential("cred-1".to_string(), vec!["claude-3-opus".to_string()]);
+        router.add_credential("cred-2".to_string(), vec!["gpt-4".to_string()]);
+        router.set_model(
+            "claude-3-opus".to_string(),
+            create_test_model("claude-3-opus", "anthropic", 200000),
+        );
+        router.set_model(
+            "gpt-4".to_string(),
+            create_test_model("gpt-4", "openai", 128000),
+        );
+
+        let request = create_test_request(1000);
+        let auths = vec![create_test_auth("cred-1"), create_test_auth("cred-2")];
+
+        for auth in &auths {
+            router.metrics().initialize_auth(&auth.id).await;
+        }
+
+        let plan = router.plan(&request, auths, None).await;
+
+        assert!(plan.primary.is_some());
+        assert!(
+            plan.fallbacks.is_empty(),
+            "Zero max_fallbacks should return no fallbacks"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_router_fallback_count_with_limited_candidates() {
+        let config = RouterConfig {
+            max_fallbacks: 10,
+            min_fallbacks: 5, // More than available
+            ..Default::default()
+        };
+        let mut router = Router::with_config(config);
+        // Only 2 credentials available
+        router.add_credential("cred-1".to_string(), vec!["claude-3-opus".to_string()]);
+        router.add_credential("cred-2".to_string(), vec!["gpt-4".to_string()]);
+        router.set_model(
+            "claude-3-opus".to_string(),
+            create_test_model("claude-3-opus", "anthropic", 200000),
+        );
+        router.set_model(
+            "gpt-4".to_string(),
+            create_test_model("gpt-4", "openai", 128000),
+        );
+
+        let request = create_test_request(1000);
+        let auths = vec![create_test_auth("cred-1"), create_test_auth("cred-2")];
+
+        for auth in &auths {
+            router.metrics().initialize_auth(&auth.id).await;
+        }
+
+        let plan = router.plan(&request, auths, None).await;
+
+        assert!(plan.primary.is_some());
+        // Should return available fallbacks, not min_fallbacks
+        assert!(
+            plan.fallbacks.len() <= 2,
+            "Should return available auths as fallbacks, not min_fallbacks"
+        );
+    }
 }

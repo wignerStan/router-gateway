@@ -707,4 +707,263 @@ mod tests {
         // Now should be unhealthy with new threshold (total 4 consecutive)
         // Note: consecutive_failures was reset when success occurred, so we need more failures
     }
+
+    // ============================================================
+    // Edge Case Tests for Health Manager State Machine
+    // ============================================================
+
+    #[tokio::test]
+    async fn test_health_transition_healthy_degraded_healthy() {
+        let config = HealthConfig {
+            healthy_threshold: 2,
+            unhealthy_threshold: 5,
+            status_codes: crate::config::StatusCodeHealthConfig {
+                degraded: vec![429],
+                unhealthy: vec![500],
+                healthy: vec![],
+            },
+            ..Default::default()
+        };
+        let manager = HealthManager::new(config);
+
+        // Start healthy (default)
+        assert_eq!(
+            manager.get_status("test-auth").await,
+            HealthStatus::Healthy,
+            "Should start healthy"
+        );
+
+        // Degraded by 429
+        manager.update_from_result("test-auth", false, 429).await;
+        assert_eq!(
+            manager.get_status("test-auth").await,
+            HealthStatus::Degraded,
+            "Should be degraded after 429"
+        );
+
+        // Direct recovery to healthy (2 successes)
+        manager.update_from_result("test-auth", true, 200).await;
+        manager.update_from_result("test-auth", true, 200).await;
+        assert_eq!(
+            manager.get_status("test-auth").await,
+            HealthStatus::Healthy,
+            "Should recover to healthy after 2 successes"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_health_transition_exact_threshold_values() {
+        // Use config with no status codes so only threshold matters
+        let config = HealthConfig {
+            healthy_threshold: 3,
+            unhealthy_threshold: 3,
+            status_codes: crate::config::StatusCodeHealthConfig {
+                degraded: vec![],
+                unhealthy: vec![],
+                healthy: vec![],
+            },
+            ..Default::default()
+        };
+        let manager = HealthManager::new(config);
+
+        // Exactly 3 failures (threshold) - use status code NOT in unhealthy list
+        manager.update_from_result("test-auth", false, 400).await;
+        manager.update_from_result("test-auth", false, 400).await;
+        assert_eq!(
+            manager.get_status("test-auth").await,
+            HealthStatus::Healthy,
+            "Should still be healthy at 2 failures (threshold - 1)"
+        );
+
+        manager.update_from_result("test-auth", false, 400).await;
+        assert_eq!(
+            manager.get_status("test-auth").await,
+            HealthStatus::Unhealthy,
+            "Should be unhealthy at exactly 3 failures (threshold)"
+        );
+
+        // Exactly 3 successes for recovery
+        manager.update_from_result("test-auth", true, 200).await;
+        manager.update_from_result("test-auth", true, 200).await;
+        let health = manager.get_health("test-auth").await.unwrap();
+        assert_eq!(
+            health.consecutive_successes, 2,
+            "Should have 2 consecutive successes"
+        );
+
+        manager.update_from_result("test-auth", true, 200).await;
+        assert_eq!(
+            manager.get_status("test-auth").await,
+            HealthStatus::Healthy,
+            "Should recover at exactly 3 successes (threshold)"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_custom_status_code_configuration() {
+        let config = HealthConfig {
+            status_codes: crate::config::StatusCodeHealthConfig {
+                degraded: vec![503], // Service unavailable
+                unhealthy: vec![401, 403], // Auth errors
+                healthy: vec![],
+            },
+            ..Default::default()
+        };
+        let manager = HealthManager::new(config);
+
+        // 503 should cause degraded
+        manager.update_from_result("test-auth-503", false, 503).await;
+        assert_eq!(
+            manager.get_status("test-auth-503").await,
+            HealthStatus::Degraded,
+            "503 should cause degraded status"
+        );
+
+        // 401 should cause unhealthy
+        manager.update_from_result("test-auth-401", false, 401).await;
+        assert_eq!(
+            manager.get_status("test-auth-401").await,
+            HealthStatus::Unhealthy,
+            "401 should cause unhealthy status"
+        );
+
+        // 403 should cause unhealthy
+        manager.update_from_result("test-auth-403", false, 403).await;
+        assert_eq!(
+            manager.get_status("test-auth-403").await,
+            HealthStatus::Unhealthy,
+            "403 should cause unhealthy status"
+        );
+
+        // 500 should NOT cause unhealthy (not in config)
+        manager.update_from_result("test-auth-500", false, 500).await;
+        assert_eq!(
+            manager.get_status("test-auth-500").await,
+            HealthStatus::Healthy,
+            "500 should not cause unhealthy when not in config"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_health_manager_zero_thresholds() {
+        let config = HealthConfig {
+            healthy_threshold: 0,
+            unhealthy_threshold: 0,
+            ..Default::default()
+        };
+        let manager = HealthManager::new(config);
+
+        // With zero threshold, even 0 consecutive failures meets threshold
+        // First success should immediately make healthy
+        manager.update_from_result("test-auth", true, 200).await;
+        let health = manager.get_health("test-auth").await.unwrap();
+        assert_eq!(health.consecutive_successes, 1);
+
+        // First failure should immediately make unhealthy with threshold 0
+        manager.update_from_result("test-auth2", false, 500).await;
+        let health2 = manager.get_health("test-auth2").await.unwrap();
+        assert_eq!(health2.consecutive_failures, 1);
+        // With threshold 0, consecutive_failures >= 0 is always true
+        assert_eq!(
+            manager.get_status("test-auth2").await,
+            HealthStatus::Unhealthy,
+            "Zero threshold should immediately mark unhealthy on any failure"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_cooldown_expiration_allows_retry_keeps_unhealthy() {
+        let config = HealthConfig {
+            unhealthy_threshold: 2,
+            cooldown_period_seconds: 1,
+            ..Default::default()
+        };
+        let manager = HealthManager::new(config);
+
+        // Make unhealthy
+        manager.update_from_result("test-auth", false, 500).await;
+        manager.update_from_result("test-auth", false, 500).await;
+
+        assert_eq!(
+            manager.get_status("test-auth").await,
+            HealthStatus::Unhealthy
+        );
+        assert!(
+            !manager.is_available("test-auth").await,
+            "Should be unavailable during cooldown"
+        );
+
+        // Wait for cooldown
+        tokio::time::sleep(tokio::time::Duration::from_millis(1100)).await;
+
+        // Still unhealthy but cooldown expired
+        assert_eq!(
+            manager.get_status("test-auth").await,
+            HealthStatus::Unhealthy,
+            "Status should still be unhealthy after cooldown"
+        );
+        // is_available checks cooldown, so should now be true (cooldown expired)
+        // but status is still Unhealthy so is_available returns false
+        assert!(
+            !manager.is_available("test-auth").await,
+            "Should still be unavailable because status is Unhealthy"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_health_with_large_consecutive_counts() {
+        let config = HealthConfig {
+            healthy_threshold: 3,
+            unhealthy_threshold: 5,
+            ..Default::default()
+        };
+        let manager = HealthManager::new(config);
+
+        // Record many successes
+        for _ in 0..100 {
+            manager.update_from_result("test-auth", true, 200).await;
+        }
+
+        let health = manager.get_health("test-auth").await.unwrap();
+        assert_eq!(health.consecutive_successes, 100);
+        assert_eq!(health.consecutive_failures, 0);
+        assert_eq!(manager.get_status("test-auth").await, HealthStatus::Healthy);
+
+        // Now record many failures
+        for _ in 0..100 {
+            manager.update_from_result("test-auth", false, 500).await;
+        }
+
+        let health = manager.get_health("test-auth").await.unwrap();
+        assert_eq!(health.consecutive_successes, 0);
+        assert_eq!(health.consecutive_failures, 100);
+        assert_eq!(
+            manager.get_status("test-auth").await,
+            HealthStatus::Unhealthy
+        );
+    }
+
+    #[tokio::test]
+    async fn test_health_status_code_priority_over_threshold() {
+        // Status codes should take priority over threshold-based transitions
+        let config = HealthConfig {
+            healthy_threshold: 10, // High threshold
+            unhealthy_threshold: 10,
+            status_codes: crate::config::StatusCodeHealthConfig {
+                degraded: vec![429],
+                unhealthy: vec![401],
+                healthy: vec![],
+            },
+            ..Default::default()
+        };
+        let manager = HealthManager::new(config);
+
+        // Single 401 should immediately cause unhealthy (status code priority)
+        manager.update_from_result("test-auth", false, 401).await;
+        assert_eq!(
+            manager.get_status("test-auth").await,
+            HealthStatus::Unhealthy,
+            "Status code 401 should immediately cause unhealthy regardless of threshold"
+        );
+    }
 }

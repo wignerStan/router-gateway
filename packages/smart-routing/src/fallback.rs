@@ -572,4 +572,214 @@ mod tests {
         let auth_ids: HashSet<_> = fallbacks.iter().map(|f| f.auth_id.clone()).collect();
         assert_eq!(auth_ids.len(), fallbacks.len());
     }
+
+    // ============================================================
+    // Edge Case Tests for FallbackPlanner
+    // ============================================================
+
+    #[tokio::test]
+    async fn test_min_fallbacks_greater_than_available_auths() {
+        let config = FallbackConfig {
+            max_fallbacks: 10,
+            min_fallbacks: 5, // More than available
+            enable_provider_diversity: false,
+            prefer_diverse_providers: false,
+        };
+        let planner = FallbackPlanner::with_config(config);
+        let calculator = DefaultWeightCalculator::new(WeightConfig::default());
+        let metrics = MetricsCollector::new();
+        let health = HealthManager::new(crate::config::HealthConfig::default());
+
+        // Only 2 available auths
+        let auths = vec![
+            create_test_auth("auth1", Some("anthropic")),
+            create_test_auth("auth2", Some("openai")),
+        ];
+
+        for auth in &auths {
+            metrics.initialize_auth(&auth.id).await;
+        }
+
+        let fallbacks = planner
+            .generate_fallbacks(auths, None, &calculator, &metrics, &health)
+            .await;
+
+        // Should return what's available (2), not min_fallbacks (5)
+        assert_eq!(
+            fallbacks.len(),
+            2,
+            "Should return available auths when min_fallbacks > available"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_max_fallbacks_zero_returns_empty() {
+        let config = FallbackConfig {
+            max_fallbacks: 0,
+            min_fallbacks: 0,
+            enable_provider_diversity: false,
+            prefer_diverse_providers: false,
+        };
+        let planner = FallbackPlanner::with_config(config);
+        let calculator = DefaultWeightCalculator::new(WeightConfig::default());
+        let metrics = MetricsCollector::new();
+        let health = HealthManager::new(crate::config::HealthConfig::default());
+
+        let auths = vec![
+            create_test_auth("auth1", Some("anthropic")),
+            create_test_auth("auth2", Some("openai")),
+        ];
+
+        for auth in &auths {
+            metrics.initialize_auth(&auth.id).await;
+        }
+
+        let fallbacks = planner
+            .generate_fallbacks(auths, None, &calculator, &metrics, &health)
+            .await;
+
+        assert!(
+            fallbacks.is_empty(),
+            "max_fallbacks=0 should return empty list"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_provider_diversity_all_same_provider() {
+        let config = FallbackConfig {
+            max_fallbacks: 5,
+            min_fallbacks: 2,
+            enable_provider_diversity: true,
+            prefer_diverse_providers: true,
+        };
+        let planner = FallbackPlanner::with_config(config);
+        let calculator = DefaultWeightCalculator::new(WeightConfig::default());
+        let metrics = MetricsCollector::new();
+        let health = HealthManager::new(crate::config::HealthConfig::default());
+
+        // All auths from same provider
+        let auths = vec![
+            create_test_auth("key1", Some("anthropic")),
+            create_test_auth("key2", Some("anthropic")),
+            create_test_auth("key3", Some("anthropic")),
+        ];
+
+        for auth in &auths {
+            metrics.initialize_auth(&auth.id).await;
+        }
+
+        let fallbacks = planner
+            .generate_fallbacks(auths, None, &calculator, &metrics, &health)
+            .await;
+
+        // Should still return fallbacks, just all from same provider
+        assert_eq!(
+            fallbacks.len(),
+            3,
+            "Should return all auths even with same provider"
+        );
+
+        // All should be from anthropic
+        for f in &fallbacks {
+            assert_eq!(
+                f.provider,
+                Some("anthropic".to_string()),
+                "All should be from anthropic"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_primary_auth_not_in_available_list() {
+        let planner = FallbackPlanner::new();
+        let calculator = DefaultWeightCalculator::new(WeightConfig::default());
+        let metrics = MetricsCollector::new();
+        let health = HealthManager::new(crate::config::HealthConfig::default());
+
+        let auths = vec![
+            create_test_auth("auth1", Some("anthropic")),
+            create_test_auth("auth2", Some("openai")),
+        ];
+
+        for auth in &auths {
+            metrics.initialize_auth(&auth.id).await;
+        }
+
+        // Primary that doesn't exist in available auths
+        let fallbacks = planner
+            .generate_fallbacks(
+                auths,
+                Some("non-existent-primary".to_string()),
+                &calculator,
+                &metrics,
+                &health,
+            )
+            .await;
+
+        // Should still return available auths, just won't have primary first
+        assert_eq!(fallbacks.len(), 2);
+        // First won't be the non-existent primary
+        assert_ne!(fallbacks[0].auth_id, "non-existent-primary");
+    }
+
+    #[tokio::test]
+    async fn test_fallback_ordering_weight_descending() {
+        let planner = FallbackPlanner::new();
+        let calculator = DefaultWeightCalculator::new(WeightConfig::default());
+        let metrics = MetricsCollector::new();
+        let health = HealthManager::new(crate::config::HealthConfig::default());
+
+        let auths = vec![
+            create_test_auth("low", Some("anthropic")),
+            create_test_auth("high", Some("openai")),
+            create_test_auth("mid", Some("google")),
+        ];
+
+        for auth in &auths {
+            metrics.initialize_auth(&auth.id).await;
+        }
+
+        let fallbacks = planner
+            .generate_fallbacks(auths, None, &calculator, &metrics, &health)
+            .await;
+
+        // Weights should be non-increasing (descending order)
+        for window in fallbacks.windows(2) {
+            assert!(
+                window[0].weight >= window[1].weight,
+                "Weights should be in descending order: {} >= {}",
+                window[0].weight,
+                window[1].weight
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_fallback_with_all_unavailable_auths() {
+        let planner = FallbackPlanner::new();
+        let calculator = DefaultWeightCalculator::new(WeightConfig::default());
+        let metrics = MetricsCollector::new();
+        let health = HealthManager::new(crate::config::HealthConfig::default());
+
+        // All auths marked unavailable
+        let mut auth1 = create_test_auth("auth1", Some("anthropic"));
+        auth1.unavailable = true;
+        let mut auth2 = create_test_auth("auth2", Some("openai"));
+        auth2.unavailable = true;
+
+        let auths = vec![auth1, auth2];
+
+        for auth in &auths {
+            metrics.initialize_auth(&auth.id).await;
+        }
+
+        let fallbacks = planner
+            .generate_fallbacks(auths, None, &calculator, &metrics, &health)
+            .await;
+
+        assert!(
+            fallbacks.is_empty(),
+            "All unavailable auths should result in empty fallbacks"
+        );
+    }
 }
