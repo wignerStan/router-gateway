@@ -223,10 +223,7 @@ impl AttemptHistory {
     }
 
     /// Get attempts by selection mode
-    pub fn get_attempts_by_selection_mode(
-        &self,
-        mode: &SelectionMode,
-    ) -> Vec<&RouteAttempt> {
+    pub fn get_attempts_by_selection_mode(&self, mode: &SelectionMode) -> Vec<&RouteAttempt> {
         self.attempts
             .iter()
             .filter(|a| a.decision_context.selection_mode == *mode)
@@ -412,11 +409,11 @@ impl TrackingSystem {
     }
 
     /// Create with custom configuration
-    pub fn with_config(
-        statistics: StatisticsAggregator,
-        history: AttemptHistory,
-    ) -> Self {
-        Self { statistics, history }
+    pub fn with_config(statistics: StatisticsAggregator, history: AttemptHistory) -> Self {
+        Self {
+            statistics,
+            history,
+        }
     }
 
     /// Record a route attempt
@@ -607,7 +604,13 @@ mod tests {
                 "route-1".to_string(),
             );
 
-            let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0 + i as f64 * 50.0, 10, 5, 200);
+            let outcome = ExecutionOutcome::success(
+                "route-1".to_string(),
+                100.0 + i as f64 * 50.0,
+                10,
+                5,
+                200,
+            );
             let attempt = RouteAttempt::new(format!("req-{}", i), decision_context, outcome);
             history.record(attempt);
         }
@@ -620,7 +623,11 @@ mod tests {
     fn test_attempt_history_selection_mode_distribution() {
         let mut history = AttemptHistory::new();
 
-        let modes = vec![SelectionMode::Weighted, SelectionMode::Thompson, SelectionMode::Weighted];
+        let modes = [
+            SelectionMode::Weighted,
+            SelectionMode::Thompson,
+            SelectionMode::Weighted,
+        ];
 
         for (i, mode) in modes.iter().enumerate() {
             let decision_context = DecisionContext::new(

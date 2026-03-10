@@ -48,6 +48,11 @@ clap = { version = "4.4", features = ["derive"] }
 # Utilities
 uuid = { version = "1.0", features = ["v4", "serde"] }
 
+# Internal packages
+smart-routing = { path = "packages/smart-routing", version = "0.1.0" }
+model-registry = { path = "packages/model-registry", version = "0.1.0" }
+llm-tracing = { path = "packages/tracing", version = "0.1.0" }
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

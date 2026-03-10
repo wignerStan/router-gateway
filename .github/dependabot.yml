@@ -1,0 +1,107 @@
+# Dependabot configuration for Gateway LLM Routing Project
+# Automatically creates pull requests to keep dependencies up-to-date
+
+version: 2
+updates:
+  # ============================================
+  # RUST DEPENDENCIES (Cargo.toml)
+  # ============================================
+
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"        # Check for updates every week
+      day: "monday"             # On Mondays
+      time: "09:00"             # At 9:00 UTC
+    open-pull-requests-limit: 10
+    target-branch: "develop"
+    labels:
+      - "dependencies"
+      - "rust"
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+      include: "scope"
+    reviewers:
+      - "jacob"                 # Add your username
+    assignees:
+      - "jacob"                 # Add your username
+    allow:
+      # Allow both direct and indirect dependencies
+      - dependency-type: "direct"
+      - dependency-type: "indirect"
+    ignore:
+      # Ignore specific versions if needed (examples below)
+      # - dependency-name: "problematic-crate"
+      #   versions: ["1.2.3"]
+    groups:
+      # Group security updates together
+      security-dependencies:
+        applies-to: security-updates
+        patterns:
+          - "*"                # All security updates
+        exclude-patterns:
+          - "*-dev"           # Exclude dev dependencies
+      # Group minor and patch updates
+      minor-patch-updates:
+        patterns:
+          - "*"                # All dependencies
+        exclude-patterns:
+          - "*-dev"           # Exclude dev dependencies
+        update-types:
+          - "minor"
+          - "patch"
+      # Major updates get their own PRs (riskier)
+
+  # ============================================
+  # GITHUB ACTIONS (Workflow Dependencies)
+  # ============================================
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    target-branch: "develop"
+    labels:
+      - "dependencies"
+      - "ci"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(ci)"
+      include: "scope"
+    reviewers:
+      - "jacob"
+    assignees:
+      - "jacob"
+    groups:
+      # Group action updates together
+      github-actions-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+# ============================================
+# CONFIGURATION NOTES
+# ============================================
+#
+# Features enabled:
+# - Weekly automated checks (Mondays at 9:00 UTC)
+# - Security updates grouped together
+# - Minor/patch updates grouped (reduces PR noise)
+# - Major updates get individual PRs (manual review)
+# - Automatic reviewer and assignee assignment
+# - Conventional commit messages
+# - Target branch: develop (not main)
+#
+# To customize:
+# - Change 'schedule.interval' to 'daily', 'weekly', or 'monthly'
+# - Add 'ignore' rules for problematic versions
+# - Add 'allow' rules to restrict certain dependency types
+# - Add your username to 'reviewers' and 'assignees'
+#
+# Documentation: https://docs.github.com/en/code-security/dependabot

@@ -3,7 +3,7 @@
 //! This module filters route candidates through hard constraints including
 //! capability mismatches, context overflow, disabled providers, and tenant policies.
 
-use crate::candidate::{RouteCandidate, TokenFitStatus, check_capability_support};
+use crate::candidate::{check_capability_support, RouteCandidate, TokenFitStatus};
 use crate::classification::ClassifiedRequest;
 use model_registry::{PolicyContext, PolicyMatcher};
 use std::fmt;
@@ -99,7 +99,8 @@ impl ConstraintFilter {
         request: &ClassifiedRequest,
     ) -> FilterResult {
         // 1. Check capability mismatch
-        let capability_support = check_capability_support(&request.required_capabilities, &candidate.model_info);
+        let capability_support =
+            check_capability_support(&request.required_capabilities, &candidate.model_info);
         if !capability_support.is_supported() {
             if let Some(desc) = capability_support.missing_description() {
                 return FilterResult::Rejected {
@@ -113,7 +114,9 @@ impl ConstraintFilter {
             return FilterResult::Rejected {
                 reason: format!(
                     "context overflow: {} tokens exceeds model {} context window of {}",
-                    request.estimated_tokens, candidate.model_id, candidate.model_info.context_window
+                    request.estimated_tokens,
+                    candidate.model_id,
+                    candidate.model_info.context_window
                 ),
             };
         }
@@ -173,11 +176,14 @@ mod tests {
     use super::*;
     use crate::candidate::TokenFitStatus;
     use crate::classification::{QualityPreference, RequestFormat, RequiredCapabilities};
-    use model_registry::{
-        DataSource, ModelCapabilities, ModelInfo, RateLimits,
-    };
+    use model_registry::{DataSource, ModelCapabilities, ModelInfo, RateLimits};
 
-    fn create_test_model(id: &str, provider: &str, context_window: usize, vision: bool) -> ModelInfo {
+    fn create_test_model(
+        id: &str,
+        provider: &str,
+        context_window: usize,
+        vision: bool,
+    ) -> ModelInfo {
         ModelInfo {
             id: id.to_string(),
             name: format!("Test Model {}", id),
@@ -214,7 +220,7 @@ mod tests {
 
     #[test]
     fn test_filter_empty_list() {
-        let mut filter = ConstraintFilter::new();
+        let filter = ConstraintFilter::new();
         let request = create_test_request(1000, RequiredCapabilities::default());
 
         let result = filter.filter(Vec::new(), &request);
@@ -223,7 +229,7 @@ mod tests {
 
     #[test]
     fn test_filter_capability_mismatch() {
-        let mut filter = ConstraintFilter::new();
+        let filter = ConstraintFilter::new();
 
         // Create a model without vision
         let model = create_test_model("test", "test", 200000, false);
@@ -259,7 +265,7 @@ mod tests {
 
     #[test]
     fn test_filter_context_overflow() {
-        let mut filter = ConstraintFilter::new();
+        let filter = ConstraintFilter::new();
 
         let model = create_test_model("test", "test", 100000, true);
 
@@ -334,7 +340,7 @@ mod tests {
 
     #[test]
     fn test_filter_accepted_candidate() {
-        let mut filter = ConstraintFilter::new();
+        let filter = ConstraintFilter::new();
 
         let model = create_test_model("test", "test", 200000, true);
 
@@ -389,7 +395,7 @@ mod tests {
 
     #[test]
     fn test_filter_token_fit_unknown() {
-        let mut filter = ConstraintFilter::new();
+        let filter = ConstraintFilter::new();
 
         let model = create_test_model("test", "test", 200000, true);
 
@@ -411,7 +417,7 @@ mod tests {
 
     #[test]
     fn test_filter_context_exact_fit() {
-        let mut filter = ConstraintFilter::new();
+        let filter = ConstraintFilter::new();
 
         let model = create_test_model("test", "test", 100000, true);
 
@@ -461,7 +467,7 @@ mod tests {
 
     #[test]
     fn test_filter_capabilities_none_required() {
-        let mut filter = ConstraintFilter::new();
+        let filter = ConstraintFilter::new();
 
         // Model with minimal capabilities
         let mut model = create_test_model("test", "test", 200000, false);
@@ -482,5 +488,237 @@ mod tests {
 
         let result = filter.check_constraints(&candidate, &request);
         assert!(result.is_accepted());
+    }
+
+    // ============================================================
+    // Edge Case Tests for ConstraintFilter
+    // ============================================================
+
+    #[test]
+    fn test_filter_all_providers_disabled_returns_empty() {
+        let mut filter = ConstraintFilter::new();
+        filter.add_disabled_provider("provider1".to_string());
+        filter.add_disabled_provider("provider2".to_string());
+
+        let model1 = create_test_model("model1", "provider1", 200000, true);
+        let model2 = create_test_model("model2", "provider2", 200000, true);
+
+        let candidates = vec![
+            RouteCandidate {
+                credential_id: "cred-1".to_string(),
+                model_id: "model1".to_string(),
+                provider: "provider1".to_string(),
+                model_info: model1,
+                estimated_cost: 0.0,
+                token_fit: TokenFitStatus::Fits,
+            },
+            RouteCandidate {
+                credential_id: "cred-2".to_string(),
+                model_id: "model2".to_string(),
+                provider: "provider2".to_string(),
+                model_info: model2,
+                estimated_cost: 0.0,
+                token_fit: TokenFitStatus::Fits,
+            },
+        ];
+
+        let request = create_test_request(1000, RequiredCapabilities::default());
+
+        let result = filter.filter(candidates, &request);
+        assert!(
+            result.is_empty(),
+            "All providers disabled should return empty list"
+        );
+    }
+
+    #[test]
+    fn test_filter_empty_disabled_providers_accepts_all() {
+        let filter = ConstraintFilter::new();
+
+        let model1 = create_test_model("model1", "provider1", 200000, true);
+        let model2 = create_test_model("model2", "provider2", 200000, true);
+
+        let candidates = vec![
+            RouteCandidate {
+                credential_id: "cred-1".to_string(),
+                model_id: "model1".to_string(),
+                provider: "provider1".to_string(),
+                model_info: model1,
+                estimated_cost: 0.0,
+                token_fit: TokenFitStatus::Fits,
+            },
+            RouteCandidate {
+                credential_id: "cred-2".to_string(),
+                model_id: "model2".to_string(),
+                provider: "provider2".to_string(),
+                model_info: model2,
+                estimated_cost: 0.0,
+                token_fit: TokenFitStatus::Fits,
+            },
+        ];
+
+        let request = create_test_request(1000, RequiredCapabilities::default());
+
+        let result = filter.filter(candidates, &request);
+        assert_eq!(
+            result.len(),
+            2,
+            "Empty disabled providers should accept all candidates"
+        );
+    }
+
+    #[test]
+    fn test_filter_multiple_capabilities_required_in_combination() {
+        let filter = ConstraintFilter::new();
+
+        // Model with only vision
+        let mut model_vision_only = create_test_model("vision-only", "test", 200000, true);
+        model_vision_only.capabilities.tools = false;
+
+        // Model with vision and tools
+        let model_vision_tools = create_test_model("vision-tools", "test", 200000, true);
+        // tools already true by default
+
+        // Request requires BOTH vision AND tools
+        let request = create_test_request(
+            1000,
+            RequiredCapabilities {
+                vision: true,
+                tools: true,
+                streaming: false,
+                thinking: false,
+            },
+        );
+
+        let candidate_vision_only = RouteCandidate {
+            credential_id: "cred-1".to_string(),
+            model_id: "vision-only".to_string(),
+            provider: "test".to_string(),
+            model_info: model_vision_only,
+            estimated_cost: 0.0,
+            token_fit: TokenFitStatus::Fits,
+        };
+
+        let candidate_vision_tools = RouteCandidate {
+            credential_id: "cred-2".to_string(),
+            model_id: "vision-tools".to_string(),
+            provider: "test".to_string(),
+            model_info: model_vision_tools,
+            estimated_cost: 0.0,
+            token_fit: TokenFitStatus::Fits,
+        };
+
+        // Vision-only should be rejected
+        let result = filter.check_constraints(&candidate_vision_only, &request);
+        assert!(
+            !result.is_accepted(),
+            "Vision-only model should be rejected when tools required"
+        );
+
+        // Vision+tools should be accepted
+        let result = filter.check_constraints(&candidate_vision_tools, &request);
+        assert!(
+            result.is_accepted(),
+            "Model with vision and tools should be accepted"
+        );
+    }
+
+    #[test]
+    fn test_filter_context_at_exact_boundary_fits() {
+        let filter = ConstraintFilter::new();
+
+        // Model with exactly 100000 context window
+        let model = create_test_model("test", "test", 100000, true);
+
+        // Request with exactly 100000 tokens should fit (not exceed)
+        let candidate = RouteCandidate {
+            credential_id: "cred-1".to_string(),
+            model_id: "test".to_string(),
+            provider: "test".to_string(),
+            model_info: model,
+            estimated_cost: 0.0,
+            token_fit: TokenFitStatus::Fits, // At boundary still fits
+        };
+
+        let request = create_test_request(100000, RequiredCapabilities::default());
+
+        let result = filter.check_constraints(&candidate, &request);
+        assert!(
+            result.is_accepted(),
+            "Token count at exact boundary should fit"
+        );
+    }
+
+    #[test]
+    fn test_filter_context_one_over_boundary_exceeds() {
+        let filter = ConstraintFilter::new();
+
+        let model = create_test_model("test", "test", 100000, true);
+
+        let candidate = RouteCandidate {
+            credential_id: "cred-1".to_string(),
+            model_id: "test".to_string(),
+            provider: "test".to_string(),
+            model_info: model,
+            estimated_cost: 0.0,
+            token_fit: TokenFitStatus::Exceeds, // Exceeds by 1
+        };
+
+        let request = create_test_request(100001, RequiredCapabilities::default());
+
+        let result = filter.check_constraints(&candidate, &request);
+        assert!(
+            !result.is_accepted(),
+            "Token count exceeding boundary should be rejected"
+        );
+    }
+
+    #[test]
+    fn test_filter_all_capabilities_required() {
+        let filter = ConstraintFilter::new();
+
+        let mut model_full = create_test_model("full", "test", 200000, true);
+        model_full.capabilities.thinking = true;
+
+        let mut model_partial = create_test_model("partial", "test", 200000, true);
+        model_partial.capabilities.thinking = false;
+
+        // Request requires ALL capabilities
+        let request = create_test_request(
+            1000,
+            RequiredCapabilities {
+                vision: true,
+                tools: true,
+                streaming: true,
+                thinking: true,
+            },
+        );
+
+        let candidate_full = RouteCandidate {
+            credential_id: "cred-1".to_string(),
+            model_id: "full".to_string(),
+            provider: "test".to_string(),
+            model_info: model_full,
+            estimated_cost: 0.0,
+            token_fit: TokenFitStatus::Fits,
+        };
+
+        let candidate_partial = RouteCandidate {
+            credential_id: "cred-2".to_string(),
+            model_id: "partial".to_string(),
+            provider: "test".to_string(),
+            model_info: model_partial,
+            estimated_cost: 0.0,
+            token_fit: TokenFitStatus::Fits,
+        };
+
+        assert!(
+            filter.check_constraints(&candidate_full, &request).is_accepted(),
+            "Model with all capabilities should be accepted"
+        );
+        assert!(
+            !filter.check_constraints(&candidate_partial, &request).is_accepted(),
+            "Model missing thinking capability should be rejected"
+        );
     }
 }

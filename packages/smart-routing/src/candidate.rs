@@ -192,7 +192,7 @@ impl CapabilitySupport {
                 } else {
                     Some(missing.join(", "))
                 }
-            }
+            },
         }
     }
 }
@@ -236,7 +236,10 @@ mod tests {
         };
 
         let candidates = builder.build_candidates(&request);
-        assert!(candidates.is_empty(), "No credentials should produce empty list");
+        assert!(
+            candidates.is_empty(),
+            "No credentials should produce empty list"
+        );
     }
 
     #[test]
@@ -311,7 +314,11 @@ mod tests {
         };
 
         let candidates = builder.build_candidates(&request);
-        assert_eq!(candidates.len(), 2, "Should create two candidates for one credential");
+        assert_eq!(
+            candidates.len(),
+            2,
+            "Should create two candidates for one credential"
+        );
     }
 
     #[test]
@@ -327,7 +334,10 @@ mod tests {
         };
 
         let candidates = builder.build_candidates(&request);
-        assert!(candidates.is_empty(), "Unknown model should not create candidates");
+        assert!(
+            candidates.is_empty(),
+            "Unknown model should not create candidates"
+        );
     }
 
     #[test]
@@ -498,12 +508,15 @@ mod tests {
         };
 
         assert_eq!(supported, CapabilitySupport::Supported);
-        assert_eq!(unsupported, CapabilitySupport::Unsupported {
-            missing_vision: true,
-            missing_tools: false,
-            missing_streaming: false,
-            missing_thinking: false,
-        });
+        assert_eq!(
+            unsupported,
+            CapabilitySupport::Unsupported {
+                missing_vision: true,
+                missing_tools: false,
+                missing_streaming: false,
+                missing_thinking: false,
+            }
+        );
         assert_ne!(supported, unsupported);
     }
 }

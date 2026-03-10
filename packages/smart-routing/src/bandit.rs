@@ -34,8 +34,8 @@ pub struct RouteStats {
 impl Default for RouteStats {
     fn default() -> Self {
         Self {
-            successes: 1.0,  // Optimistic prior
-            failures: 1.0,   // Neutral prior
+            successes: 1.0, // Optimistic prior
+            failures: 1.0,  // Neutral prior
             pulls: 0,
             last_utility: 0.5,
             diversity_penalty: 0.0,
@@ -186,7 +186,7 @@ impl BanditPolicy {
                 let alpha = self.config.prior_successes;
                 let beta = self.config.prior_failures;
                 self.sample_beta(alpha, beta)
-            }
+            },
             Some(s) => {
                 if s.pulls < self.config.min_samples_for_thompson {
                     // Not enough samples: use optimistic prior
@@ -203,7 +203,7 @@ impl BanditPolicy {
                     let penalty = s.diversity_penalty * self.config.diversity_weight;
                     (base_sample - penalty).max(0.0)
                 }
-            }
+            },
         }
     }
 
@@ -282,10 +282,7 @@ impl BanditPolicy {
 
     /// Record route selection result
     pub fn record_result(&mut self, route_id: &str, success: bool, utility: f64) {
-        let stats = self
-            .route_stats
-            .entry(route_id.to_string())
-            .or_insert_with(RouteStats::default);
+        let stats = self.route_stats.entry(route_id.to_string()).or_default();
 
         // Update statistics
         if success {
@@ -306,10 +303,7 @@ impl BanditPolicy {
 
     /// Set diversity penalty for correlated routes
     pub fn set_diversity_penalty(&mut self, route_id: &str, penalty: f64) {
-        let stats = self
-            .route_stats
-            .entry(route_id.to_string())
-            .or_insert_with(RouteStats::default);
+        let stats = self.route_stats.entry(route_id.to_string()).or_default();
         stats.diversity_penalty = penalty.clamp(0.0, 1.0);
     }
 
@@ -365,7 +359,11 @@ mod tests {
     #[test]
     fn test_bandit_select_route_multiple() {
         let policy = BanditPolicy::new();
-        let routes = vec!["route1".to_string(), "route2".to_string(), "route3".to_string()];
+        let routes = vec![
+            "route1".to_string(),
+            "route2".to_string(),
+            "route3".to_string(),
+        ];
 
         let result = policy.select_route(&routes);
         assert!(result.is_some());
@@ -426,7 +424,7 @@ mod tests {
     fn test_bandit_diversity_penalty() {
         // Use a higher diversity_weight and lower min_samples to ensure penalty is applied
         let config = BanditConfig {
-            diversity_weight: 0.5,      // Higher weight for more pronounced penalty effect
+            diversity_weight: 0.5,       // Higher weight for more pronounced penalty effect
             min_samples_for_thompson: 1, // Ensure penalty is applied after first result
             ..Default::default()
         };
@@ -454,7 +452,11 @@ mod tests {
 
         // With penalty of 1.0 and diversity_weight of 0.5, route2 gets a 0.5 penalty
         // This should give route1 a measurable advantage (>55% selection rate)
-        assert!(count1 > 275, "route1 selected {} out of 500 times, expected > 275", count1);
+        assert!(
+            count1 > 275,
+            "route1 selected {} out of 500 times, expected > 275",
+            count1
+        );
     }
 
     #[test]
@@ -472,9 +474,7 @@ mod tests {
 
         let mut count2 = 0;
         for _ in 0..50 {
-            if policy.select_route_with_utility(&routes, &utilities)
-                == Some("route2".to_string())
-            {
+            if policy.select_route_with_utility(&routes, &utilities) == Some("route2".to_string()) {
                 count2 += 1;
             }
         }
@@ -514,7 +514,7 @@ mod tests {
         // Test that beta samples are in [0, 1]
         for _ in 0..100 {
             let sample = policy.sample_beta(1.0, 1.0);
-            assert!(sample >= 0.0 && sample <= 1.0);
+            assert!((0.0..=1.0).contains(&sample));
         }
     }
 
@@ -556,8 +556,10 @@ mod tests {
 
     #[test]
     fn test_sample_decay() {
-        let mut config = BanditConfig::default();
-        config.sample_decay = 0.9;
+        let config = BanditConfig {
+            sample_decay: 0.9,
+            ..Default::default()
+        };
 
         let mut policy = BanditPolicy::with_config(config);
 
@@ -576,5 +578,227 @@ mod tests {
 
         // With decay, successes should not grow linearly
         assert!(stats2.successes < successes_after_2 + 10.0);
+    }
+
+    // ============================================================
+    // Edge Case Tests for BanditPolicy - Thompson Sampling
+    // ============================================================
+
+    #[test]
+    fn test_beta_sampling_very_small_alpha_beta() {
+        let policy = BanditPolicy::new();
+
+        // Very small parameters (near zero)
+        for _ in 0..100 {
+            let sample = policy.sample_beta(0.001, 0.001);
+            assert!(
+                (0.0..=1.0).contains(&sample),
+                "Sample should be in [0,1] with small params: {}",
+                sample
+            );
+        }
+    }
+
+    #[test]
+    fn test_beta_sampling_very_large_alpha_beta() {
+        let policy = BanditPolicy::new();
+
+        // Very large parameters (uses normal approximation)
+        let mut samples = Vec::new();
+        for _ in 0..100 {
+            let sample = policy.sample_beta(100.0, 100.0);
+            assert!(
+                (0.0..=1.0).contains(&sample),
+                "Sample should be in [0,1] with large params: {}",
+                sample
+            );
+            samples.push(sample);
+        }
+
+        // Mean should be close to alpha / (alpha + beta) = 0.5
+        let mean: f64 = samples.iter().sum::<f64>() / samples.len() as f64;
+        assert!(
+            (mean - 0.5).abs() < 0.1,
+            "Mean should be close to 0.5 with large symmetric params: {}",
+            mean
+        );
+    }
+
+    #[test]
+    fn test_gamma_sampling_shape_less_than_one() {
+        let policy = BanditPolicy::new();
+
+        // Shape < 1 uses transformation method
+        for shape in [0.1, 0.5, 0.9].iter() {
+            for _ in 0..50 {
+                let sample = policy.sample_gamma(*shape);
+                assert!(
+                    sample > 0.0,
+                    "Gamma sample with shape {} should be positive: {}",
+                    shape,
+                    sample
+                );
+                assert!(
+                    sample.is_finite(),
+                    "Gamma sample with shape {} should be finite: {}",
+                    shape,
+                    sample
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_diversity_penalty_clamping() {
+        let mut policy = BanditPolicy::new();
+
+        // Test clamping to [0, 1]
+        policy.set_diversity_penalty("route1", -0.5);
+        let stats = policy.get_stats("route1").unwrap();
+        assert_eq!(
+            stats.diversity_penalty, 0.0,
+            "Negative penalty should be clamped to 0"
+        );
+
+        policy.set_diversity_penalty("route1", 1.5);
+        let stats = policy.get_stats("route1").unwrap();
+        assert_eq!(
+            stats.diversity_penalty, 1.0,
+            "Penalty > 1 should be clamped to 1"
+        );
+
+        policy.set_diversity_penalty("route1", 0.5);
+        let stats = policy.get_stats("route1").unwrap();
+        assert_eq!(
+            stats.diversity_penalty, 0.5,
+            "Penalty in [0,1] should be unchanged"
+        );
+    }
+
+    #[test]
+    fn test_numerical_stability_extreme_utility_values() {
+        let mut policy = BanditPolicy::new();
+
+        // Record with extreme utility values
+        policy.record_result("route1", true, f64::MAX / 2.0);
+        policy.record_result("route2", true, f64::MIN_POSITIVE);
+        policy.record_result("route3", true, 0.0);
+        policy.record_result("route4", false, f64::INFINITY);
+        policy.record_result("route5", false, f64::NAN);
+
+        // Should not panic and should handle gracefully
+        let routes = vec![
+            "route1".to_string(),
+            "route2".to_string(),
+            "route3".to_string(),
+            "route4".to_string(),
+            "route5".to_string(),
+        ];
+
+        // Run selections - should not panic
+        for _ in 0..50 {
+            let result = policy.select_route(&routes);
+            assert!(result.is_some());
+        }
+    }
+
+    #[test]
+    fn test_beta_sampling_skewed_distributions() {
+        let policy = BanditPolicy::new();
+
+        // Beta(100, 1) should give values close to 1
+        let mut samples_high = Vec::new();
+        for _ in 0..100 {
+            samples_high.push(policy.sample_beta(100.0, 1.0));
+        }
+        let mean_high: f64 = samples_high.iter().sum::<f64>() / samples_high.len() as f64;
+        assert!(
+            mean_high > 0.9,
+            "Beta(100,1) mean should be high: {}",
+            mean_high
+        );
+
+        // Beta(1, 100) should give values close to 0
+        let mut samples_low = Vec::new();
+        for _ in 0..100 {
+            samples_low.push(policy.sample_beta(1.0, 100.0));
+        }
+        let mean_low: f64 = samples_low.iter().sum::<f64>() / samples_low.len() as f64;
+        assert!(
+            mean_low < 0.1,
+            "Beta(1,100) mean should be low: {}",
+            mean_low
+        );
+    }
+
+    #[test]
+    fn test_select_route_with_empty_utilities_map() {
+        let policy = BanditPolicy::new();
+        let routes = vec!["route1".to_string(), "route2".to_string()];
+
+        // Empty utilities map
+        let utilities = HashMap::new();
+
+        // Should still work, using default utility
+        for _ in 0..20 {
+            let result = policy.select_route_with_utility(&routes, &utilities);
+            assert!(result.is_some());
+            assert!(routes.contains(&result.unwrap()));
+        }
+    }
+
+    #[test]
+    fn test_record_result_with_zero_utility() {
+        let mut policy = BanditPolicy::new();
+
+        policy.record_result("route1", true, 0.0);
+        let stats = policy.get_stats("route1").unwrap();
+
+        assert_eq!(stats.last_utility, 0.0);
+        assert_eq!(stats.successes, 2.0); // 1 + prior
+        assert_eq!(stats.pulls, 1);
+    }
+
+    #[test]
+    fn test_thompson_sample_with_zero_pulls() {
+        let policy = BanditPolicy::new();
+
+        // Unknown route should use prior
+        let sample = policy.thompson_sample("unknown-route");
+
+        // With prior (1,1), sample should be in [0,1]
+        assert!(
+            (0.0..=1.0).contains(&sample),
+            "Thompson sample for unknown route should use prior"
+        );
+    }
+
+    #[test]
+    fn test_bandit_with_custom_prior() {
+        let config = BanditConfig {
+            prior_successes: 10.0,
+            prior_failures: 2.0,
+            min_samples_for_thompson: 100, // Always use prior
+            ..Default::default()
+        };
+        let mut policy = BanditPolicy::with_config(config);
+
+        // Record some results but not enough to exceed min_samples
+        policy.record_result("route1", true, 0.9);
+        policy.record_result("route1", true, 0.9);
+
+        // Should still use optimistic prior (10,2)
+        let mut samples = Vec::new();
+        for _ in 0..100 {
+            samples.push(policy.thompson_sample("route1"));
+        }
+
+        let mean: f64 = samples.iter().sum::<f64>() / samples.len() as f64;
+        // Prior mean is 10/(10+2) = 0.833
+        assert!(
+            mean > 0.7,
+            "Mean with optimistic prior (10,2) should be high: {}",
+            mean
+        );
     }
 }

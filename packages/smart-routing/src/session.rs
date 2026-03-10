@@ -9,7 +9,6 @@ use tokio::sync::RwLock;
 /// Maintains provider affinity across multi-turn conversations.
 /// Prefers the same provider for session continuation to ensure
 /// consistent behavior and context awareness.
-
 /// Session affinity record
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionAffinity {
@@ -63,7 +62,11 @@ impl SessionAffinityManager {
     pub fn with_limits(max_sessions: usize, session_ttl_seconds: i64) -> Self {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
-            max_sessions: if max_sessions > 0 { max_sessions } else { 10_000 },
+            max_sessions: if max_sessions > 0 {
+                max_sessions
+            } else {
+                10_000
+            },
             session_ttl_seconds: if session_ttl_seconds > 0 {
                 session_ttl_seconds
             } else {
@@ -79,15 +82,13 @@ impl SessionAffinityManager {
         }
 
         let sessions = self.sessions.read().await;
-        sessions.get(session_id).map(|affinity| affinity.preferred_provider.clone())
+        sessions
+            .get(session_id)
+            .map(|affinity| affinity.preferred_provider.clone())
     }
 
     /// Set or update the preferred provider for a session
-    pub async fn set_provider(
-        &self,
-        session_id: String,
-        provider: String,
-    ) -> Result<(), String> {
+    pub async fn set_provider(&self, session_id: String, provider: String) -> Result<(), String> {
         if session_id.is_empty() {
             return Err("Session ID cannot be empty".to_string());
         }
@@ -98,14 +99,14 @@ impl SessionAffinityManager {
         let mut sessions = self.sessions.write().await;
 
         // Check if session exists
-        let affinity = sessions.entry(session_id.clone()).or_insert_with(|| {
-            SessionAffinity {
+        let affinity = sessions
+            .entry(session_id.clone())
+            .or_insert_with(|| SessionAffinity {
                 session_id: session_id.clone(),
                 preferred_provider: provider.clone(),
                 last_access: Utc::now(),
                 request_count: 0,
-            }
-        });
+            });
 
         // Update existing session
         affinity.preferred_provider = provider;
@@ -170,9 +171,7 @@ impl SessionAffinityManager {
         // Collect expired sessions
         let expired: Vec<String> = sessions
             .iter()
-            .filter(|(_, affinity)| {
-                now.signed_duration_since(affinity.last_access) > ttl
-            })
+            .filter(|(_, affinity)| now.signed_duration_since(affinity.last_access) > ttl)
             .map(|(id, _)| id.clone())
             .collect();
 
@@ -220,12 +219,13 @@ impl SessionAffinityManager {
             total_requests as f64 / sessions.len() as f64
         };
 
-        let providers_count: std::collections::HashMap<String, usize> = sessions
-            .values()
-            .fold(std::collections::HashMap::new(), |mut acc, affinity| {
-                *acc.entry(affinity.preferred_provider.clone()).or_insert(0) += 1;
-                acc
-            });
+        let providers_count: std::collections::HashMap<String, usize> =
+            sessions
+                .values()
+                .fold(std::collections::HashMap::new(), |mut acc, affinity| {
+                    *acc.entry(affinity.preferred_provider.clone()).or_insert(0) += 1;
+                    acc
+                });
 
         SessionStats {
             total_sessions: sessions.len(),
@@ -395,7 +395,9 @@ mod tests {
         assert!(!manager.has_affinity("").await);
 
         // Empty session ID cannot be set
-        let result = manager.set_provider("".to_string(), "provider-a".to_string()).await;
+        let result = manager
+            .set_provider("".to_string(), "provider-a".to_string())
+            .await;
         assert!(result.is_err());
 
         // Empty session ID cannot be removed
