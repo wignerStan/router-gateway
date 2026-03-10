@@ -16,15 +16,15 @@ Reviewed all Diátaxis documentation for consistency with AGENTS.md and source c
 
 ## Files Reviewed
 
-| File | Status | Issues |
-|------|--------|--------|
-| `docs/tutorials/getting-started.md` | ✅ PASS | None |
-| `docs/guides/adding-new-provider.md` | ✅ PASS | None |
-| `docs/guides/custom-routing-rules.md` | ✅ PASS | None |
-| `docs/reference/api.md` | ✅ PASS | None |
-| `docs/reference/configuration.md` | ✅ PASS | None |
-| `docs/explanations/architecture.md` | ✅ PASS | None |
-| `docs/explanations/adr/` | ✅ PASS | None |
+| File                                  | Status  | Issues |
+| ------------------------------------- | ------- | ------ |
+| `docs/tutorials/getting-started.md`   | ✅ PASS | None   |
+| `docs/guides/adding-new-provider.md`  | ✅ PASS | None   |
+| `docs/guides/custom-routing-rules.md` | ✅ PASS | None   |
+| `docs/reference/api.md`               | ✅ PASS | None   |
+| `docs/reference/configuration.md`     | ✅ PASS | None   |
+| `docs/explanations/architecture.md`   | ✅ PASS | None   |
+| `docs/explanations/adr/`              | ✅ PASS | None   |
 
 ---
 
@@ -33,6 +33,7 @@ Reviewed all Diátaxis documentation for consistency with AGENTS.md and source c
 ### 1. Terminology ✅
 
 All documents use consistent terminology matching AGENTS.md:
+
 - "smart routing" (lowercase)
 - "local LLM gateway"
 - Strategy names: `weighted`, `time_aware`, `quota_aware`, `adaptive`
@@ -52,6 +53,7 @@ Weight factors match source code defaults:
 ### 3. Package Names ✅
 
 Correct package names used:
+
 - `llm-tracing` (not `tracing`)
 - `my-core` (not `core`)
 - `my-cli` (not `cli`)
@@ -59,6 +61,7 @@ Correct package names used:
 ### 4. Source References ✅
 
 All source file references are accurate:
+
 - `packages/smart-routing/src/config.rs`
 - `packages/model-registry/src/categories.rs`
 

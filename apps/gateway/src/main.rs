@@ -304,7 +304,7 @@ async fn root() -> Json<Value> {
 
 /// Authentication middleware for protected routes
 /// Validates Bearer token against configured auth_tokens
-/// If auth_tokens is empty, authentication is skipped (not recommended for production)
+/// Fails-closed by default (requires auth) unless GATEWAY_ENV=development is set
 async fn auth_middleware(
     State(state): State<AppState>,
     req: axum::extract::Request,
@@ -313,9 +313,29 @@ async fn auth_middleware(
     use axum::http::header::AUTHORIZATION;
     use axum::http::StatusCode;
 
-    // Skip auth if no tokens configured (development mode)
-    if state.config.server.auth_tokens.is_empty() {
+    // Check for development environment override
+    let is_development = std::env::var("GATEWAY_ENV")
+        .map(|v| v.to_lowercase() == "development")
+        .unwrap_or(false);
+
+    // Skip auth only in development mode if no tokens are configured
+    if is_development && state.config.server.auth_tokens.is_empty() {
+        tracing::warn!("Authentication skipped in development mode (no auth_tokens configured)");
         return Ok(next.run(req).await);
+    }
+
+    // Fail-closed if no tokens are configured but we're not in development mode
+    if state.config.server.auth_tokens.is_empty() {
+        tracing::error!("Access denied: No auth_tokens configured in non-development mode");
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "error": {
+                    "type": "config_error",
+                    "message": "Gateway is improperly configured: No authentication tokens available."
+                }
+            })),
+        ));
     }
 
     // Extract Authorization header
@@ -673,6 +693,40 @@ mod integration_tests {
     }
 
     #[tokio::test]
+    async fn test_models_endpoint_with_credentials() {
+        let mut state = create_test_state();
+        state.config.credentials.push(config::CredentialConfig {
+            id: "test-id".to_string(),
+            provider: "openai".to_string(),
+            api_key: "key".to_string(),
+            allowed_models: vec!["gpt-4".to_string()],
+            ..Default::default()
+        });
+
+        let app = Router::new()
+            .route("/api/models", get(list_models))
+            .with_state(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/models")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), 2048)
+            .await
+            .unwrap();
+        let list: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(list["count"], 1);
+        assert_eq!(list["models"][0]["id"], "gpt-4");
+    }
+
+    #[tokio::test]
     async fn test_health_endpoint_returns_status() {
         let state = create_test_state();
         let app = Router::new()
@@ -730,6 +784,45 @@ mod integration_tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[test]
+    fn test_request_classification() {
+        let classifier = DefaultRequestClassifier;
+
+        // Test simple text request
+        let request = json!({
+            "messages": [
+                {"role": "user", "content": "Hello"}
+            ]
+        });
+        let classified = classifier.classify(&request);
+        assert!(!classified.required_capabilities.vision);
+        assert!(!classified.required_capabilities.tools);
+        assert!(!classified.required_capabilities.thinking);
+
+        // Test vision request
+        let vision_request = json!({
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What's in this image?"},
+                        {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,..."}}
+                    ]
+                }
+            ]
+        });
+        let classified = classifier.classify(&vision_request);
+        assert!(classified.required_capabilities.vision);
+
+        // Test tools request
+        let tools_request = json!({
+            "messages": [{"role": "user", "content": "What's the weather?"}],
+            "tools": [{"type": "function", "function": {"name": "get_weather"}}]
+        });
+        let classified = classifier.classify(&tools_request);
+        assert!(classified.required_capabilities.tools);
     }
 
     #[tokio::test]

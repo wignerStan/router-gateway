@@ -873,4 +873,452 @@ mod tests {
         let selected = selector.pick(auths).await;
         assert_eq!(selected, Some("first-auth".to_string()));
     }
+
+    // ============================================================
+    // Edge Case Tests: Floating-Point Precision
+    // ============================================================
+
+    #[tokio::test]
+    async fn test_weighted_selection_with_very_small_differences() {
+        let config = SmartRoutingConfig::default();
+        let selector = SmartSelector::new(config);
+
+        // Create auths with nearly identical metrics
+        let auths = vec![
+            AuthInfo {
+                id: "auth1".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            },
+            AuthInfo {
+                id: "auth2".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            },
+        ];
+
+        // Initialize metrics with very similar performance
+        selector.metrics().initialize_auth("auth1").await;
+        selector.metrics().initialize_auth("auth2").await;
+
+        // Record almost identical results
+        selector
+            .metrics()
+            .record_result("auth1", true, 100.0, 200)
+            .await;
+        selector
+            .metrics()
+            .record_result("auth2", true, 100.0001, 200)
+            .await;
+
+        // Both should have a chance to be selected over many iterations
+        let mut auth1_count = 0;
+        let mut auth2_count = 0;
+        for _ in 0..100 {
+            let selected = selector.pick(auths.clone()).await.unwrap();
+            if selected == "auth1" {
+                auth1_count += 1;
+            } else {
+                auth2_count += 1;
+            }
+        }
+
+        // With nearly identical weights, both should be selected roughly equally
+        // (within statistical tolerance)
+        assert!(
+            auth1_count > 20 && auth2_count > 20,
+            "Both auths should receive selections with near-equal weights (auth1: {}, auth2: {})",
+            auth1_count,
+            auth2_count
+        );
+    }
+
+    #[tokio::test]
+    async fn test_weighted_selection_extreme_weight_ratio() {
+        let config = SmartRoutingConfig::default();
+        let selector = SmartSelector::new(config);
+
+        let auths = vec![
+            AuthInfo {
+                id: "high-perf".to_string(),
+                priority: Some(100),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            },
+            AuthInfo {
+                id: "low-perf".to_string(),
+                priority: Some(-100),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            },
+        ];
+
+        // Initialize with metrics showing extreme performance difference
+        selector.metrics().initialize_auth("high-perf").await;
+        selector.metrics().initialize_auth("low-perf").await;
+
+        // Record 50 data points (exceeds min 10 for Learned mode) with extreme difference
+        for _ in 0..50 {
+            selector
+                .metrics()
+                .record_result("high-perf", true, 1.0, 200)
+                .await;
+            selector
+                .metrics()
+                .record_result("low-perf", false, 30000.0, 500)
+                .await;
+        }
+
+        // High-perf should dominate selection
+        let mut high_count = 0;
+        let mut low_count = 0;
+        for _ in 0..100 {
+            match selector.pick(auths.clone()).await.unwrap().as_str() {
+                "high-perf" => high_count += 1,
+                "low-perf" => low_count += 1,
+                _ => {},
+            }
+        }
+
+        // High-perf should be selected MORE OFTEN than low-perf (relative assertion)
+        assert!(
+            high_count > low_count,
+            "High-perf auth should be selected more often than low-perf (high: {}, low: {})",
+            high_count,
+            low_count
+        );
+
+        // Verify high-perf is selected at least 60% of the time
+        // This is a robust threshold that accounts for probabilistic variance
+        // while still ensuring significant weight differentiation
+        assert!(
+            high_count >= 60,
+            "High-perf auth should be selected at least 60% of the time (got {} out of 100)",
+            high_count
+        );
+    }
+
+    // ============================================================
+    // Edge Case Tests: Concurrent Access
+    // ============================================================
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_concurrent_pick_operations() {
+        use std::sync::Arc;
+
+        let config = SmartRoutingConfig::default();
+        let selector = Arc::new(SmartSelector::new(config));
+
+        let auths = vec![
+            AuthInfo {
+                id: "auth1".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            },
+            AuthInfo {
+                id: "auth2".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            },
+            AuthInfo {
+                id: "auth3".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            },
+        ];
+
+        // Initialize metrics
+        for auth in &auths {
+            selector.metrics().initialize_auth(&auth.id).await;
+        }
+
+        let mut handles = Vec::new();
+        for _ in 0..20 {
+            let selector_clone = Arc::clone(&selector);
+            let auths_clone = auths.clone();
+            let handle = tokio::spawn(async move {
+                let mut results = Vec::new();
+                for _ in 0..10 {
+                    let selected = selector_clone.pick(auths_clone.clone()).await;
+                    results.push(selected);
+                }
+                results
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all concurrent operations to complete
+        let all_results: Vec<_> = futures::future::join_all(handles).await;
+
+        // Verify all operations completed successfully
+        for results in all_results {
+            for selected in results.unwrap() {
+                assert!(selected.is_some());
+                let id = selected.unwrap();
+                assert!(
+                    ["auth1", "auth2", "auth3"].contains(&id.as_str()),
+                    "Selected invalid auth: {}",
+                    id
+                );
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_concurrent_pick_and_record() {
+        use std::sync::Arc;
+
+        let config = SmartRoutingConfig::default();
+        let selector = Arc::new(SmartSelector::new(config));
+
+        let auths = vec![
+            AuthInfo {
+                id: "auth1".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            },
+            AuthInfo {
+                id: "auth2".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            },
+        ];
+
+        // Initialize metrics
+        for auth in &auths {
+            selector.metrics().initialize_auth(&auth.id).await;
+        }
+
+        let mut handles = Vec::new();
+
+        // Spawn pick tasks
+        for _ in 0..10 {
+            let selector_clone = Arc::clone(&selector);
+            let auths_clone = auths.clone();
+            let handle = tokio::spawn(async move {
+                for _ in 0..20 {
+                    let _ = selector_clone.pick(auths_clone.clone()).await;
+                }
+            });
+            handles.push(handle);
+        }
+
+        // Spawn record tasks
+        for i in 0..10 {
+            let selector_clone = Arc::clone(&selector);
+            let auth_id = format!("auth{}", (i % 2) + 1);
+            let handle = tokio::spawn(async move {
+                for j in 0..20 {
+                    selector_clone
+                        .metrics()
+                        .record_result(&auth_id, j % 2 == 0, 100.0 + j as f64, 200)
+                        .await;
+                }
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all tasks to complete
+        let results: Vec<_> = futures::future::join_all(handles).await;
+
+        // Verify no panics occurred
+        for result in results {
+            assert!(result.is_ok(), "Task panicked during concurrent operations");
+        }
+    }
+
+    // ============================================================
+    // Edge Case Tests: Zero and Negative Weight Handling
+    // ============================================================
+
+    #[tokio::test]
+    async fn test_all_zero_weights_falls_back_to_random() {
+        // Configure for very low weights
+        let config = SmartRoutingConfig {
+            weight: crate::config::WeightConfig {
+                success_rate_weight: 0.0,
+                latency_weight: 0.0,
+                health_weight: 0.0,
+                load_weight: 0.0,
+                priority_weight: 0.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let selector = SmartSelector::new(config);
+
+        let auths = vec![
+            AuthInfo {
+                id: "auth1".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            },
+            AuthInfo {
+                id: "auth2".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            },
+        ];
+
+        // Initialize metrics
+        for auth in &auths {
+            selector.metrics().initialize_auth(&auth.id).await;
+        }
+
+        // All weights should be equal (near zero), selection should still work
+        let mut selections = std::collections::HashSet::new();
+        for _ in 0..50 {
+            if let Some(id) = selector.pick(auths.clone()).await {
+                selections.insert(id);
+            }
+        }
+
+        // Should be able to select auths even with all-zero weights
+        assert!(
+            !selections.is_empty(),
+            "Should be able to select with zero weights"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_quota_exceeded_massively_reduces_selection_probability() {
+        let config = SmartRoutingConfig::default();
+        let selector = SmartSelector::new(config);
+
+        let auths = vec![
+            AuthInfo {
+                id: "normal-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            },
+            AuthInfo {
+                id: "quota-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: true, // Quota exceeded
+                unavailable: false,
+                model_states: Vec::new(),
+            },
+        ];
+
+        // Initialize metrics
+        for auth in &auths {
+            selector.metrics().initialize_auth(&auth.id).await;
+        }
+
+        // Run selections
+        let mut normal_count = 0;
+        let mut quota_count = 0;
+        for _ in 0..100 {
+            let selected = selector.pick(auths.clone()).await.unwrap();
+            if selected == "normal-auth" {
+                normal_count += 1;
+            } else {
+                quota_count += 1;
+            }
+        }
+
+        // Normal auth should be selected much more often
+        assert!(
+            normal_count > quota_count * 5,
+            "Normal auth should dominate over quota-exceeded (normal: {}, quota: {})",
+            normal_count,
+            quota_count
+        );
+    }
+
+    // ============================================================
+    // Edge Case Tests: Boundary Conditions
+    // ============================================================
+
+    #[tokio::test]
+    async fn test_pick_with_large_number_of_auths() {
+        let config = SmartRoutingConfig::default();
+        let selector = SmartSelector::new(config);
+
+        // Create 100 auths
+        let auths: Vec<AuthInfo> = (0..100)
+            .map(|i| AuthInfo {
+                id: format!("auth-{}", i),
+                priority: Some(i % 10 - 5), // Priorities from -5 to 4
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            })
+            .collect();
+
+        // Initialize metrics for all
+        for auth in &auths {
+            selector.metrics().initialize_auth(&auth.id).await;
+        }
+
+        // Should still be able to select
+        let selected = selector.pick(auths.clone()).await;
+        assert!(selected.is_some());
+
+        // Run many selections to verify stability
+        let mut all_selected = std::collections::HashSet::new();
+        for _ in 0..500 {
+            if let Some(id) = selector.pick(auths.clone()).await {
+                all_selected.insert(id);
+            }
+        }
+
+        // Should have selected a variety of auths
+        assert!(
+            all_selected.len() > 10,
+            "Should select multiple different auths from large pool"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_pick_with_duplicate_auth_ids() {
+        let config = SmartRoutingConfig::default();
+        let selector = SmartSelector::new(config);
+
+        // Create auths with same ID (edge case that shouldn't normally happen)
+        let auths = vec![
+            AuthInfo {
+                id: "same-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            },
+            AuthInfo {
+                id: "same-auth".to_string(), // Duplicate ID
+                priority: Some(100),         // Different priority
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            },
+        ];
+
+        selector.metrics().initialize_auth("same-auth").await;
+
+        // Should handle duplicates gracefully
+        let selected = selector.pick(auths).await;
+        assert_eq!(selected, Some("same-auth".to_string()));
+    }
 }

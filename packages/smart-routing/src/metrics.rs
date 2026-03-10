@@ -512,4 +512,236 @@ mod tests {
         assert_eq!(metrics.total_requests, 1);
         assert_eq!(metrics.success_count, 1);
     }
+
+    // ============================================================
+    // Edge Case Tests for Metrics Collector
+    // ============================================================
+
+    #[tokio::test]
+    async fn test_metrics_with_zero_requests() {
+        let collector = MetricsCollector::new();
+        collector.initialize_auth("test-auth").await;
+
+        let metrics = collector.get_metrics("test-auth").await.unwrap();
+
+        assert_eq!(metrics.total_requests, 0);
+        assert_eq!(metrics.success_count, 0);
+        assert_eq!(metrics.failure_count, 0);
+        assert_eq!(metrics.consecutive_successes, 0);
+        assert_eq!(metrics.consecutive_failures, 0);
+        // Initial success rate is 1.0 (optimistic default)
+        assert_eq!(metrics.success_rate, 1.0);
+        assert_eq!(metrics.error_rate, 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_latency_rolling_average_with_single_request() {
+        let collector = MetricsCollector::new();
+        collector.initialize_auth("test-auth").await;
+
+        // Single latency record
+        collector.record_result("test-auth", true, 150.0, 200).await;
+
+        let metrics = collector.get_metrics("test-auth").await.unwrap();
+
+        // With single request, avg should equal that request's latency
+        assert_eq!(metrics.avg_latency_ms, 150.0);
+        assert_eq!(metrics.min_latency_ms, 150.0);
+        assert_eq!(metrics.max_latency_ms, 150.0);
+    }
+
+    #[tokio::test]
+    async fn test_success_rate_calculation_all_failures() {
+        let collector = MetricsCollector::new();
+        collector.initialize_auth("test-auth").await;
+
+        // Record many failures
+        for _ in 0..50 {
+            collector
+                .record_result("test-auth", false, 100.0, 500)
+                .await;
+        }
+
+        let metrics = collector.get_metrics("test-auth").await.unwrap();
+
+        assert_eq!(metrics.total_requests, 50);
+        assert_eq!(metrics.failure_count, 50);
+        assert_eq!(metrics.success_count, 0);
+        assert_eq!(metrics.consecutive_failures, 50);
+        assert_eq!(metrics.consecutive_successes, 0);
+
+        // Success rate should be low (EWMA weighted, not 0.0)
+        // With EWMA_ALPHA = 0.3, after many failures it trends toward 0
+        assert!(
+            metrics.success_rate < 0.1,
+            "Success rate should be very low after all failures: {}",
+            metrics.success_rate
+        );
+        assert!(
+            metrics.error_rate > 0.9,
+            "Error rate should be very high: {}",
+            metrics.error_rate
+        );
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_metric_recording_no_data_loss() {
+        let collector = std::sync::Arc::new(MetricsCollector::new());
+        let mut handles = vec![];
+
+        // Spawn many concurrent recorders for the SAME auth (tests locking)
+        for _ in 0..10 {
+            let collector_clone = collector.clone();
+            let handle = tokio::spawn(async move {
+                for _ in 0..100 {
+                    collector_clone
+                        .record_result("shared-auth", true, 50.0, 200)
+                        .await;
+                }
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all tasks
+        for handle in handles {
+            handle.await.unwrap();
+        }
+
+        // Verify all metrics were recorded
+        let metrics = collector.get_metrics("shared-auth").await.unwrap();
+        assert_eq!(
+            metrics.total_requests, 1000,
+            "All 1000 requests should be recorded"
+        );
+        assert_eq!(metrics.success_count, 1000);
+        assert_eq!(metrics.failure_count, 0);
+    }
+
+    #[tokio::test]
+    async fn test_metrics_reset_clears_all_data() {
+        let collector = MetricsCollector::new();
+        collector.initialize_auth("test-auth").await;
+
+        // Record various metrics
+        for _ in 0..50 {
+            collector.record_result("test-auth", true, 100.0, 200).await;
+        }
+        for _ in 0..10 {
+            collector
+                .record_result("test-auth", false, 200.0, 500)
+                .await;
+        }
+
+        // Verify data exists
+        let before = collector.get_metrics("test-auth").await.unwrap();
+        assert_eq!(before.total_requests, 60);
+
+        // Reset
+        collector.reset("test-auth").await;
+
+        // Verify all reset
+        let after = collector.get_metrics("test-auth").await.unwrap();
+        assert_eq!(after.total_requests, 0);
+        assert_eq!(after.success_count, 0);
+        assert_eq!(after.failure_count, 0);
+        assert_eq!(after.consecutive_successes, 0);
+        assert_eq!(after.consecutive_failures, 0);
+        assert_eq!(after.avg_latency_ms, 0.0);
+        assert_eq!(after.min_latency_ms, f64::MAX);
+        assert_eq!(after.max_latency_ms, 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_ewma_latency_smoothing() {
+        let collector = MetricsCollector::new();
+        collector.initialize_auth("test-auth").await;
+
+        // Record latencies with large jump
+        collector.record_result("test-auth", true, 100.0, 200).await;
+
+        // Now record a much higher latency
+        collector
+            .record_result("test-auth", true, 1000.0, 200)
+            .await;
+        let m2 = collector.get_metrics("test-auth").await.unwrap();
+
+        // EWMA should smooth the jump (not immediately jump to 1000)
+        // EWMA = 0.3 * new + 0.7 * old
+        let expected = 0.3 * 1000.0 + 0.7 * 100.0;
+        assert!(
+            (m2.avg_latency_ms - expected).abs() < 0.1,
+            "EWMA should smooth latency: expected {}, got {}",
+            expected,
+            m2.avg_latency_ms
+        );
+        assert!(
+            m2.avg_latency_ms < 1000.0,
+            "EWMA should not jump immediately to new value"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_ewma_success_rate_smoothing() {
+        let collector = MetricsCollector::new();
+        collector.initialize_auth("test-auth").await;
+
+        // Start with success (initial rate is 1.0)
+        collector.record_result("test-auth", true, 100.0, 200).await;
+        let m1 = collector.get_metrics("test-auth").await.unwrap();
+
+        // Now record failure
+        collector
+            .record_result("test-auth", false, 100.0, 500)
+            .await;
+        let m2 = collector.get_metrics("test-auth").await.unwrap();
+
+        // Success rate should decrease smoothly
+        // EWMA = 0.3 * 0 + 0.7 * previous
+        let expected = 0.3 * 0.0 + 0.7 * m1.success_rate;
+        assert!(
+            (m2.success_rate - expected).abs() < 0.1,
+            "EWMA should smooth success rate"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_latency_extreme_values() {
+        let collector = MetricsCollector::new();
+        collector.initialize_auth("test-auth").await;
+
+        // Very small latency
+        collector
+            .record_result("test-auth", true, f64::MIN_POSITIVE, 200)
+            .await;
+        let m1 = collector.get_metrics("test-auth").await.unwrap();
+        assert!(m1.avg_latency_ms > 0.0);
+
+        // Very large latency
+        collector
+            .record_result("test-auth", true, 1_000_000.0, 200)
+            .await;
+        let m2 = collector.get_metrics("test-auth").await.unwrap();
+        assert!(m2.max_latency_ms == 1_000_000.0);
+        assert!(m2.min_latency_ms == f64::MIN_POSITIVE);
+    }
+
+    #[tokio::test]
+    async fn test_negative_latency_ignored() {
+        let collector = MetricsCollector::new();
+        collector.initialize_auth("test-auth").await;
+
+        // Record valid latency first
+        collector.record_result("test-auth", true, 100.0, 200).await;
+
+        // Try to record negative latency (should be ignored per > 0.0 check)
+        collector.record_result("test-auth", true, -50.0, 200).await;
+
+        let metrics = collector.get_metrics("test-auth").await.unwrap();
+
+        // Total requests still increments
+        assert_eq!(metrics.total_requests, 2);
+        // But negative latency should not affect min/max/avg
+        assert_eq!(metrics.min_latency_ms, 100.0);
+        assert_eq!(metrics.max_latency_ms, 100.0);
+    }
 }

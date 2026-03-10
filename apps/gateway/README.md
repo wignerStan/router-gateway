@@ -8,21 +8,21 @@ Main HTTP server exposing the gateway API for LLM request routing.
 
 ## Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/` | GET | API info |
-| `/health` | GET | Health check |
-| `/api/models` | GET | List available models |
-| `/api/route` | GET | Route a request |
+| Endpoint      | Method | Description           |
+| ------------- | ------ | --------------------- |
+| `/`           | GET    | API info              |
+| `/health`     | GET    | Health check          |
+| `/api/models` | GET    | List available models |
+| `/api/route`  | GET    | Route a request       |
 
 ## Configuration
 
 Environment variables:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `RUST_LOG` | `gateway=debug` | Log level |
-| `GATEWAY_PORT` | `3000` | HTTP server port |
+| Variable       | Default         | Description      |
+| -------------- | --------------- | ---------------- |
+| `RUST_LOG`     | `gateway=debug` | Log level        |
+| `GATEWAY_PORT` | `3000`          | HTTP server port |
 
 ## Usage
 

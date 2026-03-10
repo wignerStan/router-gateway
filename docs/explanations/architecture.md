@@ -40,6 +40,7 @@ The model registry maintains a catalog of available LLM models with their metada
 **Purpose:** Centralized model metadata management.
 
 **Key Features:**
+
 - 5-dimension classification system (Capability, Tier, Cost, Context, Provider)
 - Async filtering and lookup
 - External data source integration (ModelsDev, LiteLLM)
@@ -54,6 +55,7 @@ The smart routing package implements credential selection with health awareness.
 **Purpose:** Select the best credential for each request.
 
 **Key Components:**
+
 - **Weight Calculator:** Combines multiple factors into a selection score
 - **Health Manager:** Tracks credential health with state machine
 - **Metrics Store:** Persists request history in SQLite
@@ -68,6 +70,7 @@ Request/response observability layer.
 **Purpose:** Provide visibility into LLM interactions.
 
 **Key Features:**
+
 - Request tracing with correlation IDs
 - Tower middleware integration
 - Structured logging support
@@ -87,12 +90,14 @@ Shared utilities and common types.
 **Decision:** Use SQLite for metrics and health data storage.
 
 **Rationale:**
+
 - Local-first: No external database dependency
 - Concurrent reads: Multiple async tasks can read simultaneously
 - Simple deployment: Single file, easy backup/restore
 - Sufficient scale: Designed for single-instance gateway (not distributed)
 
 **Trade-offs:**
+
 - Write serialization: All writes go through single connection
 - No horizontal scaling: Cannot distribute across multiple gateway instances
 - Acceptable for: Local development tools, single-tenant deployments
@@ -102,12 +107,14 @@ Shared utilities and common types.
 **Decision:** The CLIProxyAPI runs as a separate process, not embedded in the gateway.
 
 **Rationale:**
+
 - **Separation of concerns:** Gateway focuses on HTTP routing; CLIProxyAPI handles LLM protocol translation
 - **Independent scaling:** Can scale proxy instances without changing gateway
 - **Fault isolation:** Proxy crashes don't affect gateway stability
 - **Language flexibility:** Could implement proxy in different language if needed
 
 **Trade-offs:**
+
 - **Network overhead:** Additional hop between gateway and proxy
 - **Deployment complexity:** Two services to manage instead of one
 - **Debugging:** Must trace across process boundaries
@@ -117,6 +124,7 @@ Shared utilities and common types.
 **Decision:** Classify models across Capability, Tier, Cost, Context, and Provider dimensions.
 
 **Rationale:**
+
 - **Capability:** Filter models by features (vision, tools, thinking)
 - **Tier:** Select quality/speed trade-off (flagship, standard, fast)
 - **Cost:** Budget optimization (ultra-premium to economy)
@@ -124,6 +132,7 @@ Shared utilities and common types.
 - **Provider:** Route to specific vendor APIs
 
 **Trade-offs:**
+
 - **Complexity:** 5 dimensions require more configuration
 - **Over-classification:** Some models may not fit neatly into categories
 - **Benefits outweigh costs:** Enables fine-grained routing policies
@@ -159,12 +168,14 @@ Credentials transition through three health states based on request outcomes:
 ```
 
 **State Transitions:**
+
 - **Healthy -> Degraded:** Rate limit (429) or intermittent errors
 - **Degraded -> Healthy:** Consecutive successes exceed threshold
 - **Degraded -> Unhealthy:** Consecutive failures exceed threshold
 - **Unhealthy -> Degraded:** Cooldown period expires
 
 **Why This Design?**
+
 - Prevents thundering herd: Unhealthy credentials get cooldown period
 - Allows recovery: Degraded credentials still receive traffic (reduced)
 - Hysteresis: State changes require multiple data points, preventing flapping
@@ -197,6 +208,7 @@ Penalties multiply the final weight:
 ```
 
 **Why This Formula?**
+
 - **Multiplicative penalties:** A single severe issue (quota exceeded) can effectively remove a credential
 - **Additive components:** Multiple small issues combine gradually
 - **Inverse latency:** Lower latency yields higher score, but with diminishing returns
@@ -242,6 +254,7 @@ Penalties multiply the final weight:
 ```
 
 **Dependency Rules:**
+
 - `core` has no internal dependencies (foundational)
 - Packages depend on `core` for shared types
 - `gateway` is the top-level aggregator

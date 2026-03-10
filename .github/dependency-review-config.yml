@@ -1,0 +1,22 @@
+# Dependency Review Configuration
+# Production-grade least privilege policy
+
+# Severity threshold for failing the check
+fail_on_severity: "high"
+
+# Strict global allow list for standard production-grade licenses
+# Unicode-3.0 is included as it is used by core unicode crates and is safe.
+allow_licenses:
+  - "MIT"
+  - "Apache-2.0"
+  - "BSD-2-Clause"
+  - "BSD-3-Clause"
+  - "ISC"
+  - "Unicode-3.0"
+  - "Unicode-DFS-2016"
+
+# Least Privilege Exceptions:
+# Specifically allow certain packages that have non-standard but safe licenses.
+# This prevents opening up the global allow list to these licenses for all dependencies.
+allow_dependencies_licenses:
+  - "pkg:cargo/colored"

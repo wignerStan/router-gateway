@@ -22,7 +22,8 @@ ignore = ["RUSTSEC-2024-0370"]
 # Licenses check configuration
 # More info: https://embarkstudios.github.io/cargo-deny/checks/licenses/cfg.html
 [licenses]
-# List of explicitly allowed licenses
+# Strict global allow list for standard production-grade licenses
+# Unicode-3.0 is included as it is used by core unicode crates and is safe.
 allow = [
     "MIT",
     "Apache-2.0",
@@ -33,11 +34,17 @@ allow = [
     "Zlib",
     "0BSD",
     "CC0-1.0",
-    "MPL-2.0",
     "Unicode-3.0",
     "Unicode-DFS-2016",
 ]
 confidence-threshold = 0.8
+
+# Least Privilege Exceptions: Allow specific components with non-standard licenses
+# only when they are known, vetted, and necessary transitive dependencies.
+
+[[licenses.exceptions]]
+name = "colored"
+allow = ["MPL-2.0"]
 
 [licenses.private]
 ignore = false
