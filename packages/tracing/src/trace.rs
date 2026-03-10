@@ -106,8 +106,8 @@ mod tests {
         assert!(span.status_code.is_none());
     }
 
-    #[test]
-    fn test_trace_completion() {
+    #[tokio::test]
+    async fn test_trace_completion() {
         let mut span = TraceSpan::new(
             "req-123".to_string(),
             "anthropic".to_string(),
@@ -115,7 +115,7 @@ mod tests {
             None,
         );
 
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         span.complete(200);
 
         assert!(span.end_time.is_some());
@@ -170,8 +170,8 @@ mod tests {
         assert!(!span.is_success());
     }
 
-    #[test]
-    fn test_complete_already_completed() {
+    #[tokio::test]
+    async fn test_complete_already_completed() {
         let mut span = TraceSpan::new(
             "req-double".to_string(),
             "openai".to_string(),
@@ -183,7 +183,7 @@ mod tests {
         let first_latency = span.latency_ms;
 
         // Small delay to ensure time difference
-        std::thread::sleep(std::time::Duration::from_millis(5));
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
 
         span.complete(500);
         // Should update status but end_time and latency should reflect second call
