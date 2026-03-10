@@ -188,7 +188,7 @@ mod tests {
         span.complete(500);
         // Should update status but end_time and latency should reflect second call
         assert_eq!(span.status_code, Some(500));
-        assert!(span.latency_ms.unwrap() >= first_latency.unwrap());
+        assert!(span.latency_ms.unwrap() >= first_latency.unwrap() + 5);
     }
 
     #[test]
