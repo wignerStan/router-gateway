@@ -37,7 +37,9 @@ The Gateway API provides intelligent routing, model registry management, and com
 ## Features
 
 ### Smart Routing
+
 Intelligent request routing based on:
+
 - **Weight-based selection**: Calculate optimal routes using configurable weights
 - **Health monitoring**: Track service health and availability
 - **Time-aware routing**: Consider request timing patterns
@@ -45,14 +47,18 @@ Intelligent request routing based on:
 - **SQLite backend**: Persistent storage for metrics and health data
 
 ### Model Registry
+
 Centralized model information management:
+
 - **Caching**: TTL-based caching with background refresh
 - **Dynamic fetching**: Pluggable fetcher architecture
 - **Categorization**: Organize models by capabilities, tier, cost, and context window
 - **Type-safe**: Strongly typed model information
 
 ### LLM Tracing
+
 Comprehensive request tracing and monitoring:
+
 - **Span tracking**: Distributed tracing for all LLM requests
 - **Metrics collection**: Performance and usage metrics
 - **Middleware integration**: Easy integration with Axum
@@ -112,34 +118,36 @@ RUST_LOG="info" cargo run --package gateway
 ## API Endpoints
 
 ### GET `/health`
+
 Health check endpoint.
 
 **Response:**
+
 ```
 OK
 ```
 
 ### GET `/`
+
 API information endpoint.
 
 **Response:**
+
 ```json
 {
   "name": "Gateway API",
   "version": "0.1.0",
   "description": "Smart routing gateway for LLM requests",
-  "features": [
-    "Smart Routing",
-    "Model Registry",
-    "LLM Tracing"
-  ]
+  "features": ["Smart Routing", "Model Registry", "LLM Tracing"]
 }
 ```
 
 ### GET `/api/models`
+
 List available models.
 
 **Response:**
+
 ```json
 {
   "models": [],
@@ -149,9 +157,11 @@ List available models.
 ```
 
 ### GET `/api/route`
+
 Example routing endpoint.
 
 **Response:**
+
 ```json
 {
   "routed_to": "example-model",
@@ -353,6 +363,7 @@ The SQLite selector uses SQL-based queries to calculate weights based on:
 - **Availability**: Unavailable services excluded
 
 The weight formula:
+
 ```rust
 weight = success_rate_weight * success_rate
        + latency_weight * latency_score
@@ -362,6 +373,7 @@ weight = success_rate_weight * success_rate
 ```
 
 Penalties are applied for:
+
 - Unhealthy services: `unhealthy_penalty`
 - Degraded services: `degraded_penalty`
 - Quota exceeded: `quota_exceeded_penalty`
@@ -419,16 +431,19 @@ cargo build --release --package gateway
 ## Package Details
 
 ### smart-routing
+
 - **Path**: `packages/smart-routing/`
 - **Features**: Weight calculation, health management, smart selection
 - **Key types**: `Router`, `SmartSelector`, `WeightCalculator`
 
 ### model-registry
+
 - **Path**: `packages/model-registry/`
 - **Features**: Model information caching, categorization, dynamic fetching
 - **Key types**: `Registry`, `ModelInfo`, `ModelFetcher`
 
 ### tracing
+
 - **Path**: `packages/tracing/`
 - **Features**: Request tracing, metrics, middleware
 - **Key types**: `TraceSpan`, `TraceCollector`, `TracingMiddleware`
