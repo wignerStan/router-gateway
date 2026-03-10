@@ -426,10 +426,7 @@ fn validate_config_content(
 
         // Check for env var in api_key
         if cred.api_key.starts_with("${") && !cred.api_key.contains(":-") {
-            let var_name = cred
-                .api_key
-                .trim_start_matches("${")
-                .trim_end_matches("}");
+            let var_name = cred.api_key.trim_start_matches("${").trim_end_matches("}");
             if std::env::var(var_name).is_err() {
                 warnings.push(format!(
                     "Credential '{}': environment variable '{}' not set",

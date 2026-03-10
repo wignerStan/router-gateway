@@ -713,11 +713,15 @@ mod tests {
         };
 
         assert!(
-            filter.check_constraints(&candidate_full, &request).is_accepted(),
+            filter
+                .check_constraints(&candidate_full, &request)
+                .is_accepted(),
             "Model with all capabilities should be accepted"
         );
         assert!(
-            !filter.check_constraints(&candidate_partial, &request).is_accepted(),
+            !filter
+                .check_constraints(&candidate_partial, &request)
+                .is_accepted(),
             "Model missing thinking capability should be rejected"
         );
     }

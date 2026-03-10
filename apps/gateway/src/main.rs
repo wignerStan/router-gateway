@@ -718,7 +718,9 @@ mod integration_tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(response.into_body(), 2048).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), 2048)
+            .await
+            .unwrap();
         let list: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(list["count"], 1);
         assert_eq!(list["models"][0]["id"], "gpt-4");

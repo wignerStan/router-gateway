@@ -1336,10 +1336,7 @@ mod tests {
             weight > 0.0,
             "Weight should be positive even with zero metrics"
         );
-        assert!(
-            weight <= 1.0,
-            "Weight should not exceed 1.0"
-        );
+        assert!(weight <= 1.0, "Weight should not exceed 1.0");
     }
 
     #[test]

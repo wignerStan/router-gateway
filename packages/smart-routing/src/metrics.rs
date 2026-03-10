@@ -557,7 +557,9 @@ mod tests {
 
         // Record many failures
         for _ in 0..50 {
-            collector.record_result("test-auth", false, 100.0, 500).await;
+            collector
+                .record_result("test-auth", false, 100.0, 500)
+                .await;
         }
 
         let metrics = collector.get_metrics("test-auth").await.unwrap();
@@ -625,7 +627,9 @@ mod tests {
             collector.record_result("test-auth", true, 100.0, 200).await;
         }
         for _ in 0..10 {
-            collector.record_result("test-auth", false, 200.0, 500).await;
+            collector
+                .record_result("test-auth", false, 200.0, 500)
+                .await;
         }
 
         // Verify data exists
@@ -656,7 +660,9 @@ mod tests {
         collector.record_result("test-auth", true, 100.0, 200).await;
 
         // Now record a much higher latency
-        collector.record_result("test-auth", true, 1000.0, 200).await;
+        collector
+            .record_result("test-auth", true, 1000.0, 200)
+            .await;
         let m2 = collector.get_metrics("test-auth").await.unwrap();
 
         // EWMA should smooth the jump (not immediately jump to 1000)
@@ -684,7 +690,9 @@ mod tests {
         let m1 = collector.get_metrics("test-auth").await.unwrap();
 
         // Now record failure
-        collector.record_result("test-auth", false, 100.0, 500).await;
+        collector
+            .record_result("test-auth", false, 100.0, 500)
+            .await;
         let m2 = collector.get_metrics("test-auth").await.unwrap();
 
         // Success rate should decrease smoothly

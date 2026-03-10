@@ -243,8 +243,8 @@ impl ProviderAdapter for AnthropicAdapter {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::types::{ContentPart, Message, MessageContent, Tool};
+    use super::*;
 
     // ============================================================
     // Basic Functionality Tests
@@ -540,9 +540,17 @@ mod tests {
         assert_eq!(transformed["max_tokens"], 2048);
         // f32 has precision limitations, compare with tolerance
         let temp = transformed["temperature"].as_f64().unwrap();
-        assert!((temp - 0.7).abs() < 0.001, "Expected temperature ~0.7, got {}", temp);
+        assert!(
+            (temp - 0.7).abs() < 0.001,
+            "Expected temperature ~0.7, got {}",
+            temp
+        );
         let top_p = transformed["top_p"].as_f64().unwrap();
-        assert!((top_p - 0.9).abs() < 0.001, "Expected top_p ~0.9, got {}", top_p);
+        assert!(
+            (top_p - 0.9).abs() < 0.001,
+            "Expected top_p ~0.9, got {}",
+            top_p
+        );
         let stop = transformed["stop_sequences"].as_array().unwrap();
         assert_eq!(stop.len(), 2);
         assert_eq!(transformed["stream"], true);
@@ -553,13 +561,12 @@ mod tests {
     fn test_transform_request_with_tools() {
         let adapter = AnthropicAdapter::new();
 
-        let tool = Tool::function("get_weather", "Get weather info")
-            .with_parameters(json!({
-                "type": "object",
-                "properties": {
-                    "location": {"type": "string"}
-                }
-            }));
+        let tool = Tool::function("get_weather", "Get weather info").with_parameters(json!({
+            "type": "object",
+            "properties": {
+                "location": {"type": "string"}
+            }
+        }));
 
         let request = ProviderRequest {
             messages: vec![Message {
@@ -777,7 +784,10 @@ mod tests {
         });
 
         let result = adapter.transform_response(response);
-        assert!(result.is_err(), "Should return error when content is missing");
+        assert!(
+            result.is_err(),
+            "Should return error when content is missing"
+        );
     }
 
     #[test]

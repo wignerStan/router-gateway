@@ -78,13 +78,14 @@ repos:
   # ============================================
   - repo: local
     hooks:
+      # Auto-formatting the code before commit
       - id: cargo-fmt
-        name: cargo fmt (check)
-        entry: cargo fmt --all -- --check
+        name: cargo fmt (auto-format)
+        entry: cargo fmt --all
         language: system
         types: [rust]
         pass_filenames: false
-        stages: [pre-push]
+        stages: [pre-commit]
 
       - id: cargo-clippy
         name: cargo clippy (strict)

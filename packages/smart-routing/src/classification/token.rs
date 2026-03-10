@@ -315,10 +315,7 @@ mod tests {
             tokens > 250_000,
             "Should handle very large content without overflow"
         );
-        assert!(
-            tokens < 300_000,
-            "Token count should be reasonable"
-        );
+        assert!(tokens < 300_000, "Token count should be reasonable");
     }
 
     #[test]
@@ -428,10 +425,7 @@ mod tests {
 
         let tokens = TokenEstimator::estimate(&request);
         // Should not panic, should saturate if needed
-        assert!(
-            tokens > 0,
-            "Should handle extreme values"
-        );
+        assert!(tokens > 0, "Should handle extreme values");
     }
 
     #[test]
