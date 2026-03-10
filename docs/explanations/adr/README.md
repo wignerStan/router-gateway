@@ -45,8 +45,8 @@ Write an ADR when you make a decision that:
 
 ## Index
 
-| Number                                        | Title                         | Status   |
-| --------------------------------------------- | ----------------------------- | -------- |
+| Number | Title | Status |
+|--------|-------|--------|
 | [0001](0001-record-architecture-decisions.md) | Record Architecture Decisions | Accepted |
 
 ## References

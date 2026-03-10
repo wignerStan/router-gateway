@@ -11,21 +11,21 @@ A **local LLM gateway** written in Rust for intelligent request routing. Routes 
 
 > **Note:** Directory names differ from Cargo package names:
 
-| Directory           | Package Name  |
-| ------------------- | ------------- |
+| Directory | Package Name |
+|-----------|--------------|
 | `packages/tracing/` | `llm-tracing` |
-| `apps/cli/`         | `my-cli`      |
+| `apps/cli/` | `my-cli` |
 
 ## Quick Start
 
-| Task        | Command                       |
-| ----------- | ----------------------------- |
-| Build       | `cargo build`                 |
-| Test        | `cargo test`                  |
-| Run Gateway | `cargo run -p gateway`        |
-| Lint        | `cargo clippy -- -D warnings` |
-| Format      | `cargo fmt`                   |
-| All Checks  | `just qa`                     |
+| Task | Command |
+|------|---------|
+| Build | `cargo build` |
+| Test | `cargo test` |
+| Run Gateway | `cargo run -p gateway` |
+| Lint | `cargo clippy -- -D warnings` |
+| Format | `cargo fmt` |
+| All Checks | `just qa` |
 
 ## Project Structure
 
@@ -47,7 +47,6 @@ gateway/
 Policy-based credential selection with configurable weights and strategies.
 
 **Routing Strategies** (configured via `SmartRoutingConfig.strategy`):
-
 - `weighted` - Weighted random selection based on scores
 - `time_aware` - Time-based credential preference (peak/off-peak)
 - `quota_aware` - Quota-balanced selection with reserve ratio
@@ -70,19 +69,18 @@ Key types: `SmartRoutingConfig`, `WeightConfig`, `HealthManager`, `WeightCalcula
 
 Multi-dimension categorization for routing decisions:
 
-| Dimension      | Categories                                                              | Purpose             |
-| -------------- | ----------------------------------------------------------------------- | ------------------- |
-| **Capability** | Vision, Tools, Streaming, Thinking                                      | Feature matching    |
-| **Tier**       | Flagship, Standard, Fast                                                | Quality routing     |
-| **Cost**       | UltraPremium, Premium, Standard, Economy                                | Cost optimization   |
-| **Context**    | Small (<32K) → Ultra (500K+)                                            | Context fitting     |
-| **Provider**   | 20+ providers (Anthropic, OpenAI, Google, xAI, DeepSeek, Mistral, etc.) | Vendor routing      |
-| **Modality**   | Text, Image, Audio, Video, Embedding, Code                              | Multi-modal routing |
+| Dimension | Categories | Purpose |
+|-----------|------------|---------|
+| **Capability** | Vision, Tools, Streaming, Thinking | Feature matching |
+| **Tier** | Flagship, Standard, Fast | Quality routing |
+| **Cost** | UltraPremium, Premium, Standard, Economy | Cost optimization |
+| **Context** | Small (<32K) → Ultra (500K+) | Context fitting |
+| **Provider** | 20+ providers (Anthropic, OpenAI, Google, xAI, DeepSeek, Mistral, etc.) | Vendor routing |
+| **Modality** | Text, Image, Audio, Video, Embedding, Code | Multi-modal routing |
 
 **Supported Providers**: Anthropic, OpenAI, Google, xAI (Grok), DeepSeek, Mistral, Cohere, Perplexity, Alibaba (Qwen), Zhipu (GLM), Baidu, Moonshot (Kimi), ByteDance, Meta (Llama), Amazon Bedrock, Azure, and more.
 
 **Routing Policy System**: Fine-grained routing rules based on multi-dimensional classification with:
-
 - Policy filters (capabilities, tiers, costs, providers, modalities)
 - Policy actions (prefer, avoid, block, weight)
 - Conditional application (time-based, tenant-based, token-count)
@@ -110,15 +108,15 @@ Key types: `TraceSpan`, `TraceCollector` trait, `TracingMiddleware`
 
 ## Reference Implementations
 
-| Pattern               | Location                                            |
-| --------------------- | --------------------------------------------------- |
-| SmartRoutingConfig    | `packages/smart-routing/src/config.rs:4-21`         |
-| WeightConfig defaults | `packages/smart-routing/src/config.rs:134-147`      |
-| Weight calculation    | `packages/smart-routing/src/weight.rs:112-166`      |
-| Health state machine  | `packages/smart-routing/src/health.rs:4-50`         |
-| Model categorization  | `packages/model-registry/src/categories.rs:146-277` |
-| Trace span            | `packages/tracing/src/trace.rs:5-35`                |
-| HTTP endpoint setup   | `apps/gateway/src/main.rs:43-48`                    |
+| Pattern | Location |
+|---------|----------|
+| SmartRoutingConfig | `packages/smart-routing/src/config.rs:4-21` |
+| WeightConfig defaults | `packages/smart-routing/src/config.rs:134-147` |
+| Weight calculation | `packages/smart-routing/src/weight.rs:112-166` |
+| Health state machine | `packages/smart-routing/src/health.rs:4-50` |
+| Model categorization | `packages/model-registry/src/categories.rs:146-277` |
+| Trace span | `packages/tracing/src/trace.rs:5-35` |
+| HTTP endpoint setup | `apps/gateway/src/main.rs:43-48` |
 
 ## Documentation
 
@@ -127,7 +125,6 @@ Key types: `TraceSpan`, `TraceCollector` trait, `TracingMiddleware`
 - Skills: `.agents/skills/`
 
 <!-- BEGIN BEADS INTEGRATION -->
-
 ## Issue Tracking with bd (beads)
 
 **IMPORTANT**: This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TODOs, task lists, or other tracking methods.
@@ -233,7 +230,6 @@ For more details, see README.md and docs/QUICKSTART.md.
 7. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**
-
 - Work is NOT complete until `git push` succeeds
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push

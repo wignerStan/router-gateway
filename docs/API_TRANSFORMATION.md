@@ -40,12 +40,12 @@ The external CLIProxyAPI service handles:
 
 ### Format Pairs (CLIProxyAPI)
 
-| Source | Target     | Direction     |
-| ------ | ---------- | ------------- |
-| OpenAI | Claude     | Bidirectional |
-| OpenAI | Gemini     | Bidirectional |
+| Source | Target | Direction |
+|--------|--------|-----------|
+| OpenAI | Claude | Bidirectional |
+| OpenAI | Gemini | Bidirectional |
 | OpenAI | Gemini-CLI | Bidirectional |
-| Claude | Gemini     | Bidirectional |
+| Claude | Gemini | Bidirectional |
 
 ### Key Transformation Patterns (CLIProxyAPI)
 
@@ -53,32 +53,32 @@ For reference, these patterns are implemented in CLIProxyAPI:
 
 #### OpenAI ↔ Claude
 
-| OpenAI Field                  | Claude Field                           |
-| ----------------------------- | -------------------------------------- |
+| OpenAI Field | Claude Field |
+|--------------|--------------|
 | `messages[].content` (string) | `messages[].content` (array of blocks) |
-| `messages[role=system]`       | `system` (root-level field)            |
-| `tool_calls`                  | `tool_use` content blocks              |
-| `reasoning_effort`            | `thinking.budget_tokens`               |
+| `messages[role=system]` | `system` (root-level field) |
+| `tool_calls` | `tool_use` content blocks |
+| `reasoning_effort` | `thinking.budget_tokens` |
 
 #### OpenAI ↔ Gemini
 
-| OpenAI Field                | Gemini Field                   |
-| --------------------------- | ------------------------------ |
-| `messages[]`                | `contents[]`                   |
-| `content`                   | `parts[]`                      |
-| `messages[role=system]`     | `systemInstruction`            |
-| `temperature`, `max_tokens` | `generationConfig.*`           |
-| `reasoning_effort`          | `thinkingConfig.thinkingLevel` |
-| `tool_calls`                | `functionCall`                 |
+| OpenAI Field | Gemini Field |
+|--------------|--------------|
+| `messages[]` | `contents[]` |
+| `content` | `parts[]` |
+| `messages[role=system]` | `systemInstruction` |
+| `temperature`, `max_tokens` | `generationConfig.*` |
+| `reasoning_effort` | `thinkingConfig.thinkingLevel` |
+| `tool_calls` | `functionCall` |
 
 ## Gateway API Endpoints
 
-| Endpoint          | Purpose                    |
-| ----------------- | -------------------------- |
-| `GET /`           | Service info               |
-| `GET /health`     | Health check               |
-| `GET /api/models` | List available models      |
-| `GET /api/route`  | Get routing recommendation |
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /` | Service info |
+| `GET /health` | Health check |
+| `GET /api/models` | List available models |
+| `GET /api/route` | Get routing recommendation |
 
 ## Configuration
 
@@ -97,5 +97,5 @@ See `packages/smart-routing/src/config.rs` for full configuration options.
 
 ---
 
-_Format conversion details are documented in CLIProxyAPI.
-This gateway delegates transformation to that external service._
+*Format conversion details are documented in CLIProxyAPI.
+This gateway delegates transformation to that external service.*

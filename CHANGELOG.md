@@ -8,7 +8,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-
 - Initial template structure
 - Workspace configuration for Bun package manager
 - TypeScript project references support
@@ -16,12 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions CI/CD workflows
 
 ### Changed
-
 - Removed detect-secrets in favor of gitleaks
 - Enhanced TypeScript configuration with strict mode options
 
 ### Security
-
 - gitleaks for secret scanning
 - Dependency audit workflow
 
@@ -30,7 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - YYYY-MM-DD
 
 ### Initial Release
-
 - Workspace architecture with packages/core, packages/api, packages/bin
 - Comprehensive documentation (AGENTS.md, README-WORKSPACE.md, ROADMAP.md)
 - Production-ready CI/CD pipeline

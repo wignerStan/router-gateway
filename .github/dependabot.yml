@@ -10,9 +10,9 @@ updates:
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
-      interval: "weekly" # Check for updates every week
-      day: "monday" # On Mondays
-      time: "09:00" # At 9:00 UTC
+      interval: "weekly"        # Check for updates every week
+      day: "monday"             # On Mondays
+      time: "09:00"             # At 9:00 UTC
     open-pull-requests-limit: 10
     target-branch: "develop"
     labels:
@@ -23,31 +23,28 @@ updates:
       prefix-development: "chore(deps-dev)"
       include: "scope"
     reviewers:
-      - "jacob" # Add your username
+      - "jacob"                 # Add your username
     assignees:
-      - "jacob" # Add your username
+      - "jacob"                 # Add your username
     allow:
       # Allow both direct and indirect dependencies
       - dependency-type: "direct"
       - dependency-type: "indirect"
-    ignore:
-      # Ignore specific versions if needed (examples below)
-      # - dependency-name: "problematic-crate"
-      #   versions: ["1.2.3"]
     groups:
       # Group security updates together
       security-dependencies:
-        applies-to: security-updates
         patterns:
-          - "*" # All security updates
+          - "*"                # All security updates
         exclude-patterns:
-          - "*-dev" # Exclude dev dependencies
+          - "*-dev"           # Exclude dev dependencies
+        update-types:
+          - "security"
       # Group minor and patch updates
       minor-patch-updates:
         patterns:
-          - "*" # All dependencies
+          - "*"                # All dependencies
         exclude-patterns:
-          - "*-dev" # Exclude dev dependencies
+          - "*-dev"           # Exclude dev dependencies
         update-types:
           - "minor"
           - "patch"

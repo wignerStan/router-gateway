@@ -9,12 +9,12 @@ This document provides complete reference information for the Gateway HTTP API e
 
 The Gateway exposes a RESTful HTTP API for model discovery, health monitoring, and routing recommendations. All endpoints return JSON responses.
 
-| Endpoint          | Method | Description                |
-| ----------------- | ------ | -------------------------- |
-| `GET /`           | GET    | Service information        |
-| `GET /health`     | GET    | Health check status        |
-| `GET /api/models` | GET    | List available models      |
-| `GET /api/route`  | GET    | Get routing recommendation |
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `GET /` | GET | Service information |
+| `GET /health` | GET | Health check status |
+| `GET /api/models` | GET | List available models |
+| `GET /api/route` | GET | Get routing recommendation |
 
 ---
 
@@ -43,17 +43,17 @@ Host: localhost:8080
 
 #### Response Fields
 
-| Field     | Type   | Description                                               |
-| --------- | ------ | --------------------------------------------------------- |
-| `name`    | string | Service name                                              |
-| `version` | string | Service version (semver)                                  |
-| `status`  | string | Current service status (`running`, `stopped`, `degraded`) |
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Service name |
+| `version` | string | Service version (semver) |
+| `status` | string | Current service status (`running`, `stopped`, `degraded`) |
 
 #### Status Codes
 
-| Code | Description                            |
-| ---- | -------------------------------------- |
-| 200  | Success - Service information returned |
+| Code | Description |
+|------|-------------|
+| 200 | Success - Service information returned |
 
 ---
 
@@ -99,19 +99,19 @@ Host: localhost:8080
 
 #### Response Fields
 
-| Field       | Type   | Description                                                |
-| ----------- | ------ | ---------------------------------------------------------- |
-| `status`    | string | Overall health status (`healthy`, `degraded`, `unhealthy`) |
-| `timestamp` | string | ISO 8601 timestamp of the health check                     |
-| `checks`    | object | Individual component health statuses                       |
-| `message`   | string | Optional message explaining degraded/unhealthy status      |
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | string | Overall health status (`healthy`, `degraded`, `unhealthy`) |
+| `timestamp` | string | ISO 8601 timestamp of the health check |
+| `checks` | object | Individual component health statuses |
+| `message` | string | Optional message explaining degraded/unhealthy status |
 
 #### Status Codes
 
-| Code | Description                                |
-| ---- | ------------------------------------------ |
-| 200  | Success - Service is healthy or degraded   |
-| 503  | Service Unavailable - Service is unhealthy |
+| Code | Description |
+|------|-------------|
+| 200 | Success - Service is healthy or degraded |
+| 503 | Service Unavailable - Service is unhealthy |
 
 ---
 
@@ -129,10 +129,10 @@ Accept: application/json
 
 #### Query Parameters
 
-| Parameter  | Type   | Required | Default | Description                                      |
-| ---------- | ------ | -------- | ------- | ------------------------------------------------ |
-| `provider` | string | No       | -       | Filter by provider (e.g., `openai`, `anthropic`) |
-| `type`     | string | No       | -       | Filter by model type (e.g., `chat`, `embedding`) |
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `provider` | string | No | - | Filter by provider (e.g., `openai`, `anthropic`) |
+| `type` | string | No | - | Filter by model type (e.g., `chat`, `embedding`) |
 
 #### Response
 
@@ -165,25 +165,25 @@ Accept: application/json
 
 #### Response Fields
 
-| Field                     | Type    | Description                                    |
-| ------------------------- | ------- | ---------------------------------------------- |
-| `models`                  | array   | Array of model objects                         |
-| `models[].id`             | string  | Unique model identifier                        |
-| `models[].name`           | string  | Human-readable model name                      |
-| `models[].provider`       | string  | Provider name                                  |
-| `models[].type`           | string  | Model type (`chat`, `embedding`, `completion`) |
-| `models[].context_window` | integer | Maximum context window size                    |
-| `models[].max_tokens`     | integer | Maximum output tokens                          |
-| `models[].capabilities`   | array   | List of supported capabilities                 |
-| `count`                   | integer | Total number of models returned                |
-| `timestamp`               | string  | ISO 8601 timestamp                             |
+| Field | Type | Description |
+|-------|------|-------------|
+| `models` | array | Array of model objects |
+| `models[].id` | string | Unique model identifier |
+| `models[].name` | string | Human-readable model name |
+| `models[].provider` | string | Provider name |
+| `models[].type` | string | Model type (`chat`, `embedding`, `completion`) |
+| `models[].context_window` | integer | Maximum context window size |
+| `models[].max_tokens` | integer | Maximum output tokens |
+| `models[].capabilities` | array | List of supported capabilities |
+| `count` | integer | Total number of models returned |
+| `timestamp` | string | ISO 8601 timestamp |
 
 #### Status Codes
 
-| Code | Description                                  |
-| ---- | -------------------------------------------- |
-| 200  | Success - Models list returned               |
-| 500  | Internal Server Error - Registry unavailable |
+| Code | Description |
+|------|-------------|
+| 200 | Success - Models list returned |
+| 500 | Internal Server Error - Registry unavailable |
 
 ---
 
@@ -201,11 +201,11 @@ Accept: application/json
 
 #### Query Parameters
 
-| Parameter  | Type    | Required | Default    | Description               |
-| ---------- | ------- | -------- | ---------- | ------------------------- |
-| `model`    | string  | Yes      | -          | Target model ID to route  |
-| `strategy` | string  | No       | `weighted` | Override routing strategy |
-| `priority` | integer | No       | `0`        | Request priority (0-10)   |
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `model` | string | Yes | - | Target model ID to route |
+| `strategy` | string | No | `weighted` | Override routing strategy |
+| `priority` | integer | No | `0` | Request priority (0-10) |
 
 #### Response
 
@@ -223,7 +223,7 @@ Accept: application/json
     },
     {
       "auth_id": "auth-backup-001",
-      "confidence": 0.7
+      "confidence": 0.70
     }
   ],
   "metadata": {
@@ -236,29 +236,29 @@ Accept: application/json
 
 #### Response Fields
 
-| Field                       | Type    | Description                            |
-| --------------------------- | ------- | -------------------------------------- |
-| `model`                     | string  | Requested model ID                     |
-| `provider`                  | string  | Model provider                         |
-| `recommended_auth`          | string  | Recommended credential identifier      |
-| `strategy`                  | string  | Routing strategy used                  |
-| `confidence`                | float   | Confidence score (0.0-1.0)             |
-| `alternatives`              | array   | Alternative credential recommendations |
-| `alternatives[].auth_id`    | string  | Alternative credential identifier      |
-| `alternatives[].confidence` | float   | Alternative confidence score           |
-| `metadata`                  | object  | Additional routing metadata            |
-| `metadata.latency_ms`       | integer | Average latency in milliseconds        |
-| `metadata.success_rate`     | float   | Historical success rate (0.0-1.0)      |
-| `metadata.health_status`    | string  | Credential health status               |
+| Field | Type | Description |
+|-------|------|-------------|
+| `model` | string | Requested model ID |
+| `provider` | string | Model provider |
+| `recommended_auth` | string | Recommended credential identifier |
+| `strategy` | string | Routing strategy used |
+| `confidence` | float | Confidence score (0.0-1.0) |
+| `alternatives` | array | Alternative credential recommendations |
+| `alternatives[].auth_id` | string | Alternative credential identifier |
+| `alternatives[].confidence` | float | Alternative confidence score |
+| `metadata` | object | Additional routing metadata |
+| `metadata.latency_ms` | integer | Average latency in milliseconds |
+| `metadata.success_rate` | float | Historical success rate (0.0-1.0) |
+| `metadata.health_status` | string | Credential health status |
 
 #### Status Codes
 
-| Code | Description                                            |
-| ---- | ------------------------------------------------------ |
-| 200  | Success - Routing recommendation returned              |
-| 400  | Bad Request - Missing required `model` parameter       |
-| 404  | Not Found - Model not found in registry                |
-| 503  | Service Unavailable - No healthy credentials available |
+| Code | Description |
+|------|-------------|
+| 200 | Success - Routing recommendation returned |
+| 400 | Bad Request - Missing required `model` parameter |
+| 404 | Not Found - Model not found in registry |
+| 503 | Service Unavailable - No healthy credentials available |
 
 ---
 
@@ -281,19 +281,19 @@ All endpoints follow a consistent error response format:
 
 ### Error Codes
 
-| Code                     | HTTP Status | Description                          |
-| ------------------------ | ----------- | ------------------------------------ |
-| `BAD_REQUEST`            | 400         | Invalid request parameters           |
-| `MODEL_NOT_FOUND`        | 404         | Requested model does not exist       |
-| `NO_HEALTHY_CREDENTIALS` | 503         | No credentials available for routing |
-| `INTERNAL_ERROR`         | 500         | Unexpected server error              |
+| Code | HTTP Status | Description |
+|------|-------------|-------------|
+| `BAD_REQUEST` | 400 | Invalid request parameters |
+| `MODEL_NOT_FOUND` | 404 | Requested model does not exist |
+| `NO_HEALTHY_CREDENTIALS` | 503 | No credentials available for routing |
+| `INTERNAL_ERROR` | 500 | Unexpected server error |
 
 ---
 
 ## Content Types
 
-| Content-Type       | Description                               |
-| ------------------ | ----------------------------------------- |
+| Content-Type | Description |
+|--------------|-------------|
 | `application/json` | Default response format for all endpoints |
 
 ---

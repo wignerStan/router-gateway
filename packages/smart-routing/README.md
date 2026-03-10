@@ -8,15 +8,15 @@ Provides weighted credential selection based on health, latency, success rate, a
 
 ## Key Components
 
-| File          | Description                                         |
-| ------------- | --------------------------------------------------- |
-| `router.rs`   | Main router structure                               |
-| `selector.rs` | `SmartSelector` for credential selection            |
-| `health.rs`   | Health state machine and tracking                   |
-| `weight.rs`   | `WeightCalculator` trait and default implementation |
-| `metrics.rs`  | `MetricsCollector` for performance tracking         |
-| `config.rs`   | Configuration types                                 |
-| `sqlite/`     | SQLite persistence layer                            |
+| File | Description |
+|------|-------------|
+| `router.rs` | Main router structure |
+| `selector.rs` | `SmartSelector` for credential selection |
+| `health.rs` | Health state machine and tracking |
+| `weight.rs` | `WeightCalculator` trait and default implementation |
+| `metrics.rs` | `MetricsCollector` for performance tracking |
+| `config.rs` | Configuration types |
+| `sqlite/` | SQLite persistence layer |
 
 ## Routing Algorithm
 

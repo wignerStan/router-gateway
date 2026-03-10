@@ -8,13 +8,13 @@ Provides tracing, metrics collection, and middleware for observability of LLM AP
 
 ## Key Components
 
-| File            | Description                       |
-| --------------- | --------------------------------- |
-| `lib.rs`        | Module exports                    |
-| `trace.rs`      | Trace context and span management |
-| `collector.rs`  | Metrics collection interface      |
-| `metrics.rs`    | Performance metrics types         |
-| `middleware.rs` | Tower/Axum middleware             |
+| File | Description |
+|------|-------------|
+| `lib.rs` | Module exports |
+| `trace.rs` | Trace context and span management |
+| `collector.rs` | Metrics collection interface |
+| `metrics.rs` | Performance metrics types |
+| `middleware.rs` | Tower/Axum middleware |
 
 ## Usage
 

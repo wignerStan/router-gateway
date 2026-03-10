@@ -29,7 +29,6 @@ just qa
 ```
 
 This runs:
-
 - **Linting**: ESLint + Prettier check.
 - **Type-Check**: TypeScript compiler validation.
 - **Testing**: Bun's native test runner.
@@ -37,7 +36,6 @@ This runs:
 ## Commit Guidelines
 
 We use [Conventional Commits](https://www.conventionalcommits.org/):
-
 - `feat`: New feature
 - `fix`: Bug fix
 - `docs`: Documentation changes

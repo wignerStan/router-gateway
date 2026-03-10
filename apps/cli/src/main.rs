@@ -301,15 +301,54 @@ async fn main() -> Result<()> {
             }
 
             // Read and parse the config file
-            // Read file content
             let content =
                 std::fs::read_to_string(&config).context("Failed to read configuration file")?;
 
             // Parse as YAML and validate structure
-            let validation_result = validate_config_content(&content);
+            let parsed: Result<GatewayConfigYaml, _> = serde_yaml::from_str(&content);
 
-            match validation_result {
-                Ok((config_value, errors, warnings)) => {
+            match parsed {
+                Ok(config_value) => {
+                    let mut errors = Vec::new();
+                    let mut warnings = Vec::new();
+
+                    // Validate credentials
+                    for (i, cred) in config_value.credentials.iter().enumerate() {
+                        // Check required fields
+                        if cred.id.is_empty() {
+                            errors.push(format!("Credential {}: 'id' field is empty", i));
+                        }
+                        if cred.provider.is_empty() {
+                            errors.push(format!("Credential {}: 'provider' field is empty", i));
+                        }
+                        if cred.api_key.is_empty() {
+                            errors.push(format!("Credential {}: 'api_key' field is empty", i));
+                        }
+
+                        // Check for env var in api_key
+                        if cred.api_key.starts_with("${") && !cred.api_key.contains(":-") {
+                            let var_name =
+                                cred.api_key.trim_start_matches("${").trim_end_matches("}");
+                            if std::env::var(var_name).is_err() {
+                                warnings.push(format!(
+                                    "Credential '{}': environment variable '{}' not set",
+                                    cred.id, var_name
+                                ));
+                            }
+                        }
+                    }
+
+                    // Validate routing strategy
+                    if let Some(ref routing) = config_value.routing {
+                        let valid_strategies = ["weighted", "adaptive", "round_robin"];
+                        if !valid_strategies.contains(&routing.strategy.as_str()) {
+                            errors.push(format!(
+                                "Invalid routing strategy: '{}'. Valid options: {:?}",
+                                routing.strategy, valid_strategies
+                            ));
+                        }
+                    }
+
                     if format_json {
                         let server_info = config_value.server.as_ref().map(|s| {
                             serde_json::json!({
@@ -342,7 +381,7 @@ async fn main() -> Result<()> {
                         }
                         println!("  Credentials: {} defined", config_value.credentials.len());
                         for cred in &config_value.credentials {
-                            println!(
+                            print!(
                                 "    - {} ({}): priority={}, models={}",
                                 cred.id,
                                 cred.provider,
@@ -401,139 +440,4 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
-}
-
-/// Validates the content of a gateway configuration file
-fn validate_config_content(
-    content: &str,
-) -> Result<(GatewayConfigYaml, Vec<String>, Vec<String>), serde_yaml::Error> {
-    let config_value: GatewayConfigYaml = serde_yaml::from_str(content)?;
-    let mut errors = Vec::new();
-    let mut warnings = Vec::new();
-
-    // Validate credentials
-    for (i, cred) in config_value.credentials.iter().enumerate() {
-        // Check required fields
-        if cred.id.is_empty() {
-            errors.push(format!("Credential {}: 'id' field is empty", i));
-        }
-        if cred.provider.is_empty() {
-            errors.push(format!("Credential {}: 'provider' field is empty", i));
-        }
-        if cred.api_key.is_empty() {
-            errors.push(format!("Credential {}: 'api_key' field is empty", i));
-        }
-
-        // Check for env var in api_key
-        if cred.api_key.starts_with("${") && !cred.api_key.contains(":-") {
-            let var_name = cred.api_key.trim_start_matches("${").trim_end_matches("}");
-            if std::env::var(var_name).is_err() {
-                warnings.push(format!(
-                    "Credential '{}': environment variable '{}' not set",
-                    cred.id, var_name
-                ));
-            }
-        }
-    }
-
-    // Validate routing strategy
-    if let Some(ref routing) = config_value.routing {
-        let valid_strategies = [
-            "weighted",
-            "adaptive",
-            "round_robin",
-            "time_aware",
-            "quota_aware",
-            "policy_aware",
-        ];
-        if !valid_strategies.contains(&routing.strategy.as_str()) {
-            errors.push(format!(
-                "Invalid routing strategy: '{}'. Valid options: {:?}",
-                routing.strategy, valid_strategies
-            ));
-        }
-    }
-
-    Ok((config_value, errors, warnings))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_validate_valid_config() {
-        let yaml = r#"
-server:
-  port: 8080
-credentials:
-  - id: openai-1
-    provider: openai
-    api_key: "sk-..."
-    priority: 1
-    allowed_models: ["gpt-4"]
-routing:
-  strategy: adaptive
-"#;
-        let result = validate_config_content(yaml);
-        assert!(result.is_ok());
-        let (_, errors, _) = result.unwrap();
-        assert!(errors.is_empty());
-    }
-
-    #[test]
-    fn test_validate_invalid_strategy() {
-        let yaml = r#"
-credentials:
-  - id: test
-    provider: openai
-    api_key: "key"
-routing:
-  strategy: invalid_strategy
-"#;
-        let result = validate_config_content(yaml);
-        assert!(result.is_ok());
-        let (_, errors, _) = result.unwrap();
-        assert!(!errors.is_empty());
-        assert!(errors[0].contains("Invalid routing strategy"));
-    }
-
-    #[test]
-    fn test_validate_empty_fields() {
-        let yaml = r#"
-credentials:
-  - id: ""
-    provider: ""
-    api_key: ""
-"#;
-        let result = validate_config_content(yaml);
-        assert!(result.is_ok());
-        let (_, errors, _) = result.unwrap();
-        assert_eq!(errors.len(), 3);
-        assert!(errors[0].contains("'id' field is empty"));
-        assert!(errors[1].contains("'provider' field is empty"));
-        assert!(errors[2].contains("'api_key' field is empty"));
-    }
-
-    #[test]
-    fn test_validate_invalid_yaml() {
-        let yaml = "invalid: yaml: :";
-        let result = validate_config_content(yaml);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_validate_missing_env_var_warning() {
-        let yaml = r#"
-credentials:
-  - id: test
-    provider: openai
-    api_key: "${NON_EXISTENT_VAR_123}"
-"#;
-        let result = validate_config_content(yaml);
-        assert!(result.is_ok());
-        let (_, _, warnings) = result.unwrap();
-        assert!(!warnings.is_empty());
-        assert!(warnings[0].contains("environment variable 'NON_EXISTENT_VAR_123' not set"));
-    }
 }

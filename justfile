@@ -37,7 +37,7 @@ help:
 # ============================================
 
 # Tier 1: Fast feedback (<5s) - Use for pre-commit
-qa: fmt-check lint-fast
+qa: fmt-check lint-fast type-check
     @echo "✅ Tier 1 QA passed (fast checks)"
 
 # Tier 2: Comprehensive (>5s) - Use for pre-push / CI

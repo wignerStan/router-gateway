@@ -6,15 +6,9 @@ title = "Gitleaks Configuration"
 [extend]
 useDefault = true
 
-# Global allowlist for paths and regexes
-[allowlist]
-description = "Global allowlist"
-paths = [
-    '''\.env\.example$''',
-    '''gitleaks\.toml$''',
-    '''CLAUDE\.md$''',
-    '''AGENTS\.md$''',
-]
+[rules]
+# Allow example placeholders
+[[rules.allowlist]]
 regexes = [
     '''\{\{[A-Z_]+\}\}''',  # Template placeholders like {{SECRET_KEY}}
     '''<YOUR_.*>''',        # Placeholder tokens
@@ -33,3 +27,12 @@ id = "jwt-token"
 description = "JWT Token"
 regex = '''eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*'''
 tags = ["jwt", "token"]
+
+[allowlist]
+description = "Global allowlist"
+paths = [
+    '''\.env\.example$''',
+    '''gitleaks\.toml$''',
+    '''CLAUDE\.md$''',
+    '''AGENTS\.md$''',
+]

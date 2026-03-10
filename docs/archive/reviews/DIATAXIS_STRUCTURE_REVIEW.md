@@ -16,12 +16,12 @@ Reviewed all Diátaxis documentation for structure compliance with the Diátaxis
 
 ## Diátaxis Framework Overview
 
-| Type         | Purpose       | Orientation |
-| ------------ | ------------- | ----------- |
-| Tutorials    | Learning      | Study       |
-| Guides       | Problem       | Action      |
-| Reference    | Information   | Lookup      |
-| Explanations | Understanding | Context     |
+| Type | Purpose | Orientation |
+|------|---------|-------------|
+| Tutorials | Learning | Study |
+| Guides | Problem | Action |
+| Reference | Information | Lookup |
+| Explanations | Understanding | Context |
 
 ---
 
@@ -31,15 +31,14 @@ Reviewed all Diátaxis documentation for structure compliance with the Diátaxis
 
 **Score: 9/10** ✅ PASS
 
-| Criteria              | Status                             |
-| --------------------- | ---------------------------------- |
-| Learning-oriented     | ✅ Yes - teaches concepts          |
-| Beginner-friendly     | ✅ Yes - starts with prerequisites |
-| Step-by-step learning | ✅ Yes - progressive steps         |
-| Working examples      | ✅ Yes - includes code blocks      |
+| Criteria | Status |
+|----------|--------|
+| Learning-oriented | ✅ Yes - teaches concepts |
+| Beginner-friendly | ✅ Yes - starts with prerequisites |
+| Step-by-step learning | ✅ Yes - progressive steps |
+| Working examples | ✅ Yes - includes code blocks |
 
 **File:** `getting-started.md`
-
 - ✅ Teaches "why" not just "how"
 - ✅ Builds understanding progressively
 - ✅ Includes verification steps
@@ -48,15 +47,14 @@ Reviewed all Diátaxis documentation for structure compliance with the Diátaxis
 
 **Score: 9/10** ✅ PASS
 
-| Criteria                  | Status                            |
-| ------------------------- | --------------------------------- |
-| Problem-oriented          | ✅ Yes - solves specific problems |
-| Step-by-step instructions | ✅ Yes - numbered steps           |
-| Clear goals               | ✅ Yes - stated at start          |
-| Practical examples        | ✅ Yes - code snippets            |
+| Criteria | Status |
+|----------|--------|
+| Problem-oriented | ✅ Yes - solves specific problems |
+| Step-by-step instructions | ✅ Yes - numbered steps |
+| Clear goals | ✅ Yes - stated at start |
+| Practical examples | ✅ Yes - code snippets |
 
 **Files:**
-
 - `adding-new-provider.md` - ✅ Solves "how do I add a provider?"
 - `custom-routing-rules.md` - ✅ Solves "how do I configure routing?"
 
@@ -64,15 +62,14 @@ Reviewed all Diátaxis documentation for structure compliance with the Diátaxis
 
 **Score: 10/10** ✅ PASS
 
-| Criteria             | Status                          |
-| -------------------- | ------------------------------- |
-| Information-oriented | ✅ Yes - complete listing       |
-| Accurate             | ✅ Yes - matches source code    |
-| Lookup-friendly      | ✅ Yes - table format           |
-| Complete             | ✅ Yes - all options documented |
+| Criteria | Status |
+|----------|--------|
+| Information-oriented | ✅ Yes - complete listing |
+| Accurate | ✅ Yes - matches source code |
+| Lookup-friendly | ✅ Yes - table format |
+| Complete | ✅ Yes - all options documented |
 
 **Files:**
-
 - `api.md` - ✅ Complete API documentation
 - `configuration.md` - ✅ All config options with defaults
 
@@ -80,15 +77,14 @@ Reviewed all Diátaxis documentation for structure compliance with the Diátaxis
 
 **Score: 9/10** ✅ PASS
 
-| Criteria               | Status                      |
-| ---------------------- | --------------------------- |
-| Understanding-oriented | ✅ Yes - explains why       |
-| Context provided       | ✅ Yes - rationale included |
-| Trade-offs discussed   | ✅ Yes - design decisions   |
-| Architecture context   | ✅ Yes - system overview    |
+| Criteria | Status |
+|----------|--------|
+| Understanding-oriented | ✅ Yes - explains why |
+| Context provided | ✅ Yes - rationale included |
+| Trade-offs discussed | ✅ Yes - design decisions |
+| Architecture context | ✅ Yes - system overview |
 
 **Files:**
-
 - `architecture.md` - ✅ Explains design decisions
 - `adr/` - ✅ Architecture Decision Records
 
@@ -96,12 +92,12 @@ Reviewed all Diátaxis documentation for structure compliance with the Diátaxis
 
 ## Cross-Cutting Quality
 
-| Aspect                | Score | Notes                      |
-| --------------------- | ----- | -------------------------- |
-| No content overlap    | 10/10 | Each doc has clear purpose |
-| Consistent formatting | 9/10  | Markdown tables used well  |
-| Navigation clarity    | 8/10  | Could add index file       |
-| Code examples         | 10/10 | Working, accurate examples |
+| Aspect | Score | Notes |
+|--------|-------|-------|
+| No content overlap | 10/10 | Each doc has clear purpose |
+| Consistent formatting | 9/10 | Markdown tables used well |
+| Navigation clarity | 8/10 | Could add index file |
+| Code examples | 10/10 | Working, accurate examples |
 
 ---
 

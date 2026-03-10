@@ -84,7 +84,6 @@ The `bun_v1.0` template has been aligned with production-grade standards from `r
 ### 5. Justfile Expansion
 
 Added task categories aligning with rust_v1.0:
-
 - **Workspace operations**: members, graph, structure, update, outdated, tree
 - **Security**: security-scan, audit, check-unused
 - **CI**: ci-full, ci-lint, ci-type-check, ci-test, ci-build, ci-fmt
@@ -93,13 +92,11 @@ Added task categories aligning with rust_v1.0:
 ### 6. CI/CD Enhancements
 
 **ci.yml additions**:
-
 - Separate `lint` job (was combined with test)
 - Separate `build` job for verification
 - `gitleaks` job for secret scanning
 
 **security.yml additions**:
-
 - `gitleaks` job on every push/PR
 - `dependency-review` job with high severity fail
 
@@ -131,7 +128,6 @@ Added task categories aligning with rust_v1.0:
 **Lock File:** pnpm-lock.yaml
 **Workspace Config:** `pnpm-workspace.yaml`
 **Differences:**
-
 - No bunfig.toml (Bun-specific)
 - Updated package.json scripts (bun run → pnpm run)
 - Uses pnpm filter syntax (`pnpm --filter '*'`)
@@ -187,12 +183,10 @@ The template includes comprehensive dependencies for production TypeScript proje
 ### Core Dependencies
 
 #### All Packages
-
 - `typescript` - TypeScript compiler
 - `@types/node` - Node.js type definitions
 
 #### Bun Template
-
 - `bun-types` - Bun global API type definitions
 
 ### Dev Dependencies
@@ -205,7 +199,6 @@ The template includes comprehensive dependencies for production TypeScript proje
 ### Workspace Dependencies
 
 Packages use `workspace:*` protocol for internal dependencies:
-
 ```json
 {
   "dependencies": {
@@ -230,15 +223,15 @@ Packages use `workspace:*` protocol for internal dependencies:
 
 ## Comparison: bun_v1.0 vs pnpm_v1.0
 
-| Feature          | bun_v1.0                   | pnpm_v1.0                |
-| ---------------- | -------------------------- | ------------------------ |
-| Runtime          | Bun >= 1.0.0               | Node.js >= 18.0.0        |
-| Package Manager  | bun install                | pnpm install             |
-| Lock File        | bun.lockb                  | pnpm-lock.yaml           |
-| Workspace Config | workspaces in package.json | pnpm-workspace.yaml      |
-| Config File      | bunfig.toml                | -                        |
-| Performance      | Native JS runtime          | Standard Node.js         |
-| Suitability      | New projects, fast dev     | Large-scale, established |
+| Feature | bun_v1.0 | pnpm_v1.0 |
+|---------|-------------|-------------|
+| Runtime | Bun >= 1.0.0 | Node.js >= 18.0.0 |
+| Package Manager | bun install | pnpm install |
+| Lock File | bun.lockb | pnpm-lock.yaml |
+| Workspace Config | workspaces in package.json | pnpm-workspace.yaml |
+| Config File | bunfig.toml | - |
+| Performance | Native JS runtime | Standard Node.js |
+| Suitability | New projects, fast dev | Large-scale, established |
 
 ## Verification
 
@@ -255,13 +248,11 @@ The templates have been verified for:
 The consolidated TypeScript templates (`bun_v1.0` and `pnpm_v1.0`) provide comprehensive, production-ready starting points for TypeScript projects, whether single package or workspace. They incorporate best practices from the `rust_v1.0` template and include all tools and configurations needed for modern TypeScript development.
 
 The `bun_v1.0` template is ideal for:
-
 - New projects requiring fast development cycles
 - Projects leveraging Bun's native performance
 - Smaller to medium-sized projects
 
 The `pnpm_v1.0` template is ideal for:
-
 - Large-scale enterprise projects
 - Teams established with pnpm
 - Projects requiring broader Node.js ecosystem support

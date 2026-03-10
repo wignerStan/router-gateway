@@ -69,7 +69,7 @@ A fast wrong model is still a wrong route.
 
 Manual configuration should express business policy, not micro-optimization.
 
-### 3. Prefer one routing pipeline over many "strategies"
+### 3. Prefer one routing pipeline over many “strategies”
 
 Time, quota, policy, and adaptive behavior should be stages in one system.
 

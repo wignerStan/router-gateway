@@ -579,7 +579,7 @@ Current code leans toward auth selection first. For this product, the better ord
 
 Why:
 
-- the gateway's value is model-aware routing, not only credential balancing.
+- the gateway’s value is model-aware routing, not only credential balancing.
 
 ### Recommendation 4: Define a compatibility matrix
 
