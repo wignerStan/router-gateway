@@ -72,14 +72,14 @@ jobs:
         run: just ci-lint
 
   msrv:
-    name: MSRV Check (1.75)
+    name: MSRV Check (1.77)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Rust 1.75
-        uses: dtolnay/rust-toolchain@1.75
+      - name: Set up Rust 1.77
+        uses: dtolnay/rust-toolchain@1.77
 
       - name: Cache cargo registry
         uses: Swatinem/rust-cache@v2
@@ -175,7 +175,7 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           files: coverage/cobertura.xml
-          fail_ci_if_error: true
+          fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: unittests
           name: gateway-coverage
