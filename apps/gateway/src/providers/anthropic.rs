@@ -421,11 +421,20 @@ mod tests {
 
         // First message should have text and malformed image placeholder
         let first_content = messages[0]["content"].as_array().unwrap();
-        assert!(!first_content.is_empty());
+        assert_eq!(first_content.len(), 2);
+        assert_eq!(first_content[0]["type"], "text");
+        assert_eq!(first_content[0]["text"], "Hello");
+        assert_eq!(first_content[1]["type"], "text");
+        assert_eq!(first_content[1]["text"], "[malformed image content]");
 
         // Second message should have text and empty URL image
         let second_content = messages[1]["content"].as_array().unwrap();
-        assert!(!second_content.is_empty());
+        assert_eq!(second_content.len(), 2);
+        assert_eq!(second_content[0]["type"], "text");
+        assert_eq!(second_content[0]["text"], "World");
+        assert_eq!(second_content[1]["type"], "image");
+        assert_eq!(second_content[1]["source"]["type"], "url");
+        assert_eq!(second_content[1]["source"]["url"], "");
     }
 
     #[test]
