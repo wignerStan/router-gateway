@@ -1239,7 +1239,7 @@ mod tests {
             "Weight should be finite even with Inf metrics"
         );
         assert!(
-            weight >= 0.0 && weight <= 1.0,
+            (0.0..=1.0).contains(&weight),
             "Weight should be in valid range"
         );
     }
@@ -1379,7 +1379,8 @@ mod tests {
             model_states: Vec::new(),
         };
 
-        let normal_weight = calculator.calculate(&auth_normal, Some(&metrics), HealthStatus::Healthy);
+        let normal_weight =
+            calculator.calculate(&auth_normal, Some(&metrics), HealthStatus::Healthy);
         let quota_weight = calculator.calculate(&auth_quota, Some(&metrics), HealthStatus::Healthy);
 
         // Quota exceeded should apply heavy penalty
@@ -1522,7 +1523,8 @@ mod tests {
         };
 
         let full_weight = calculator.calculate(&auth, Some(&full_metrics), HealthStatus::Healthy);
-        let sparse_weight = calculator.calculate(&auth, Some(&sparse_metrics), HealthStatus::Healthy);
+        let sparse_weight =
+            calculator.calculate(&auth, Some(&sparse_metrics), HealthStatus::Healthy);
         let none_weight = calculator.calculate(&auth, None, HealthStatus::Healthy);
 
         // All should be valid
