@@ -69,9 +69,7 @@ The root `package.json` defines workspace and shared scripts:
   "name": "{{PROJECT_NAME}}-workspace",
   "version": "1.0.0",
   "private": true,
-  "workspaces": [
-    "packages/*"
-  ],
+  "workspaces": ["packages/*"],
   "scripts": {
     "dev": "bun run --filter '*' dev",
     "build": "bun run --filter '*' build",
@@ -161,30 +159,35 @@ just type-check
 ## Package Organization
 
 ### Core Package (`packages/core`)
+
 - Shared types and utilities
 - Domain models
 - Business logic
 - No external dependencies beyond workspace
 
 ### API Package (`packages/api`)
+
 - HTTP handlers (if using a web framework)
 - API types and schemas
 - Request/response models
 - Depends on `core`
 
 ### Binary Package (`packages/bin`)
+
 - Application entry point
 - CLI argument parsing
 - Configuration loading
 - Depends on `core` and `api`
 
 ### Frontend Package (`packages/frontend`, optional)
+
 - UI components
 - State management
 - Routing
 - Depends on `api` and `core`
 
 ### Backend Package (`packages/backend`, optional)
+
 - Server setup
 - API routes
 - Middleware
@@ -195,6 +198,7 @@ just type-check
 The GitHub Actions workflows include:
 
 **CI Pipeline** (`.github/workflows/ci.yml`):
+
 - **Test** - Runs tests on multiple platforms and Node versions
 - **Lint** - Runs ESLint with strict warnings
 - **Build** - Verifies workspace builds successfully
@@ -203,6 +207,7 @@ The GitHub Actions workflows include:
 - **Documentation** - Builds documentation
 
 **Security Pipeline** (`.github/workflows/security.yml`):
+
 - **Gitleaks** - Secret scanning on every push
 - **Audit** - Dependency vulnerability checks
 - **Dependency Review** - Reviews dependencies for security issues
@@ -210,6 +215,7 @@ The GitHub Actions workflows include:
 ## Pre-commit Hooks
 
 The `.pre-commit-config.yaml` includes hooks for:
+
 - Trailing whitespace and end-of-file fixes
 - YAML, JSON, and TOML validation
 - Large file detection

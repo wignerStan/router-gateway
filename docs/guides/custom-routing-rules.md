@@ -4,12 +4,12 @@ This guide explains how to configure smart routing strategies in the gateway.
 
 ## Available Strategies
 
-| Strategy | Description |
-|----------|-------------|
-| `weighted` | Default. Selects credentials based on weighted performance scores |
-| `time_aware` | Adjusts routing based on time of day (peak/off-peak) |
-| `quota_aware` | Balances load across credentials to optimize quota usage |
-| `adaptive` | Combines multiple strategies with dynamic adjustment |
+| Strategy      | Description                                                       |
+| ------------- | ----------------------------------------------------------------- |
+| `weighted`    | Default. Selects credentials based on weighted performance scores |
+| `time_aware`  | Adjusts routing based on time of day (peak/off-peak)              |
+| `quota_aware` | Balances load across credentials to optimize quota usage          |
+| `adaptive`    | Combines multiple strategies with dynamic adjustment              |
 
 ## Basic Configuration
 

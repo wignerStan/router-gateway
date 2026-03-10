@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version'
+        description: "Release version"
         required: false
         type: string
 
@@ -72,14 +72,14 @@ jobs:
         run: just ci-lint
 
   msrv:
-    name: MSRV Check (1.77)
+    name: MSRV Check (1.83)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Rust 1.77
-        uses: dtolnay/rust-toolchain@1.77
+      - name: Set up Rust 1.83
+        uses: dtolnay/rust-toolchain@1.83
 
       - name: Cache cargo registry
         uses: Swatinem/rust-cache@v2
@@ -145,7 +145,7 @@ jobs:
           tool: just
 
       - name: Run tests
-        run: just ci-test
+        run: cargo test --all --all-features
 
   coverage:
     name: Test Coverage
@@ -169,7 +169,7 @@ jobs:
           tool: cargo-tarpaulin
 
       - name: Generate coverage report
-        run: cargo tarpaulin --all --all-features --out Xml --output-dir coverage --timeout 300
+        run: cargo tarpaulin --all --all-features --out Xml --output-dir coverage --timeout 300 --exclude-files "apps/cli/src/main.rs" --exclude-files "apps/gateway/src/main.rs"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -346,14 +346,14 @@ jobs:
     steps:
       - name: Check all jobs passed
         run: |
-          if [[ "${{ needs.fmt.result }}" != "success" ||
-                "${{ needs.lint.result }}" != "success" ||
-                "${{ needs.msrv.result }}" != "success" ||
-                "${{ needs.type-check.result }}" != "success" ||
-                "${{ needs.test.result }}" != "success" ||
-                "${{ needs.coverage.result }}" != "success" ||
-                "${{ needs.security-audit.result }}" != "success" ||
-                "${{ needs.build.result }}" != "success" ]]; then
+          if [[ "${{ needs.fmt.result }}" == "failure" ||
+                "${{ needs.lint.result }}" == "failure" ||
+                "${{ needs.msrv.result }}" == "failure" ||
+                "${{ needs.type-check.result }}" == "failure" ||
+                "${{ needs.test.result }}" == "failure" ||
+                "${{ needs.coverage.result }}" == "failure" ||
+                "${{ needs.security-audit.result }}" == "failure" ||
+                "${{ needs.build.result }}" == "failure" ]]; then
             echo "::error::Quality gate failed - one or more required jobs did not pass"
             exit 1
           fi

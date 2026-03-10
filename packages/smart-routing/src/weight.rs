@@ -104,9 +104,13 @@ impl DefaultWeightCalculator {
             // Sparse data -> Heuristic mode
             (DataAvailability::Sparse, _) => PlannerMode::Heuristic,
             // Missing state -> Safe weighted mode
-            (DataAvailability::Missing, _) => PlannerMode::SafeWeighted,
+            (DataAvailability::Missing, HealthStatus::Healthy | HealthStatus::Degraded) => {
+                PlannerMode::SafeWeighted
+            },
             // Unhealthy with full data -> Safe weighted (conservative)
             (DataAvailability::Full, HealthStatus::Unhealthy) => PlannerMode::SafeWeighted,
+            // Unhealthy with missing data -> Deterministic fallback
+            (DataAvailability::Missing, HealthStatus::Unhealthy) => PlannerMode::Deterministic,
         }
     }
 
@@ -1239,7 +1243,7 @@ mod tests {
             "Weight should be finite even with Inf metrics"
         );
         assert!(
-            weight >= 0.0 && weight <= 1.0,
+            (0.0..=1.0).contains(&weight),
             "Weight should be in valid range"
         );
     }
@@ -1336,10 +1340,7 @@ mod tests {
             weight > 0.0,
             "Weight should be positive even with zero metrics"
         );
-        assert!(
-            weight <= 1.0,
-            "Weight should not exceed 1.0"
-        );
+        assert!(weight <= 1.0, "Weight should not exceed 1.0");
     }
 
     #[test]
@@ -1379,7 +1380,8 @@ mod tests {
             model_states: Vec::new(),
         };
 
-        let normal_weight = calculator.calculate(&auth_normal, Some(&metrics), HealthStatus::Healthy);
+        let normal_weight =
+            calculator.calculate(&auth_normal, Some(&metrics), HealthStatus::Healthy);
         let quota_weight = calculator.calculate(&auth_quota, Some(&metrics), HealthStatus::Healthy);
 
         // Quota exceeded should apply heavy penalty
@@ -1522,7 +1524,8 @@ mod tests {
         };
 
         let full_weight = calculator.calculate(&auth, Some(&full_metrics), HealthStatus::Healthy);
-        let sparse_weight = calculator.calculate(&auth, Some(&sparse_metrics), HealthStatus::Healthy);
+        let sparse_weight =
+            calculator.calculate(&auth, Some(&sparse_metrics), HealthStatus::Healthy);
         let none_weight = calculator.calculate(&auth, None, HealthStatus::Healthy);
 
         // All should be valid

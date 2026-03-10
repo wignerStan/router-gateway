@@ -933,16 +933,11 @@ mod tests {
         router.metrics().initialize_auth("cred-1").await;
 
         // Record a result
-        router
-            .record_result("cred-1", true, 150.0, 200, 0.9)
-            .await;
+        router.record_result("cred-1", true, 150.0, 200, 0.9).await;
 
         // Verify metrics were updated
         let metrics = router.metrics().get_metrics("cred-1").await;
-        assert!(
-            metrics.is_some(),
-            "Metrics should be recorded"
-        );
+        assert!(metrics.is_some(), "Metrics should be recorded");
         let m = metrics.unwrap();
         assert_eq!(m.total_requests, 1);
         assert_eq!(m.success_count, 1);
@@ -959,10 +954,7 @@ mod tests {
         // Verify bandit policy was updated
         let bandit = router.bandit_policy().lock().await;
         let stats = bandit.get_stats("cred-1");
-        assert!(
-            stats.is_some(),
-            "Bandit stats should be recorded"
-        );
+        assert!(stats.is_some(), "Bandit stats should be recorded");
         let s = stats.unwrap();
         assert_eq!(s.pulls, 1);
         assert_eq!(s.last_utility, 0.9);

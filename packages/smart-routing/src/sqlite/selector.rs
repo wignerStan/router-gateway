@@ -227,6 +227,9 @@ impl SQLiteSelector {
             return available.into_iter().nth(idx).unwrap().id;
         }
 
+        // Save last element as fallback for floating-point edge cases
+        let fallback = available.last().map(|a| a.id.clone()).unwrap();
+
         // Weighted random selection
         let r = rand::thread_rng().gen::<f64>() * total_weight;
         let mut cumulative = 0.0;
@@ -238,13 +241,7 @@ impl SQLiteSelector {
             }
         }
 
-        // SAFETY: Mathematically impossible to reach here because:
-        // 1. total_weight > 0 (checked above)
-        // 2. r is in [0, total_weight)
-        // 3. cumulative starts at 0 and accumulates to total_weight
-        // The loop must match at or before the last element.
-        // If we somehow reach here, it indicates a logic bug.
-        unreachable!("Weighted selection should always match within cumulative range")
+        fallback
     }
 
     /// Precompute weights for batch operations

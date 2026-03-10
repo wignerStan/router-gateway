@@ -982,7 +982,7 @@ mod tests {
             match selector.pick(auths.clone()).await.unwrap().as_str() {
                 "high-perf" => high_count += 1,
                 "low-perf" => low_count += 1,
-                _ => {}
+                _ => {},
             }
         }
 
@@ -1194,7 +1194,10 @@ mod tests {
         }
 
         // Should be able to select auths even with all-zero weights
-        assert!(!selections.is_empty(), "Should be able to select with zero weights");
+        assert!(
+            !selections.is_empty(),
+            "Should be able to select with zero weights"
+        );
     }
 
     #[tokio::test]

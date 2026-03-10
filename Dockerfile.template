@@ -1,49 +1,47 @@
-# Dockerfile for TypeScript Workspace Template (Bun)
-# Multi-stage build for optimized image size
+# Multi-stage Dockerfile for Gateway (Rust)
+# ============================================
 
-FROM oven/bun:1.1-alpine as builder
+# Stage 1: Plan (Cargo Chef)
+FROM lukemathwalker/cargo-chef:latest-rust-1.78-alpine AS chef
+WORKDIR /app
+RUN apk add --no-cache musl-dev
 
-# Set working directory
-WORKDIR /usr/src/{{PROJECT_NAME}}
-
-# Install system dependencies
-RUN apk add --no-cache git
-
-# Copy workspace files
+# Stage 2: Prepare
+FROM chef AS planner
 COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
 
-# Install dependencies
-RUN bun install --frozen-lockfile
+# Stage 3: Build
+FROM chef AS builder
+COPY --from=planner /app/recipe.json recipe.json
+# Build dependencies - this layer is cached as long as recipe.json doesn't change
+RUN cargo chef cook --release --recipe-path recipe.json
+# Build application
+COPY . .
+RUN cargo build --release --bin gateway --bin cli
 
-# Build workspace
-RUN bun run build
+# Stage 4: Runtime
+FROM alpine:3.19
+WORKDIR /app
 
-# Runtime stage
-FROM oven/bun:1.1-alpine
+# Install runtime dependencies
+RUN apk add --no-cache libgcc ca-certificates
 
 # Create non-root user
 RUN addgroup -g 1001 appuser && adduser -D -u 1001 -G appuser appuser
 
-# Set working directory
-WORKDIR /home/appuser
+# Copy binaries
+COPY --from=builder /app/target/release/gateway /app/gateway
+COPY --from=builder /app/target/release/cli /app/cli
 
-# Copy built artifacts from builder
-COPY --from=builder --chown=appuser:appuser /usr/src/{{PROJECT_NAME}}/packages /home/appuser/packages
-
-# Set environment variables
+# Set environment
 ENV NODE_ENV=production
 ENV LOG_LEVEL=info
-
-# Switch to non-root user
 USER appuser
-
-# Default command (bin package)
-CMD ["bun", "packages/bin/dist/index.js"]
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s \
-    CMD bun --version || exit 1
+    CMD ./gateway --version || exit 1
 
-# Metadata
-LABEL description="{{PROJECT_DESCRIPTION}}"
-LABEL version="1.0.0"
+EXPOSE 3000
+CMD ["./gateway"]

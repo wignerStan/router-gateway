@@ -693,6 +693,40 @@ mod integration_tests {
     }
 
     #[tokio::test]
+    async fn test_models_endpoint_with_credentials() {
+        let mut state = create_test_state();
+        state.config.credentials.push(config::CredentialConfig {
+            id: "test-id".to_string(),
+            provider: "openai".to_string(),
+            api_key: "key".to_string(),
+            allowed_models: vec!["gpt-4".to_string()],
+            ..Default::default()
+        });
+
+        let app = Router::new()
+            .route("/api/models", get(list_models))
+            .with_state(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/models")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), 2048)
+            .await
+            .unwrap();
+        let list: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(list["count"], 1);
+        assert_eq!(list["models"][0]["id"], "gpt-4");
+    }
+
+    #[tokio::test]
     async fn test_health_endpoint_returns_status() {
         let state = create_test_state();
         let app = Router::new()
@@ -750,6 +784,45 @@ mod integration_tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[test]
+    fn test_request_classification() {
+        let classifier = DefaultRequestClassifier;
+
+        // Test simple text request
+        let request = json!({
+            "messages": [
+                {"role": "user", "content": "Hello"}
+            ]
+        });
+        let classified = classifier.classify(&request);
+        assert!(!classified.required_capabilities.vision);
+        assert!(!classified.required_capabilities.tools);
+        assert!(!classified.required_capabilities.thinking);
+
+        // Test vision request
+        let vision_request = json!({
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What's in this image?"},
+                        {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,..."}}
+                    ]
+                }
+            ]
+        });
+        let classified = classifier.classify(&vision_request);
+        assert!(classified.required_capabilities.vision);
+
+        // Test tools request
+        let tools_request = json!({
+            "messages": [{"role": "user", "content": "What's the weather?"}],
+            "tools": [{"type": "function", "function": {"name": "get_weather"}}]
+        });
+        let classified = classifier.classify(&tools_request);
+        assert!(classified.required_capabilities.tools);
     }
 
     #[tokio::test]

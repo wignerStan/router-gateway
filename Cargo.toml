@@ -13,7 +13,7 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/proxy/gateway"
-rust-version = "1.75"
+rust-version = "1.83"
 
 [workspace.dependencies]
 # Async runtime
@@ -46,7 +46,8 @@ chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.4", features = ["derive"] }
 
 # Utilities
-uuid = { version = "1.0", features = ["v4", "serde"] }
+# Pin uuid to <1.21 to avoid getrandom 0.4.1 which requires Rust edition 2024
+uuid = { version = "1.0, <1.21", features = ["v4", "serde"] }
 
 # Internal packages
 smart-routing = { path = "packages/smart-routing", version = "0.1.0" }

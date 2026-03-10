@@ -73,7 +73,7 @@ fn default_timeout() -> u64 {
 }
 
 /// Credential configuration for a provider API key
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CredentialConfig {
     /// Unique credential identifier
     pub id: String,

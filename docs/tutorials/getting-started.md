@@ -45,11 +45,11 @@ INFO gateway: Gateway listening on 0.0.0.0:3000
 
 The Gateway is a Rust-based proxy that sits between your applications and multiple LLM providers. Its primary job is to intelligently route requests based on several factors:
 
-| Feature | Purpose |
-|---------|---------|
-| **Smart Routing** | Selects the best credential/model for each request |
-| **Model Registry** | Tracks available models and their capabilities |
-| **LLM Tracing** | Records request/response data for analysis |
+| Feature            | Purpose                                            |
+| ------------------ | -------------------------------------------------- |
+| **Smart Routing**  | Selects the best credential/model for each request |
+| **Model Registry** | Tracks available models and their capabilities     |
+| **LLM Tracing**    | Records request/response data for analysis         |
 
 ## Your First Request
 
@@ -87,13 +87,13 @@ curl http://localhost:3000/api/route
 
 The smart routing system uses multiple strategies to select the optimal credential for each request. The router evaluates these weight factors:
 
-| Factor | Weight | Description |
-|--------|--------|-------------|
-| Success Rate | 35% | Historical reliability of the credential |
-| Latency | 25% | Response time performance |
-| Health | 20% | Current endpoint health status |
-| Load | 15% | Current request load on the credential |
-| Priority | 5% | User-defined priority level |
+| Factor       | Weight | Description                              |
+| ------------ | ------ | ---------------------------------------- |
+| Success Rate | 35%    | Historical reliability of the credential |
+| Latency      | 25%    | Response time performance                |
+| Health       | 20%    | Current endpoint health status           |
+| Load         | 15%    | Current request load on the credential   |
+| Priority     | 5%     | User-defined priority level              |
 
 ### Available Routing Strategies
 

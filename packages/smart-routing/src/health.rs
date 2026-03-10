@@ -803,7 +803,7 @@ mod tests {
     async fn test_custom_status_code_configuration() {
         let config = HealthConfig {
             status_codes: crate::config::StatusCodeHealthConfig {
-                degraded: vec![503], // Service unavailable
+                degraded: vec![503],       // Service unavailable
                 unhealthy: vec![401, 403], // Auth errors
                 healthy: vec![],
             },
@@ -812,7 +812,9 @@ mod tests {
         let manager = HealthManager::new(config);
 
         // 503 should cause degraded
-        manager.update_from_result("test-auth-503", false, 503).await;
+        manager
+            .update_from_result("test-auth-503", false, 503)
+            .await;
         assert_eq!(
             manager.get_status("test-auth-503").await,
             HealthStatus::Degraded,
@@ -820,7 +822,9 @@ mod tests {
         );
 
         // 401 should cause unhealthy
-        manager.update_from_result("test-auth-401", false, 401).await;
+        manager
+            .update_from_result("test-auth-401", false, 401)
+            .await;
         assert_eq!(
             manager.get_status("test-auth-401").await,
             HealthStatus::Unhealthy,
@@ -828,7 +832,9 @@ mod tests {
         );
 
         // 403 should cause unhealthy
-        manager.update_from_result("test-auth-403", false, 403).await;
+        manager
+            .update_from_result("test-auth-403", false, 403)
+            .await;
         assert_eq!(
             manager.get_status("test-auth-403").await,
             HealthStatus::Unhealthy,
@@ -836,7 +842,9 @@ mod tests {
         );
 
         // 500 should NOT cause unhealthy (not in config)
-        manager.update_from_result("test-auth-500", false, 500).await;
+        manager
+            .update_from_result("test-auth-500", false, 500)
+            .await;
         assert_eq!(
             manager.get_status("test-auth-500").await,
             HealthStatus::Healthy,
