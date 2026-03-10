@@ -414,4 +414,239 @@ mod tests {
         assert_eq!(tool.function.name, "get_weather");
         assert!(tool.function.parameters.is_some());
     }
+
+    // ============================================================
+    // ContentPart Tests
+    // ============================================================
+
+    #[test]
+    fn test_content_part_text() {
+        let part = ContentPart::text("Hello world");
+        assert_eq!(part.part_type, "text");
+        assert_eq!(part.text, Some("Hello world".to_string()));
+        assert!(part.image_url.is_none());
+        assert!(part.image_data.is_none());
+    }
+
+    #[test]
+    fn test_content_part_image_url() {
+        let part = ContentPart::image_url("https://example.com/image.png");
+        assert_eq!(part.part_type, "image_url");
+        assert!(part.text.is_none());
+        assert!(part.image_url.is_some());
+        assert_eq!(
+            part.image_url.as_ref().unwrap().url,
+            "https://example.com/image.png"
+        );
+        assert!(part.image_url.as_ref().unwrap().detail.is_none());
+        assert!(part.image_data.is_none());
+    }
+
+    #[test]
+    fn test_content_part_serialization() {
+        let part = ContentPart::text("Test");
+        let json = serde_json::to_string(&part).unwrap();
+        assert!(json.contains("\"type\":\"text\""));
+        assert!(json.contains("\"text\":\"Test\""));
+    }
+
+    #[test]
+    fn test_content_part_deserialization() {
+        let json = json!({
+            "type": "text",
+            "text": "Hello"
+        });
+        let part: ContentPart = serde_json::from_value(json).unwrap();
+        assert_eq!(part.part_type, "text");
+        assert_eq!(part.text, Some("Hello".to_string()));
+    }
+
+    #[test]
+    fn test_content_part_with_image_data() {
+        let part = ContentPart {
+            part_type: "image".to_string(),
+            text: None,
+            image_url: None,
+            image_data: Some(ImageData {
+                mime_type: "image/png".to_string(),
+                data: "base64encoded".to_string(),
+            }),
+        };
+        assert_eq!(part.part_type, "image");
+        assert!(part.image_data.is_some());
+        let img_data = part.image_data.unwrap();
+        assert_eq!(img_data.mime_type, "image/png");
+        assert_eq!(img_data.data, "base64encoded");
+    }
+
+    // ============================================================
+    // ImageUrl Tests
+    // ============================================================
+
+    #[test]
+    fn test_image_url_with_detail() {
+        let url = ImageUrl {
+            url: "https://example.com/img.png".to_string(),
+            detail: Some("high".to_string()),
+        };
+        assert_eq!(url.url, "https://example.com/img.png");
+        assert_eq!(url.detail, Some("high".to_string()));
+    }
+
+    #[test]
+    fn test_image_url_serialization() {
+        let url = ImageUrl {
+            url: "https://example.com/img.png".to_string(),
+            detail: Some("auto".to_string()),
+        };
+        let json = serde_json::to_string(&url).unwrap();
+        assert!(json.contains("\"url\":\"https://example.com/img.png\""));
+        assert!(json.contains("\"detail\":\"auto\""));
+    }
+
+    #[test]
+    fn test_image_url_deserialization() {
+        let json = json!({
+            "url": "https://example.com/img.png"
+        });
+        let url: ImageUrl = serde_json::from_value(json).unwrap();
+        assert_eq!(url.url, "https://example.com/img.png");
+        assert!(url.detail.is_none());
+    }
+
+    // ============================================================
+    // ImageData Tests
+    // ============================================================
+
+    #[test]
+    fn test_image_data() {
+        let data = ImageData {
+            mime_type: "image/jpeg".to_string(),
+            data: "base64data".to_string(),
+        };
+        assert_eq!(data.mime_type, "image/jpeg");
+        assert_eq!(data.data, "base64data");
+    }
+
+    #[test]
+    fn test_image_data_serialization() {
+        let data = ImageData {
+            mime_type: "image/png".to_string(),
+            data: "abc123".to_string(),
+        };
+        let json = serde_json::to_string(&data).unwrap();
+        assert!(json.contains("\"mime_type\":\"image/png\""));
+        assert!(json.contains("\"data\":\"abc123\""));
+    }
+
+    // ============================================================
+    // Tool Tests
+    // ============================================================
+
+    #[test]
+    fn test_tool_function_without_parameters() {
+        let tool = Tool::function("test", "A test function");
+        assert_eq!(tool.tool_type, "function");
+        assert_eq!(tool.function.name, "test");
+        assert_eq!(
+            tool.function.description,
+            Some("A test function".to_string())
+        );
+        assert!(tool.function.parameters.is_none());
+    }
+
+    #[test]
+    fn test_tool_serialization() {
+        let tool = Tool::function("calc", "Calculator").with_parameters(json!({"type": "object"}));
+        let json_str = serde_json::to_string(&tool).unwrap();
+        assert!(json_str.contains("\"type\":\"function\""));
+        assert!(json_str.contains("\"name\":\"calc\""));
+    }
+
+    // ============================================================
+    // MessageContent Tests
+    // ============================================================
+
+    #[test]
+    fn test_message_content_parts() {
+        let content = MessageContent::Parts(vec![
+            ContentPart::text("Hello"),
+            ContentPart::image_url("https://example.com/img.png"),
+        ]);
+        match content {
+            MessageContent::Parts(parts) => {
+                assert_eq!(parts.len(), 2);
+                assert_eq!(parts[0].part_type, "text");
+                assert_eq!(parts[1].part_type, "image_url");
+            },
+            _ => panic!("Expected Parts variant"),
+        }
+    }
+
+    #[test]
+    fn test_message_content_text_variant() {
+        let content = MessageContent::Text("Hello world".to_string());
+        match content {
+            MessageContent::Text(text) => assert_eq!(text, "Hello world"),
+            _ => panic!("Expected Text variant"),
+        }
+    }
+
+    // ============================================================
+    // FunctionDef Tests
+    // ============================================================
+
+    #[test]
+    fn test_function_def() {
+        let func = FunctionDef {
+            name: "test_func".to_string(),
+            description: Some("A test function".to_string()),
+            parameters: Some(json!({"type": "object"})),
+        };
+        assert_eq!(func.name, "test_func");
+        assert_eq!(func.description, Some("A test function".to_string()));
+        assert!(func.parameters.is_some());
+    }
+
+    #[test]
+    fn test_function_def_serialization() {
+        let func = FunctionDef {
+            name: "my_func".to_string(),
+            description: None,
+            parameters: None,
+        };
+        let json = serde_json::to_string(&func).unwrap();
+        assert!(json.contains("\"name\":\"my_func\""));
+        // description and parameters should be omitted when None
+        assert!(!json.contains("\"description\""));
+        assert!(!json.contains("\"parameters\""));
+    }
+
+    // ============================================================
+    // Message Tests
+    // ============================================================
+
+    #[test]
+    fn test_message() {
+        let msg = Message {
+            role: "user".to_string(),
+            content: MessageContent::text("Hello"),
+            name: Some("Alice".to_string()),
+        };
+        assert_eq!(msg.role, "user");
+        assert_eq!(msg.content.as_text(), Some("Hello"));
+        assert_eq!(msg.name, Some("Alice".to_string()));
+    }
+
+    #[test]
+    fn test_message_serialization() {
+        let msg = Message {
+            role: "assistant".to_string(),
+            content: MessageContent::Text("Hi there".to_string()),
+            name: None,
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"role\":\"assistant\""));
+        assert!(json.contains("\"content\":\"Hi there\""));
+    }
 }
