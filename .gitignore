@@ -1,5 +1,5 @@
 # Rust
-/target
+target/
 Cargo.lock
 # Only exclude lock file if this is a library, but gateway is an application.
 # For now, let's follow the standard practice for apps.
