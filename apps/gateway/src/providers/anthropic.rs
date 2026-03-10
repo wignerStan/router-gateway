@@ -228,7 +228,13 @@ impl ProviderAdapter for AnthropicAdapter {
     }
 
     fn get_endpoint(&self, base_url: Option<&str>, _model_id: &str) -> String {
-        let base = base_url.unwrap_or(&self.default_base_url);
+        // Handle empty base URL by falling back to default
+        let base = match base_url {
+            Some(url) if !url.is_empty() => url,
+            _ => &self.default_base_url,
+        };
+        // Remove trailing slash to prevent double-slash issues
+        let base = base.trim_end_matches('/');
         format!("{}/messages", base)
     }
 
@@ -966,8 +972,8 @@ mod tests {
     fn test_get_endpoint_custom_base_url_with_trailing_slash() {
         let adapter = AnthropicAdapter::new();
         let endpoint = adapter.get_endpoint(Some("https://custom.api.com/"), "claude-3-opus");
-        // Should include the trailing slash (no normalization)
-        assert_eq!(endpoint, "https://custom.api.com//messages");
+        // Trailing slash should be normalized to prevent double-slash issues
+        assert_eq!(endpoint, "https://custom.api.com/messages");
     }
 
     #[test]
@@ -987,9 +993,9 @@ mod tests {
     #[test]
     fn test_get_endpoint_empty_base_url_uses_default() {
         let adapter = AnthropicAdapter::new();
-        // Empty string should NOT use default - it will create an invalid URL
+        // Empty string should fall back to default base URL
         let endpoint = adapter.get_endpoint(Some(""), "claude-3-opus");
-        assert_eq!(endpoint, "/messages"); // Empty base + /messages
+        assert_eq!(endpoint, "https://api.anthropic.com/v1/messages");
     }
 
     #[test]
