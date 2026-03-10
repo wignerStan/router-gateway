@@ -1,8 +1,4 @@
-use axum::{
-    extract::State,
-    routing::get,
-    Json, Router,
-};
+use axum::{extract::State, routing::get, Json, Router};
 use serde_json::{json, Value};
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -14,8 +10,8 @@ use llm_tracing::{MemoryTraceCollector, TracingMiddleware};
 use model_registry::Registry as ModelRegistry;
 use smart_routing::{
     classification::{
-        detection::ToolDetector, FormatDetector, RequestClassifier,
-        StreamingExtractor, TokenEstimator, ContentTypeDetector,
+        detection::ToolDetector, ContentTypeDetector, FormatDetector, RequestClassifier,
+        StreamingExtractor, TokenEstimator,
     },
     config::HealthConfig,
     executor::{ExecutorConfig, RouteExecutor},
@@ -211,18 +207,21 @@ async fn route_request(State(state): State<AppState>) -> Json<serde_json::Value>
             "utility": primary.utility,
             "weight": primary.weight,
         }),
-        None => json!(null)
+        None => json!(null),
     };
 
     // Format fallbacks
-    let fallbacks_json: Vec<serde_json::Value> = route_plan.fallbacks
+    let fallbacks_json: Vec<serde_json::Value> = route_plan
+        .fallbacks
         .iter()
-        .map(|fb| json!({
-            "credential_id": fb.auth_id,
-            "position": fb.position,
-            "weight": fb.weight,
-            "provider": fb.provider,
-        }))
+        .map(|fb| {
+            json!({
+                "credential_id": fb.auth_id,
+                "position": fb.position,
+                "weight": fb.weight,
+                "provider": fb.provider,
+            })
+        })
         .collect();
 
     // Build response

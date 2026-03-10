@@ -1149,7 +1149,7 @@ mod bdd_integration {
         let hour = now.hour(); // chrono::DateTime has hour() method
 
         // Peak hours: 9 AM - 6 PM (9-18)
-        let is_peak = hour >= 9 && hour <= 18;
+        let is_peak = (9..=18).contains(&hour);
 
         // Verify we can determine time bucket
         let bucket = if is_peak { "peak" } else { "off-peak" };

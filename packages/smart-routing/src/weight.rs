@@ -91,7 +91,11 @@ impl DefaultWeightCalculator {
     }
 
     /// Select planner mode based on data availability and error state
-    fn select_planner_mode(&self, data_availability: DataAvailability, health: HealthStatus) -> PlannerMode {
+    fn select_planner_mode(
+        &self,
+        data_availability: DataAvailability,
+        health: HealthStatus,
+    ) -> PlannerMode {
         match (data_availability, health) {
             // Full data with healthy/degraded state -> Learned mode
             (DataAvailability::Full, HealthStatus::Healthy | HealthStatus::Degraded) => {

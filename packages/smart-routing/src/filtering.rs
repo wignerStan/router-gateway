@@ -3,7 +3,7 @@
 //! This module filters route candidates through hard constraints including
 //! capability mismatches, context overflow, disabled providers, and tenant policies.
 
-use crate::candidate::{RouteCandidate, TokenFitStatus, check_capability_support};
+use crate::candidate::{check_capability_support, RouteCandidate, TokenFitStatus};
 use crate::classification::ClassifiedRequest;
 use model_registry::{PolicyContext, PolicyMatcher};
 use std::fmt;
@@ -99,7 +99,8 @@ impl ConstraintFilter {
         request: &ClassifiedRequest,
     ) -> FilterResult {
         // 1. Check capability mismatch
-        let capability_support = check_capability_support(&request.required_capabilities, &candidate.model_info);
+        let capability_support =
+            check_capability_support(&request.required_capabilities, &candidate.model_info);
         if !capability_support.is_supported() {
             if let Some(desc) = capability_support.missing_description() {
                 return FilterResult::Rejected {
@@ -113,7 +114,9 @@ impl ConstraintFilter {
             return FilterResult::Rejected {
                 reason: format!(
                     "context overflow: {} tokens exceeds model {} context window of {}",
-                    request.estimated_tokens, candidate.model_id, candidate.model_info.context_window
+                    request.estimated_tokens,
+                    candidate.model_id,
+                    candidate.model_info.context_window
                 ),
             };
         }
@@ -173,11 +176,14 @@ mod tests {
     use super::*;
     use crate::candidate::TokenFitStatus;
     use crate::classification::{QualityPreference, RequestFormat, RequiredCapabilities};
-    use model_registry::{
-        DataSource, ModelCapabilities, ModelInfo, RateLimits,
-    };
+    use model_registry::{DataSource, ModelCapabilities, ModelInfo, RateLimits};
 
-    fn create_test_model(id: &str, provider: &str, context_window: usize, vision: bool) -> ModelInfo {
+    fn create_test_model(
+        id: &str,
+        provider: &str,
+        context_window: usize,
+        vision: bool,
+    ) -> ModelInfo {
         ModelInfo {
             id: id.to_string(),
             name: format!("Test Model {}", id),

@@ -80,7 +80,7 @@ impl UtilityEstimator {
                     + cost_utility * self.config.cost_weight;
 
                 utility.max(self.config.min_utility)
-            }
+            },
         }
     }
 
@@ -107,7 +107,7 @@ impl UtilityEstimator {
                     + cost_utility * self.config.cost_weight;
 
                 utility.max(self.config.min_utility)
-            }
+            },
         }
     }
 
@@ -295,7 +295,10 @@ mod tests {
         let metrics_low = create_metrics(0.0, 500.0);
         let utility_low = estimator.estimate_utility(Some(&metrics_low));
 
-        assert!(utility_high > utility_low, "Higher success should give higher utility");
+        assert!(
+            utility_high > utility_low,
+            "Higher success should give higher utility"
+        );
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use crate::outcome::{ExecutionOutcome, ErrorClass};
+use crate::outcome::{ErrorClass, ExecutionOutcome};
 use chrono::{DateTime, Datelike, Duration, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -430,9 +430,11 @@ impl StatisticsAggregator {
         tier: Option<String>,
     ) {
         if !self.route_stats.contains_key(&route_id) {
-            let stats = self
-                .priors
-                .initialize_route(route_id.clone(), provider.as_deref(), tier.as_deref());
+            let stats = self.priors.initialize_route(
+                route_id.clone(),
+                provider.as_deref(),
+                tier.as_deref(),
+            );
             self.route_stats.insert(route_id, stats);
         }
     }
@@ -590,7 +592,11 @@ mod tests {
 
         assert!(aggregator.get_stats("route-1").is_some());
         assert_eq!(
-            aggregator.get_stats("route-1").unwrap().overall.total_requests,
+            aggregator
+                .get_stats("route-1")
+                .unwrap()
+                .overall
+                .total_requests,
             1
         );
     }
@@ -611,11 +617,15 @@ mod tests {
 
         let mut old_stats = RouteStatistics::new("old-route".to_string());
         old_stats.updated_at = Utc::now() - Duration::days(2);
-        aggregator.route_stats.insert("old-route".to_string(), old_stats);
+        aggregator
+            .route_stats
+            .insert("old-route".to_string(), old_stats);
 
         let mut new_stats = RouteStatistics::new("new-route".to_string());
         new_stats.updated_at = Utc::now();
-        aggregator.route_stats.insert("new-route".to_string(), new_stats);
+        aggregator
+            .route_stats
+            .insert("new-route".to_string(), new_stats);
 
         aggregator.cleanup_old();
 

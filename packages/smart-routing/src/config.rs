@@ -363,7 +363,7 @@ impl TimeSlot {
         }
 
         // Validate days of week (0-6)
-        self.days_of_week.retain(|day| *day >= 0 && *day <= 6);
+        self.days_of_week.retain(|day| (0..=6).contains(day));
     }
 }
 
