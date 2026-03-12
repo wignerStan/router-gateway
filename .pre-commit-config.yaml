@@ -131,13 +131,13 @@ repos:
         always_run: true
         verbose: true
 
-      # commit-msg adds agent identity trailers for forensics
+      # prepare-commit-msg adds agent identity trailers for forensics
       - id: bd-prepare-commit-msg
         name: bd (beads) agent trailer
         entry: bd hooks run prepare-commit-msg
         language: system
         pass_filenames: false
-        stages: [commit-msg]
+        stages: [prepare-commit-msg]
         always_run: true
         verbose: true
 
