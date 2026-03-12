@@ -216,6 +216,14 @@ impl GatewayConfig {
                 *base_url = expand_env_var(base_url);
             }
         }
+        for provider in self.providers.values_mut() {
+            if let Some(ref mut base_url) = provider.base_url {
+                *base_url = expand_env_var(base_url);
+            }
+            for value in provider.headers.values_mut() {
+                *value = expand_env_var(value);
+            }
+        }
         Ok(())
     }
 
@@ -286,20 +294,35 @@ impl GatewayConfig {
     }
 }
 
-/// Expand a single environment variable reference
-/// Supports ${VAR_NAME} and ${VAR_NAME:-default} syntax
+/// Expand environment variable references in a string
+/// Supports ${VAR_NAME}, ${VAR_NAME:-default}, and embedded references
+/// e.g., "Bearer ${AUTH_KEY}" or "${HOST:-localhost}:${PORT}"
 fn expand_env_var(value: &str) -> String {
-    if let Some(stripped) = value.strip_prefix("${").and_then(|s| s.strip_suffix("}")) {
-        // Check for default value syntax
-        if let Some((var_name, default)) = stripped.split_once(":-") {
-            std::env::var(var_name).unwrap_or_else(|_| default.to_string())
+    let mut result = String::with_capacity(value.len());
+    let mut rest = value;
+
+    while let Some(start) = rest.find("${") {
+        result.push_str(&rest[..start]);
+        rest = &rest[start + 2..];
+
+        if let Some(end) = rest.find('}') {
+            let inner = &rest[..end];
+            rest = &rest[end + 1..];
+
+            let expanded = if let Some((var_name, default)) = inner.split_once(":-") {
+                std::env::var(var_name).unwrap_or_else(|_| default.to_string())
+            } else {
+                std::env::var(inner).unwrap_or_default()
+            };
+            result.push_str(&expanded);
         } else {
-            // Return empty string for unset env vars so validation catches them
-            std::env::var(stripped).unwrap_or_default()
+            // No closing brace, treat as literal
+            result.push_str("${");
         }
-    } else {
-        value.to_string()
     }
+
+    result.push_str(rest);
+    result
 }
 
 /// Constant-time comparison of two token strings to prevent timing attacks.
@@ -535,6 +558,33 @@ credentials:
         assert!(
             err_msg.contains("private/internal IP") || err_msg.contains("invalid base_url"),
             "Unexpected error: {err_msg}"
+    );
+    }
+
+    #[test]
+    fn test_provider_env_vars_with_defaults() {
+        let config = GatewayConfig::from_yaml(
+            r#"
+credentials:
+  - id: cred1
+    provider: openai
+    api_key: key1
+providers:
+  openai:
+    enabled: true
+    base_url: ${PROVIDER_BASE_URL:-https://api.openai.com}
+    headers:
+      Authorization: Bearer ${PROVIDER_AUTH}
+"#,
+        )
+        .unwrap();
+
+        let openai = config.providers.get("openai").unwrap();
+        assert_eq!(openai.base_url.as_deref(), Some("https://api.openai.com"));
+        assert_eq!(
+            openai.headers.get("Authorization").unwrap(),
+            "Bearer ",
+            "Unset env var should expand to empty string"
         );
     }
 
@@ -669,5 +719,60 @@ server:
 "#;
         let config = GatewayConfig::from_yaml(yaml).unwrap();
         assert!(config.is_auth_enabled());
+    }
+
+    #[test]
+    fn test_provider_env_vars_with_set_variables() {
+        std::env::set_var("TEST_PROVIDER_URL", "https://custom.provider.com");
+        std::env::set_var("TEST_PROVIDER_KEY", "secret-key");
+
+        let config = GatewayConfig::from_yaml(
+            r#"
+credentials:
+  - id: cred1
+    provider: openai
+    api_key: key1
+providers:
+  openai:
+    enabled: true
+    base_url: ${TEST_PROVIDER_URL}
+    headers:
+      X-Api-Key: ${TEST_PROVIDER_KEY}
+"#,
+        )
+        .unwrap();
+
+        let openai = config.providers.get("openai").unwrap();
+        assert_eq!(
+            openai.base_url.as_deref(),
+            Some("https://custom.provider.com")
+        );
+        assert_eq!(openai.headers.get("X-Api-Key").unwrap(), "secret-key");
+
+        std::env::remove_var("TEST_PROVIDER_URL");
+        std::env::remove_var("TEST_PROVIDER_KEY");
+    }
+
+    #[test]
+    fn test_provider_config_without_env_vars_unchanged() {
+        let config = GatewayConfig::from_yaml(
+            r#"
+credentials:
+  - id: cred1
+    provider: openai
+    api_key: key1
+providers:
+  openai:
+    enabled: true
+    base_url: https://api.openai.com
+    headers:
+      X-Custom: literal-value
+"#,
+        )
+        .unwrap();
+
+        let openai = config.providers.get("openai").unwrap();
+        assert_eq!(openai.base_url.as_deref(), Some("https://api.openai.com"));
+        assert_eq!(openai.headers.get("X-Custom").unwrap(), "literal-value");
     }
 }
