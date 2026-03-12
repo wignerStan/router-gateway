@@ -6,6 +6,7 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::net::IpAddr;
 use std::path::Path;
 
 /// Main gateway configuration
@@ -228,6 +229,14 @@ impl GatewayConfig {
             }
         }
 
+        // Validate provider base URLs (SSRF protection)
+        for cred in &self.credentials {
+            if let Some(ref base_url) = cred.base_url {
+                validate_url_not_private(base_url)
+                    .with_context(|| format!("Credential {} has an invalid base_url", cred.id))?;
+            }
+        }
+
         // Validate routing strategy - must match smart-routing strategies
         let valid_strategies = [
             "weighted",
@@ -288,6 +297,82 @@ pub fn constant_time_token_eq(a: &str, b: &str) -> bool {
     let a_bytes = a.as_bytes();
     let b_bytes = b.as_bytes();
     a_bytes.ct_eq(b_bytes).into()
+}
+
+/// Validate that a URL does not point to a private, loopback, link-local,
+/// or cloud metadata address. Returns `Ok(())` if the URL is safe, or an
+/// error describing the rejected address.
+pub fn validate_url_not_private(url_str: &str) -> Result<()> {
+    let parsed = url::Url::parse(url_str).with_context(|| format!("Invalid URL: {url_str}"))?;
+
+    let host = parsed
+        .host()
+        .ok_or_else(|| anyhow::anyhow!("URL has no host: {url_str}"))?;
+
+    let ip = match host {
+        url::Host::Domain(_) => return Ok(()), // Domain names are allowed (DNS rebinding is separate concern)
+        url::Host::Ipv4(v4) => IpAddr::V4(v4),
+        url::Host::Ipv6(v6) => IpAddr::V6(v6),
+    };
+
+    if is_private_ip(&ip) {
+        anyhow::bail!(
+            "URL points to a private/internal IP address ({ip}), which is not allowed (SSRF protection)"
+        );
+    }
+
+    Ok(())
+}
+
+/// Check whether an IP address falls into a private, loopback, link-local,
+/// or cloud metadata range.
+fn is_private_ip(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            let octets = v4.octets();
+            // Loopback: 127.0.0.0/8
+            if octets[0] == 127 {
+                return true;
+            }
+            // Private: 10.0.0.0/8
+            if octets[0] == 10 {
+                return true;
+            }
+            // Private: 172.16.0.0/12
+            if octets[0] == 172 && (16..=31).contains(&octets[1]) {
+                return true;
+            }
+            // Private: 192.168.0.0/16
+            if octets[0] == 192 && octets[1] == 168 {
+                return true;
+            }
+            // Link-local: 169.254.0.0/16 (includes cloud metadata 169.254.169.254)
+            if octets[0] == 169 && octets[1] == 254 {
+                return true;
+            }
+            // Link-local: 0.0.0.0/8
+            if octets[0] == 0 {
+                return true;
+            }
+            false
+        },
+        IpAddr::V6(v6) => {
+            // Loopback: ::1
+            if v6.is_loopback() {
+                return true;
+            }
+            let segments = v6.segments();
+            // Private: fc00::/7 (unique local)
+            if (0xfc00..=0xfdff).contains(&segments[0]) {
+                return true;
+            }
+            // Link-local: fe80::/10
+            if (0xfe80..=0xfebf).contains(&segments[0]) {
+                return true;
+            }
+            false
+        },
+    }
 }
 
 #[cfg(test)]
@@ -430,5 +515,109 @@ credentials:
 
         let openai_creds = config.credentials_for_provider("openai");
         assert_eq!(openai_creds.len(), 1);
+    }
+
+    // --- SSRF protection tests ---
+
+    #[test]
+    fn test_ssrf_reject_loopback() {
+        let yaml = r#"
+credentials:
+  - id: test
+    provider: openai
+    api_key: key1
+    base_url: http://127.0.0.1:8000
+"#;
+        let result = GatewayConfig::from_yaml(yaml);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("private/internal IP") || err_msg.contains("invalid base_url"),
+            "Unexpected error: {err_msg}"
+        );
+    }
+
+    #[test]
+    fn test_ssrf_reject_loopback_localhost() {
+        // localhost resolves to 127.0.0.1, but since it's not a literal IP
+        // our parser allows it (DNS rebinding is out of scope).
+        // This test verifies the IP-based check path.
+        let result = validate_url_not_private("http://127.0.0.1/v1/chat");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_private_10_range() {
+        let result = validate_url_not_private("http://10.0.0.1/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_private_172_range() {
+        let result = validate_url_not_private("http://172.16.0.1/api");
+        assert!(result.is_err());
+        let result = validate_url_not_private("http://172.31.255.255/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_private_192_range() {
+        let result = validate_url_not_private("http://192.168.1.1/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_link_local() {
+        let result = validate_url_not_private("http://169.254.169.254/latest/meta-data/");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_ipv6_loopback() {
+        let result = validate_url_not_private("http://[::1]:8000/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_ipv6_unique_local() {
+        let result = validate_url_not_private("http://[fc00::1]/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_ipv6_link_local() {
+        let result = validate_url_not_private("http://[fe80::1]/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_allow_public_ip() {
+        let result = validate_url_not_private("https://api.openai.com/v1/chat/completions");
+        // openai.com is a domain, not a literal IP — allowed
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_ssrf_allow_public_literal_ip() {
+        let result = validate_url_not_private("https://1.1.1.1/api");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_ssrf_allow_credential_without_base_url() {
+        let yaml = r#"
+credentials:
+  - id: test
+    provider: openai
+    api_key: key1
+"#;
+        let result = GatewayConfig::from_yaml(yaml);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_ssrf_reject_zero_network() {
+        let result = validate_url_not_private("http://0.0.0.0/api");
+        assert!(result.is_err());
     }
 }
