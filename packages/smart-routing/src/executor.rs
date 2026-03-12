@@ -26,6 +26,10 @@ pub struct ExecutionResult {
     pub status_code: Option<i32>,
     /// Error message if failed
     pub error: Option<String>,
+    /// Number of prompt tokens consumed
+    pub prompt_tokens: Option<u32>,
+    /// Number of completion tokens generated
+    pub completion_tokens: Option<u32>,
 }
 
 /// Executor configuration
@@ -131,6 +135,8 @@ impl RouteExecutor {
                         total_latency_ms: latency,
                         status_code: Some(status_code),
                         error: None,
+                        prompt_tokens: None,
+                        completion_tokens: None,
                     };
                 },
                 AttemptResult::RetryableError {
@@ -162,6 +168,8 @@ impl RouteExecutor {
                             total_latency_ms: total_latency,
                             status_code: Some(status_code),
                             error: Some(error),
+                            prompt_tokens: None,
+                            completion_tokens: None,
                         };
                     }
                 },
@@ -227,6 +235,8 @@ impl RouteExecutor {
                         total_latency_ms: total_latency,
                         status_code: Some(status_code),
                         error: None,
+                        prompt_tokens: None,
+                        completion_tokens: None,
                     };
                 },
                 AttemptResult::RetryableError {
@@ -256,6 +266,8 @@ impl RouteExecutor {
                             total_latency_ms: total_latency,
                             status_code: Some(status_code),
                             error: Some(error),
+                            prompt_tokens: None,
+                            completion_tokens: None,
                         };
                     }
                     // Continue to next fallback
@@ -272,6 +284,8 @@ impl RouteExecutor {
             total_latency_ms: total_latency,
             status_code: None,
             error: Some("Retry budget exhausted".to_string()),
+            prompt_tokens: None,
+            completion_tokens: None,
         }
     }
 
@@ -703,5 +717,43 @@ mod tests {
         assert_eq!(result.total_latency_ms, 150.0);
         assert_eq!(result.status_code, Some(200));
         assert!(result.error.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_execution_result_captures_token_usage() {
+        let config = ExecutorConfig::default();
+        let metrics = MetricsCollector::new();
+        let health = HealthManager::new(HealthConfig::default());
+
+        let executor = RouteExecutor::new(config, metrics, health);
+
+        let primary = Some(create_test_route("cred-1", "provider-a"));
+
+        let result = executor
+            .execute(primary, vec![], |_route| async { Ok((200, 100.0)) })
+            .await;
+
+        assert!(result.success);
+        assert!(result.prompt_tokens.is_none());
+        assert!(result.completion_tokens.is_none());
+    }
+
+    #[test]
+    fn test_execution_result_with_token_counts() {
+        let result = ExecutionResult {
+            success: true,
+            credential_id: Some("cred-1".to_string()),
+            model_id: Some("model-a".to_string()),
+            attempts: 1,
+            total_latency_ms: 200.0,
+            status_code: Some(200),
+            error: None,
+            prompt_tokens: Some(1500),
+            completion_tokens: Some(800),
+        };
+
+        assert_eq!(result.prompt_tokens, Some(1500));
+        assert_eq!(result.completion_tokens, Some(800));
+        assert!(result.success);
     }
 }
