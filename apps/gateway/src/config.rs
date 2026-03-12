@@ -390,4 +390,51 @@ credentials:
         let openai_creds = config.credentials_for_provider("openai");
         assert_eq!(openai_creds.len(), 1);
     }
+
+    #[test]
+    fn test_example_config_parses() {
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let example_path = manifest_dir
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("gateway.yaml.example");
+        let yaml = std::fs::read_to_string(&example_path)
+            .unwrap_or_else(|e| panic!("{}: {}", example_path.display(), e));
+
+        // Parse YAML structure (bypasses env var expansion for CI reproducibility)
+        let config: GatewayConfig = serde_yaml::from_str(&yaml)
+            .expect("example config should parse as valid GatewayConfig YAML");
+
+        // Verify all sections are present and populated
+        assert_eq!(config.server.port, 3000);
+        assert_eq!(config.server.host, "0.0.0.0");
+        assert_eq!(config.server.timeout_secs, 120);
+        assert!(!config.server.auth_tokens.is_empty());
+
+        assert_eq!(config.credentials.len(), 3);
+
+        let cred = &config.credentials[0];
+        assert_eq!(cred.id, "anthropic-primary");
+        assert_eq!(cred.provider, "anthropic");
+        assert!(!cred.allowed_models.is_empty());
+        assert_eq!(cred.priority, 10);
+        assert!(cred.daily_quota.is_none());
+        assert!(cred.rate_limit.is_none());
+
+        let cred2 = &config.credentials[1];
+        assert_eq!(cred2.id, "openai-backup");
+        assert_eq!(cred2.daily_quota, Some(5000));
+        assert_eq!(cred2.rate_limit, Some(40));
+
+        let cred3 = &config.credentials[2];
+        assert_eq!(cred3.id, "google-vertex");
+        assert!(cred3.base_url.is_some());
+
+        assert_eq!(config.routing.strategy, "weighted");
+        assert!(config.routing.session_affinity);
+        assert_eq!(config.routing.min_healthy_credentials, 1);
+        assert_eq!(config.routing.fallback_depth, 2);
+    }
 }
