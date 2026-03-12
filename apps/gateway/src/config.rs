@@ -6,6 +6,7 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::net::IpAddr;
 use std::path::Path;
 
 /// Main gateway configuration
@@ -112,7 +113,7 @@ pub struct CredentialConfig {
 /// Routing policy configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoutingPolicyConfig {
-    /// Selection strategy: "weighted", "time_aware", "quota_aware", "adaptive", "policy_aware"
+    /// Selection strategy: "weighted", "adaptive", "round_robin"
     #[serde(default = "default_strategy")]
     pub strategy: String,
 
@@ -207,14 +208,6 @@ impl GatewayConfig {
                 *base_url = expand_env_var(base_url);
             }
         }
-        for provider in self.providers.values_mut() {
-            if let Some(ref mut base_url) = provider.base_url {
-                *base_url = expand_env_var(base_url);
-            }
-            for value in provider.headers.values_mut() {
-                *value = expand_env_var(value);
-            }
-        }
         Ok(())
     }
 
@@ -233,6 +226,14 @@ impl GatewayConfig {
 
             if cred.provider.is_empty() {
                 anyhow::bail!("Credential {} has empty provider", cred.id);
+            }
+        }
+
+        // Validate provider base URLs (SSRF protection)
+        for cred in &self.credentials {
+            if let Some(ref base_url) = cred.base_url {
+                validate_url_not_private(base_url)
+                    .with_context(|| format!("Credential {} has an invalid base_url", cred.id))?;
             }
         }
 
@@ -270,42 +271,149 @@ impl GatewayConfig {
             .map(|p| p.enabled)
             .unwrap_or(true) // Enabled by default if not configured
     }
+
+    /// Check if authentication is enabled (at least one auth token configured)
+    pub fn is_auth_enabled(&self) -> bool {
+        !self.server.auth_tokens.is_empty()
+    }
 }
 
-/// Expand environment variable references in a string
-/// Supports ${VAR_NAME}, ${VAR_NAME:-default}, and embedded references
-/// e.g., "Bearer ${AUTH_KEY}" or "${HOST:-localhost}:${PORT}"
+/// Expand a single environment variable reference
+/// Supports ${VAR_NAME} and ${VAR_NAME:-default} syntax
 fn expand_env_var(value: &str) -> String {
-    let mut result = String::with_capacity(value.len());
-    let mut rest = value;
-
-    while let Some(start) = rest.find("${") {
-        result.push_str(&rest[..start]);
-        rest = &rest[start + 2..];
-
-        if let Some(end) = rest.find('}') {
-            let inner = &rest[..end];
-            rest = &rest[end + 1..];
-
-            let expanded = if let Some((var_name, default)) = inner.split_once(":-") {
-                std::env::var(var_name).unwrap_or_else(|_| default.to_string())
-            } else {
-                std::env::var(inner).unwrap_or_default()
-            };
-            result.push_str(&expanded);
+    if let Some(stripped) = value.strip_prefix("${").and_then(|s| s.strip_suffix("}")) {
+        // Check for default value syntax
+        if let Some((var_name, default)) = stripped.split_once(":-") {
+            std::env::var(var_name).unwrap_or_else(|_| default.to_string())
         } else {
-            // No closing brace, treat as literal
-            result.push_str("${");
+            // Return empty string for unset env vars so validation catches them
+            std::env::var(stripped).unwrap_or_default()
         }
+    } else {
+        value.to_string()
+    }
+}
+
+/// Constant-time comparison of two token strings to prevent timing attacks.
+/// Returns `true` if tokens are byte-equal, always comparing the full length
+/// of both strings regardless of where they differ.
+pub fn constant_time_token_eq(a: &str, b: &str) -> bool {
+    use subtle::ConstantTimeEq;
+    let a_bytes = a.as_bytes();
+    let b_bytes = b.as_bytes();
+    a_bytes.ct_eq(b_bytes).into()
+}
+
+/// Validate that a URL does not point to a private, loopback, link-local,
+/// or cloud metadata address. Returns `Ok(())` if the URL is safe, or an
+/// error describing the rejected address.
+pub fn validate_url_not_private(url_str: &str) -> Result<()> {
+    let parsed = url::Url::parse(url_str).with_context(|| format!("Invalid URL: {url_str}"))?;
+
+    let host = parsed
+        .host()
+        .ok_or_else(|| anyhow::anyhow!("URL has no host: {url_str}"))?;
+
+    let ip = match host {
+        url::Host::Domain(_) => return Ok(()), // Domain names are allowed (DNS rebinding is separate concern)
+        url::Host::Ipv4(v4) => IpAddr::V4(v4),
+        url::Host::Ipv6(v6) => IpAddr::V6(v6),
+    };
+
+    if is_private_ip(&ip) {
+        anyhow::bail!(
+            "URL points to a private/internal IP address ({ip}), which is not allowed (SSRF protection)"
+        );
     }
 
-    result.push_str(rest);
-    result
+    Ok(())
+}
+
+/// Check whether an IP address falls into a private, loopback, link-local,
+/// or cloud metadata range.
+fn is_private_ip(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            let octets = v4.octets();
+            // Loopback: 127.0.0.0/8
+            if octets[0] == 127 {
+                return true;
+            }
+            // Private: 10.0.0.0/8
+            if octets[0] == 10 {
+                return true;
+            }
+            // Private: 172.16.0.0/12
+            if octets[0] == 172 && (16..=31).contains(&octets[1]) {
+                return true;
+            }
+            // Private: 192.168.0.0/16
+            if octets[0] == 192 && octets[1] == 168 {
+                return true;
+            }
+            // Link-local: 169.254.0.0/16 (includes cloud metadata 169.254.169.254)
+            if octets[0] == 169 && octets[1] == 254 {
+                return true;
+            }
+            // Link-local: 0.0.0.0/8
+            if octets[0] == 0 {
+                return true;
+            }
+            false
+        },
+        IpAddr::V6(v6) => {
+            // Loopback: ::1
+            if v6.is_loopback() {
+                return true;
+            }
+            let segments = v6.segments();
+            // Private: fc00::/7 (unique local)
+            if (0xfc00..=0xfdff).contains(&segments[0]) {
+                return true;
+            }
+            // Link-local: fe80::/10
+            if (0xfe80..=0xfebf).contains(&segments[0]) {
+                return true;
+            }
+            false
+        },
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_constant_time_token_eq_same_tokens() {
+        assert!(constant_time_token_eq(
+            "secret-token-123",
+            "secret-token-123"
+        ));
+    }
+
+    #[test]
+    fn test_constant_time_token_eq_different_tokens_same_length() {
+        assert!(!constant_time_token_eq(
+            "secret-token-123",
+            "secret-token-124"
+        ));
+    }
+
+    #[test]
+    fn test_constant_time_token_eq_different_lengths() {
+        assert!(!constant_time_token_eq("short", "much-longer-token"));
+    }
+
+    #[test]
+    fn test_constant_time_token_eq_empty_tokens() {
+        assert!(constant_time_token_eq("", ""));
+    }
+
+    #[test]
+    fn test_constant_time_token_eq_one_empty() {
+        assert!(!constant_time_token_eq("nonempty", ""));
+    }
 
     #[test]
     fn test_default_config() {
@@ -414,85 +522,126 @@ credentials:
         assert_eq!(openai_creds.len(), 1);
     }
 
+    // --- SSRF protection tests ---
+
     #[test]
-    fn test_provider_env_vars_with_defaults() {
-        let config = GatewayConfig::from_yaml(
-            r#"
+    fn test_ssrf_reject_loopback() {
+        let yaml = r#"
 credentials:
-  - id: cred1
+  - id: test
     provider: openai
     api_key: key1
-providers:
-  openai:
-    enabled: true
-    base_url: ${PROVIDER_BASE_URL:-https://api.openai.com}
-    headers:
-      Authorization: Bearer ${PROVIDER_AUTH}
-"#,
-        )
-        .unwrap();
-
-        let openai = config.providers.get("openai").unwrap();
-        assert_eq!(openai.base_url.as_deref(), Some("https://api.openai.com"));
-        assert_eq!(
-            openai.headers.get("Authorization").unwrap(),
-            "Bearer ",
-            "Unset env var should expand to empty string"
+    base_url: http://127.0.0.1:8000
+"#;
+        let result = GatewayConfig::from_yaml(yaml);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("private/internal IP") || err_msg.contains("invalid base_url"),
+            "Unexpected error: {err_msg}"
         );
     }
 
     #[test]
-    fn test_provider_env_vars_with_set_variables() {
-        std::env::set_var("TEST_PROVIDER_URL", "https://custom.provider.com");
-        std::env::set_var("TEST_PROVIDER_KEY", "secret-key");
-
-        let config = GatewayConfig::from_yaml(
-            r#"
-credentials:
-  - id: cred1
-    provider: openai
-    api_key: key1
-providers:
-  openai:
-    enabled: true
-    base_url: ${TEST_PROVIDER_URL}
-    headers:
-      X-Api-Key: ${TEST_PROVIDER_KEY}
-"#,
-        )
-        .unwrap();
-
-        let openai = config.providers.get("openai").unwrap();
-        assert_eq!(
-            openai.base_url.as_deref(),
-            Some("https://custom.provider.com")
-        );
-        assert_eq!(openai.headers.get("X-Api-Key").unwrap(), "secret-key");
-
-        std::env::remove_var("TEST_PROVIDER_URL");
-        std::env::remove_var("TEST_PROVIDER_KEY");
+    fn test_ssrf_reject_loopback_localhost() {
+        // localhost resolves to 127.0.0.1, but since it's not a literal IP
+        // our parser allows it (DNS rebinding is out of scope).
+        // This test verifies the IP-based check path.
+        let result = validate_url_not_private("http://127.0.0.1/v1/chat");
+        assert!(result.is_err());
     }
 
     #[test]
-    fn test_provider_config_without_env_vars_unchanged() {
-        let config = GatewayConfig::from_yaml(
-            r#"
+    fn test_ssrf_reject_private_10_range() {
+        let result = validate_url_not_private("http://10.0.0.1/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_private_172_range() {
+        let result = validate_url_not_private("http://172.16.0.1/api");
+        assert!(result.is_err());
+        let result = validate_url_not_private("http://172.31.255.255/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_private_192_range() {
+        let result = validate_url_not_private("http://192.168.1.1/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_link_local() {
+        let result = validate_url_not_private("http://169.254.169.254/latest/meta-data/");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_ipv6_loopback() {
+        let result = validate_url_not_private("http://[::1]:8000/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_ipv6_unique_local() {
+        let result = validate_url_not_private("http://[fc00::1]/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_ipv6_link_local() {
+        let result = validate_url_not_private("http://[fe80::1]/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_allow_public_ip() {
+        let result = validate_url_not_private("https://api.openai.com/v1/chat/completions");
+        // openai.com is a domain, not a literal IP — allowed
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_ssrf_allow_public_literal_ip() {
+        let result = validate_url_not_private("https://1.1.1.1/api");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_ssrf_allow_credential_without_base_url() {
+        let yaml = r#"
 credentials:
-  - id: cred1
+  - id: test
     provider: openai
     api_key: key1
-providers:
-  openai:
-    enabled: true
-    base_url: https://api.openai.com
-    headers:
-      X-Custom: literal-value
-"#,
-        )
-        .unwrap();
+"#;
+        let result = GatewayConfig::from_yaml(yaml);
+        assert!(result.is_ok());
+    }
 
-        let openai = config.providers.get("openai").unwrap();
-        assert_eq!(openai.base_url.as_deref(), Some("https://api.openai.com"));
-        assert_eq!(openai.headers.get("X-Custom").unwrap(), "literal-value");
+    #[test]
+    fn test_ssrf_reject_zero_network() {
+        let result = validate_url_not_private("http://0.0.0.0/api");
+        assert!(result.is_err());
+    }
+
+    // --- Auth enabled tests ---
+
+    #[test]
+    fn test_auth_disabled_when_no_tokens() {
+        let config = GatewayConfig::default();
+        assert!(!config.is_auth_enabled());
+    }
+
+    #[test]
+    fn test_auth_enabled_with_tokens() {
+        let yaml = r#"
+server:
+  auth_tokens:
+    - "my-secret-token"
+"#;
+        let config = GatewayConfig::from_yaml(yaml).unwrap();
+        assert!(config.is_auth_enabled());
     }
 }

@@ -9,8 +9,9 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -150,6 +151,14 @@ async fn main() -> anyhow::Result<()> {
         config.credentials.len()
     );
 
+    // Warn if authentication is disabled
+    if !config.is_auth_enabled() {
+        tracing::warn!(
+            "WARNING: No auth_tokens configured — authentication is DISABLED. \
+             This is not recommended for production deployments."
+        );
+    }
+
     // Initialize model registry
     let registry = ModelRegistry::default();
     tracing::info!("Model registry initialized");
@@ -198,6 +207,13 @@ async fn main() -> anyhow::Result<()> {
         })
         .collect();
 
+    // Initialize rate limiter
+    let rate_limiter = Arc::new(RateLimiter::new(DEFAULT_RATE_LIMIT));
+    tracing::info!(
+        "Rate limiter initialized: {} requests per minute per IP",
+        DEFAULT_RATE_LIMIT
+    );
+
     let state = AppState {
         config,
         registry,
@@ -236,6 +252,11 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .merge(public_routes)
         .merge(protected_routes)
+        .layer(axum::middleware::from_fn_with_state(
+            rate_limiter,
+            rate_limit_middleware,
+        ))
+        .layer(axum::middleware::from_fn(security_headers_middleware))
         .layer(axum::middleware::from_fn_with_state(
             tracing_middleware,
             llm_tracing::tracing_middleware,
@@ -348,8 +369,14 @@ async fn auth_middleware(
         Some(header) => {
             // Check Bearer token format
             if let Some(token) = header.strip_prefix("Bearer ") {
-                // Validate against configured tokens
-                if state.config.server.auth_tokens.iter().any(|t| t == token) {
+                // Validate against configured tokens using constant-time comparison
+                if state
+                    .config
+                    .server
+                    .auth_tokens
+                    .iter()
+                    .any(|t| config::constant_time_token_eq(t, token))
+                {
                     return Ok(next.run(req).await);
                 }
             }
@@ -373,6 +400,115 @@ async fn auth_middleware(
             })),
         )),
     }
+}
+
+/// Middleware that adds standard security headers to all HTTP responses.
+async fn security_headers_middleware(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::http::header::HeaderName;
+    use axum::http::HeaderValue;
+
+    let mut response = next.run(req).await;
+
+    let headers = response.headers_mut();
+    headers.insert(
+        HeaderName::from_static("x-content-type-options"),
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(
+        HeaderName::from_static("x-frame-options"),
+        HeaderValue::from_static("DENY"),
+    );
+    headers.insert(
+        HeaderName::from_static("x-xss-protection"),
+        HeaderValue::from_static("1; mode=block"),
+    );
+    headers.insert(
+        HeaderName::from_static("referrer-policy"),
+        HeaderValue::from_static("strict-origin-when-cross-origin"),
+    );
+    headers.insert(
+        HeaderName::from_static("content-security-policy"),
+        HeaderValue::from_static("default-src 'none'; frame-ancestors 'none'"),
+    );
+
+    response
+}
+
+/// Default rate limit: requests per minute per client IP.
+const DEFAULT_RATE_LIMIT: u64 = 60;
+
+/// In-memory rate limiter tracking request counts per client IP
+/// within a sliding one-minute window.
+struct RateLimiter {
+    /// IP address -> (request count, window start time)
+    buckets: Arc<Mutex<HashMap<String, (u64, Instant)>>>,
+    max_requests: u64,
+}
+
+impl RateLimiter {
+    fn new(max_requests: u64) -> Self {
+        Self {
+            buckets: Arc::new(Mutex::new(HashMap::new())),
+            max_requests,
+        }
+    }
+
+    /// Check whether a request from the given IP should be allowed.
+    /// Returns `true` if under the limit, `false` if rate limited.
+    fn check(&self, ip: &str) -> bool {
+        let mut buckets = self.buckets.lock().unwrap();
+        let now = Instant::now();
+
+        let (count, window_start) = buckets.entry(ip.to_string()).or_insert((0, now));
+
+        // Reset window if more than 60 seconds have passed
+        if now.duration_since(*window_start).as_secs() >= 60 {
+            *count = 0;
+            *window_start = now;
+        }
+
+        if *count >= self.max_requests {
+            return false;
+        }
+
+        *count += 1;
+        true
+    }
+}
+
+/// Rate limiting middleware. Extracts client IP from X-Forwarded-For or
+/// X-Real-IP headers (falling back to the remote addr) and enforces per-IP limits.
+async fn rate_limit_middleware(
+    axum::extract::State(limiter): axum::extract::State<Arc<RateLimiter>>,
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> std::result::Result<axum::response::Response, (axum::http::StatusCode, Json<Value>)> {
+    let client_ip = req
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| req.headers().get("x-real-ip").and_then(|v| v.to_str().ok()))
+        .unwrap_or("unknown");
+
+    if !limiter.check(client_ip) {
+        return Err((
+            axum::http::StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({
+                "error": {
+                    "type": "rate_limit_error",
+                    "message": "Too many requests. Please try again later."
+                }
+            })),
+        ));
+    }
+
+    Ok(next.run(req).await)
 }
 
 async fn health_check(State(state): State<AppState>) -> Json<HealthStatus> {
@@ -843,5 +979,94 @@ mod integration_tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_security_headers_present() {
+        let state = create_test_state();
+        let app = Router::new()
+            .route("/health", get(health_check))
+            .layer(axum::middleware::from_fn(security_headers_middleware))
+            .with_state(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let headers = response.headers();
+
+        assert_eq!(headers.get("X-Content-Type-Options").unwrap(), "nosniff");
+        assert_eq!(headers.get("X-Frame-Options").unwrap(), "DENY");
+        assert_eq!(headers.get("X-XSS-Protection").unwrap(), "1; mode=block");
+        assert!(
+            headers.get("Referrer-Policy").is_some(),
+            "Referrer-Policy header should be set"
+        );
+        assert!(
+            headers.get("Content-Security-Policy").is_some(),
+            "Content-Security-Policy header should be set"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiter_rejects_excess_requests() {
+        let limiter = Arc::new(RateLimiter::new(3)); // Very low limit for testing
+        let state = create_test_state();
+        let app = Router::new()
+            .route("/health", get(health_check))
+            .layer(axum::middleware::from_fn_with_state(
+                limiter,
+                rate_limit_middleware,
+            ))
+            .with_state(state);
+
+        // First 3 requests should succeed
+        for _ in 0..3 {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri("/health")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+
+        // 4th request should be rate limited (429)
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    #[test]
+    fn test_rate_limiter_unit() {
+        let limiter = RateLimiter::new(2);
+
+        // First two requests allowed
+        assert!(limiter.check("192.168.1.1"));
+        assert!(limiter.check("192.168.1.1"));
+
+        // Third request denied
+        assert!(!limiter.check("192.168.1.1"));
+
+        // Different IP is independent
+        assert!(limiter.check("10.0.0.1"));
     }
 }

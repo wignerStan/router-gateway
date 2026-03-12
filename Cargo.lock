@@ -513,12 +513,14 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "smart-routing",
+ "subtle",
  "tokio",
  "tokio-stream",
  "tower",
  "tower-http 0.5.2",
  "tracing",
  "tracing-subscriber",
+ "url",
  "uuid",
 ]
 
