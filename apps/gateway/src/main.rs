@@ -1,5 +1,4 @@
-pub mod config;
-pub mod providers;
+use gateway::{config, providers};
 
 use anyhow::Context;
 use axum::{
@@ -249,6 +248,16 @@ async fn main() -> anyhow::Result<()> {
             auth_middleware,
         ));
 
+    // Periodically prune expired rate-limit buckets to bound memory growth.
+    let prune_limiter = Arc::clone(&rate_limiter);
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(120));
+        loop {
+            interval.tick().await;
+            prune_limiter.prune();
+        }
+    });
+
     let app = Router::new()
         .merge(public_routes)
         .merge(protected_routes)
@@ -265,7 +274,12 @@ async fn main() -> anyhow::Result<()> {
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }
@@ -370,13 +384,7 @@ async fn auth_middleware(
             // Check Bearer token format
             if let Some(token) = header.strip_prefix("Bearer ") {
                 // Validate against configured tokens using constant-time comparison
-                if state
-                    .config
-                    .server
-                    .auth_tokens
-                    .iter()
-                    .any(|t| config::constant_time_token_eq(t, token))
-                {
+                if config::constant_time_token_matches(token, &state.config.server.auth_tokens) {
                     return Ok(next.run(req).await);
                 }
             }
@@ -433,6 +441,10 @@ async fn security_headers_middleware(
         HeaderName::from_static("content-security-policy"),
         HeaderValue::from_static("default-src 'none'; frame-ancestors 'none'"),
     );
+    headers.insert(
+        HeaderName::from_static("strict-transport-security"),
+        HeaderValue::from_static("max-age=63072000; includeSubDomains; preload"),
+    );
 
     response
 }
@@ -459,7 +471,7 @@ impl RateLimiter {
     /// Check whether a request from the given IP should be allowed.
     /// Returns `true` if under the limit, `false` if rate limited.
     fn check(&self, ip: &str) -> bool {
-        let mut buckets = self.buckets.lock().unwrap();
+        let mut buckets = self.buckets.lock().unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
 
         let (count, window_start) = buckets.entry(ip.to_string()).or_insert((0, now));
@@ -477,26 +489,28 @@ impl RateLimiter {
         *count += 1;
         true
     }
+
+    /// Remove expired rate-limit entries to bound memory growth.
+    /// Called periodically from a background task.
+    #[allow(dead_code)]
+    fn prune(&self) {
+        let mut buckets = self.buckets.lock().unwrap_or_else(|e| e.into_inner());
+        let now = Instant::now();
+        buckets.retain(|_, (_, window_start)| now.duration_since(*window_start).as_secs() < 120);
+    }
 }
 
-/// Rate limiting middleware. Extracts client IP from X-Forwarded-For or
-/// X-Real-IP headers (falling back to the remote addr) and enforces per-IP limits.
+/// Rate limiting middleware. Uses the TCP peer address from `ConnectInfo<SocketAddr>`
+/// to prevent IP spoofing via `X-Forwarded-For` headers.
 async fn rate_limit_middleware(
     axum::extract::State(limiter): axum::extract::State<Arc<RateLimiter>>,
+    axum::extract::ConnectInfo(addr): axum::extract::ConnectInfo<SocketAddr>,
     req: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> std::result::Result<axum::response::Response, (axum::http::StatusCode, Json<Value>)> {
-    let client_ip = req
-        .headers()
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.split(',').next())
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .or_else(|| req.headers().get("x-real-ip").and_then(|v| v.to_str().ok()))
-        .unwrap_or("unknown");
+    let client_ip = addr.ip().to_string();
 
-    if !limiter.check(client_ip) {
+    if !limiter.check(&client_ip) {
         return Err((
             axum::http::StatusCode::TOO_MANY_REQUESTS,
             Json(json!({
@@ -708,7 +722,7 @@ async fn chat_completions(
                 Json(json!({
                     "error": {
                         "type": "credential_not_found",
-                        "message": format!("Credential {} not found in configuration", primary.credential_id)
+                        "message": "Internal error: selected credential is not available"
                     }
                 })),
             ));
@@ -1012,10 +1026,15 @@ mod integration_tests {
             headers.get("Content-Security-Policy").is_some(),
             "Content-Security-Policy header should be set"
         );
+        assert!(
+            headers.get("Strict-Transport-Security").is_some(),
+            "Strict-Transport-Security header should be set"
+        );
     }
 
     #[tokio::test]
     async fn test_rate_limiter_rejects_excess_requests() {
+        use axum::extract::ConnectInfo;
         let limiter = Arc::new(RateLimiter::new(3)); // Very low limit for testing
         let state = create_test_state();
         let app = Router::new()
@@ -1026,32 +1045,28 @@ mod integration_tests {
             ))
             .with_state(state);
 
+        let test_addr: SocketAddr = "127.0.0.1:12345".parse().unwrap();
+
         // First 3 requests should succeed
         for _ in 0..3 {
-            let response = app
-                .clone()
-                .oneshot(
-                    Request::builder()
-                        .uri("/health")
-                        .body(Body::empty())
-                        .unwrap(),
-                )
-                .await
+            let mut request = Request::builder()
+                .uri("/health")
+                .body(Body::empty())
                 .unwrap();
+            request.extensions_mut().insert(ConnectInfo(test_addr));
+
+            let response = app.clone().oneshot(request).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK);
         }
 
         // 4th request should be rate limited (429)
-        let response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/health")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
+        let mut request = Request::builder()
+            .uri("/health")
+            .body(Body::empty())
             .unwrap();
+        request.extensions_mut().insert(ConnectInfo(test_addr));
 
+        let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
     }
 
