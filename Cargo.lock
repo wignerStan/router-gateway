@@ -513,6 +513,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "smart-routing",
+ "subtle",
  "tokio",
  "tokio-stream",
  "tower",
