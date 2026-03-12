@@ -38,10 +38,7 @@ pub trait ModelFetcher: Send + Sync {
 
 /// Converts a `PoisonError` into a boxed error suitable for the trait return type.
 fn lock_err(e: PoisonError<impl std::fmt::Debug>) -> Box<dyn std::error::Error + Send + Sync> {
-    Box::new(std::io::Error::new(
-        std::io::ErrorKind::Other,
-        format!("lock poisoned: {e}"),
-    ))
+    Box::new(std::io::Error::other(format!("lock poisoned: {e}")))
 }
 
 /// StaticFetcher provides hardcoded model data for common models.
