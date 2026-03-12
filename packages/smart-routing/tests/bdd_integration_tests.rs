@@ -400,4 +400,487 @@ mod bdd_integration {
         }
         assert_eq!(manager.get_status(auth_id).await, HealthStatus::Healthy);
     }
+
+    // ================================================================
+    // Planner-mode BDD scenarios
+    // ================================================================
+
+    #[tokio::test]
+    async fn test_bdd_learned_mode_uses_bandit_priors() {
+        use smart_routing::bandit::BanditConfig;
+        use smart_routing::bandit::BanditPolicy;
+        use smart_routing::bandit::TierPriors;
+
+        // Scenario: When bandit has accumulated data, learned priors influence selection
+        let config = BanditConfig {
+            min_samples_for_thompson: 3,
+            tier_priors: Some(TierPriors::default()),
+            ..Default::default()
+        };
+        let mut bandit = BanditPolicy::with_config(config);
+        bandit.set_route_tier("flagship-route", smart_routing::bandit::Tier::Flagship);
+        bandit.set_route_tier("fast-route", smart_routing::bandit::Tier::Fast);
+
+        // Train flagship-route to be successful
+        for _ in 0..10 {
+            bandit.record_result("flagship-route", true, 0.9);
+        }
+        // Train fast-route to fail
+        for _ in 0..10 {
+            bandit.record_result("fast-route", false, 0.1);
+        }
+
+        let routes = vec!["flagship-route".to_string(), "fast-route".to_string()];
+
+        // flagship should win significantly more often due to learned stats
+        let mut flagship_wins = 0;
+        for _ in 0..100 {
+            let selected = bandit.select_route(&routes).unwrap();
+            if selected == "flagship-route" {
+                flagship_wins += 1;
+            }
+        }
+        assert!(
+            flagship_wins > 70,
+            "Learned mode should prefer flagship ({}/100)",
+            flagship_wins
+        );
+    }
+
+    #[tokio::test]
+    async fn test_bdd_heuristic_mode_fallback_provider_inference() {
+        use smart_routing::config::WeightConfig;
+        use smart_routing::fallback::FallbackPlanner;
+        use smart_routing::weight::DefaultWeightCalculator;
+
+        // Scenario: FallbackPlanner infers providers via known-provider matching in generate_fallbacks()
+        let planner = FallbackPlanner::new();
+        let calculator = DefaultWeightCalculator::new(WeightConfig::default());
+        let metrics = smart_routing::MetricsCollector::new();
+        let health =
+            smart_routing::HealthManager::new(smart_routing::config::HealthConfig::default());
+
+        // Auth IDs with known-provider prefixes
+        let auths = vec![
+            smart_routing::weight::AuthInfo {
+                id: "amazon-bedrock-us-east-key".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            },
+            smart_routing::weight::AuthInfo {
+                id: "azure-openai-gpt4-key".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            },
+            smart_routing::weight::AuthInfo {
+                id: "deepseek-api-key".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            },
+        ];
+
+        for auth in &auths {
+            metrics.initialize_auth(&auth.id).await;
+        }
+
+        let fallbacks = planner
+            .generate_fallbacks(auths, None, &calculator, &metrics, &health)
+            .await;
+
+        assert_eq!(
+            fallbacks.len(),
+            3,
+            "Should generate fallbacks for all auths"
+        );
+
+        // Verify provider inference through FallbackRoute.provider field
+        let providers: Vec<_> = fallbacks.iter().map(|f| f.provider.as_deref()).collect();
+        assert!(
+            providers.contains(&Some("amazon-bedrock")),
+            "Should infer 'amazon-bedrock' from multi-word prefix"
+        );
+        assert!(
+            providers.contains(&Some("azure-openai")),
+            "Should infer 'azure-openai' from multi-word prefix"
+        );
+        assert!(
+            providers.contains(&Some("deepseek")),
+            "Should infer 'deepseek' from single-word prefix"
+        );
+    }
+
+    #[test]
+    fn test_bdd_safe_weighted_mode_handles_nan_scores() {
+        use std::cmp::Ordering;
+
+        // Scenario: Weighted selection handles NaN scores via unwrap_or(Ordering::Equal)
+        // This mirrors the pattern in Router::select_weighted()
+        let scores = [
+            ("cred-a".to_string(), 0.9),
+            ("cred-b".to_string(), f64::NAN),
+            ("cred-c".to_string(), 0.5),
+        ];
+
+        // Find max using partial_cmp().unwrap_or(Ordering::Equal) - same as router code
+        let best = scores
+            .iter()
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
+
+        assert!(best.is_some());
+        let (id, score) = best.unwrap();
+        assert!(
+            !id.is_empty(),
+            "Safe weighted mode should always produce a result"
+        );
+        // A non-NaN score should win over NaN (NaN compares as Equal via unwrap_or)
+        assert!(
+            !score.is_nan(),
+            "Best score should be non-NaN ({score}), actual: {id}={score}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_bdd_deterministic_fallback_when_all_filtered() {
+        use smart_routing::classification::{
+            ClassifiedRequest, QualityPreference, RequestFormat, RequiredCapabilities,
+        };
+        use smart_routing::router::Router;
+
+        // Scenario: When all candidates are filtered out, plan returns empty primary
+        let mut router = Router::with_config(smart_routing::router::RouterConfig {
+            use_bandit: false,
+            ..Default::default()
+        });
+        router.add_credential("cred-1".to_string(), vec!["small-model".to_string()]);
+        router.set_model(
+            "small-model".to_string(),
+            model_registry::ModelInfo {
+                id: "small-model".to_string(),
+                name: "Small Model".to_string(),
+                provider: "test".to_string(),
+                context_window: 1000, // Very small context
+                max_output_tokens: 256,
+                input_price_per_million: 1.0,
+                output_price_per_million: 2.0,
+                capabilities: model_registry::ModelCapabilities {
+                    streaming: false,
+                    tools: false,
+                    vision: false,
+                    thinking: false,
+                },
+                rate_limits: model_registry::RateLimits {
+                    requests_per_minute: 60,
+                    tokens_per_minute: 90000,
+                },
+                source: model_registry::DataSource::Static,
+            },
+        );
+
+        // Request needs way more context than available
+        let request = ClassifiedRequest {
+            required_capabilities: RequiredCapabilities::default(),
+            estimated_tokens: 100_000, // Way exceeds 1000 context
+            format: RequestFormat::OpenAI,
+            quality_preference: QualityPreference::Balanced,
+        };
+        let auths = vec![smart_routing::weight::AuthInfo {
+            id: "cred-1".to_string(),
+            priority: Some(0),
+            quota_exceeded: false,
+            unavailable: false,
+            model_states: Vec::new(),
+        }];
+
+        let plan = router.plan(&request, auths, None).await;
+
+        assert!(
+            plan.primary.is_none(),
+            "All candidates filtered should yield None primary"
+        );
+        assert_eq!(plan.total_candidates, 1);
+        assert_eq!(plan.filtered_candidates, 0);
+        assert!(
+            plan.fallbacks.is_empty(),
+            "No fallbacks when all candidates filtered"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_bdd_session_affinity_returns_same_provider() {
+        use smart_routing::classification::{
+            ClassifiedRequest, QualityPreference, RequestFormat, RequiredCapabilities,
+        };
+        use smart_routing::router::Router;
+
+        // Scenario: Router::plan() with session_id returns same provider for repeated calls
+        let mut router = Router::with_config(smart_routing::router::RouterConfig {
+            use_bandit: false,
+            enable_session_affinity: true,
+            ..Default::default()
+        });
+        router.add_credential("cred-1".to_string(), vec!["model-a".to_string()]);
+        router.add_credential("cred-2".to_string(), vec!["model-b".to_string()]);
+        router.set_model(
+            "model-a".to_string(),
+            model_registry::ModelInfo {
+                id: "model-a".to_string(),
+                name: "Model A".to_string(),
+                provider: "provider-a".to_string(),
+                context_window: 200_000,
+                max_output_tokens: 4096,
+                input_price_per_million: 1.0,
+                output_price_per_million: 2.0,
+                capabilities: model_registry::ModelCapabilities {
+                    streaming: true,
+                    tools: true,
+                    vision: false,
+                    thinking: false,
+                },
+                rate_limits: model_registry::RateLimits {
+                    requests_per_minute: 60,
+                    tokens_per_minute: 90000,
+                },
+                source: model_registry::DataSource::Static,
+            },
+        );
+        router.set_model(
+            "model-b".to_string(),
+            model_registry::ModelInfo {
+                id: "model-b".to_string(),
+                name: "Model B".to_string(),
+                provider: "provider-b".to_string(),
+                context_window: 200_000,
+                max_output_tokens: 4096,
+                input_price_per_million: 1.0,
+                output_price_per_million: 2.0,
+                capabilities: model_registry::ModelCapabilities {
+                    streaming: true,
+                    tools: true,
+                    vision: false,
+                    thinking: false,
+                },
+                rate_limits: model_registry::RateLimits {
+                    requests_per_minute: 60,
+                    tokens_per_minute: 90000,
+                },
+                source: model_registry::DataSource::Static,
+            },
+        );
+
+        let request = ClassifiedRequest {
+            required_capabilities: RequiredCapabilities::default(),
+            estimated_tokens: 1000,
+            format: RequestFormat::OpenAI,
+            quality_preference: QualityPreference::Balanced,
+        };
+        let auths = vec![
+            smart_routing::weight::AuthInfo {
+                id: "cred-1".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            },
+            smart_routing::weight::AuthInfo {
+                id: "cred-2".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            },
+        ];
+
+        router.metrics().initialize_auth("cred-1").await;
+        router.metrics().initialize_auth("cred-2").await;
+
+        let session_id = "test-session-42";
+
+        // First call establishes affinity
+        let plan1 = router.plan(&request, auths.clone(), Some(session_id)).await;
+        assert!(plan1.primary.is_some());
+        let first_provider = plan1.primary.as_ref().unwrap().provider.clone();
+
+        // Second call should prefer the same provider via affinity
+        let plan2 = router.plan(&request, auths, Some(session_id)).await;
+        assert!(plan2.primary.is_some());
+        let second_provider = plan2.primary.as_ref().unwrap().provider.clone();
+
+        assert_eq!(
+            first_provider, second_provider,
+            "Session affinity should return same provider for same session"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_bdd_router_clone_preserves_shared_state() {
+        use smart_routing::classification::{
+            ClassifiedRequest, QualityPreference, RequestFormat, RequiredCapabilities,
+        };
+        use smart_routing::router::Router;
+
+        // Scenario: Cloned router retains bandit state and session affinity (shared via Arc)
+        let mut router = Router::new();
+        router.add_credential("cred-1".to_string(), vec!["model-a".to_string()]);
+        router.set_model(
+            "model-a".to_string(),
+            model_registry::ModelInfo {
+                id: "model-a".to_string(),
+                name: "Model A".to_string(),
+                provider: "provider-a".to_string(),
+                context_window: 200_000,
+                max_output_tokens: 4096,
+                input_price_per_million: 1.0,
+                output_price_per_million: 2.0,
+                capabilities: model_registry::ModelCapabilities {
+                    streaming: true,
+                    tools: true,
+                    vision: false,
+                    thinking: false,
+                },
+                rate_limits: model_registry::RateLimits {
+                    requests_per_minute: 60,
+                    tokens_per_minute: 90000,
+                },
+                source: model_registry::DataSource::Static,
+            },
+        );
+
+        router.metrics().initialize_auth("cred-1").await;
+
+        // Record a result on the original to populate bandit state
+        router.record_result("cred-1", true, 100.0, 200, 0.9).await;
+
+        // Set session affinity on original
+        router
+            .session_manager()
+            .set_provider("session-1".to_string(), "provider-a".to_string())
+            .await
+            .unwrap();
+
+        let cloned = router.clone();
+
+        // Clone should see the same bandit data (shared via Arc)
+        let bandit = cloned.bandit_policy().lock().await;
+        let stats = bandit.get_stats("cred-1");
+        assert!(stats.is_some(), "Clone should share bandit state");
+        let s = stats.unwrap();
+        assert_eq!(s.pulls, 1, "Bandit pull count should be preserved");
+        assert_eq!(s.last_utility, 0.9, "Bandit utility should be preserved");
+        drop(bandit);
+
+        // Clone should see the same session affinity (shared via Arc)
+        let provider = cloned
+            .session_manager()
+            .get_preferred_provider("session-1")
+            .await;
+        assert_eq!(
+            provider,
+            Some("provider-a".to_string()),
+            "Clone should share session affinity"
+        );
+
+        // Clone should be usable for planning
+        let request = ClassifiedRequest {
+            required_capabilities: RequiredCapabilities::default(),
+            estimated_tokens: 1000,
+            format: RequestFormat::OpenAI,
+            quality_preference: QualityPreference::Balanced,
+        };
+        let auths = vec![smart_routing::weight::AuthInfo {
+            id: "cred-1".to_string(),
+            priority: Some(0),
+            quota_exceeded: false,
+            unavailable: false,
+            model_states: Vec::new(),
+        }];
+
+        let plan = cloned.plan(&request, auths, Some("session-1")).await;
+        assert!(
+            plan.primary.is_some(),
+            "Cloned router should produce valid plans"
+        );
+    }
+
+    #[test]
+    fn test_bdd_nan_safe_score_sorting() {
+        use std::cmp::Ordering;
+
+        // Scenario: Sorting scores containing NaN uses unwrap_or(Ordering::Equal)
+        let mut scores: Vec<(String, f64)> = [
+            ("good".to_string(), 0.8),
+            ("nan-a".to_string(), f64::NAN),
+            ("better".to_string(), 0.95),
+            ("nan-b".to_string(), f64::NAN),
+            ("okay".to_string(), 0.5),
+        ]
+        .into();
+
+        // This sort mirrors the router's weighted selection pattern
+        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+
+        // Should not panic; first element should be non-NaN (NaN compares as Equal)
+        assert!(!scores[0].0.is_empty());
+        // At least one non-NaN element should be in the top positions
+        let top_three: Vec<_> = scores.iter().take(3).filter(|(_, s)| !s.is_nan()).collect();
+        assert!(
+            top_three.len() >= 2,
+            "Non-NaN scores should sort to top positions"
+        );
+    }
+
+    #[test]
+    fn test_bdd_token_usage_in_execution_result() {
+        use smart_routing::executor::ExecutionResult;
+
+        // Scenario: ExecutionResult supports prompt_tokens and completion_tokens fields
+        let result_with_tokens = ExecutionResult {
+            success: true,
+            credential_id: Some("cred-1".to_string()),
+            model_id: Some("model-a".to_string()),
+            attempts: 1,
+            total_latency_ms: 200.0,
+            status_code: Some(200),
+            error: None,
+            prompt_tokens: Some(1500),
+            completion_tokens: Some(800),
+        };
+        assert_eq!(result_with_tokens.prompt_tokens, Some(1500));
+        assert_eq!(result_with_tokens.completion_tokens, Some(800));
+
+        // Scenario: ExecutionResult can have None token counts (executor returns None)
+        let result_no_tokens = ExecutionResult {
+            success: true,
+            credential_id: Some("cred-2".to_string()),
+            model_id: Some("model-b".to_string()),
+            attempts: 1,
+            total_latency_ms: 100.0,
+            status_code: Some(200),
+            error: None,
+            prompt_tokens: None,
+            completion_tokens: None,
+        };
+        assert_eq!(result_no_tokens.prompt_tokens, None);
+        assert_eq!(result_no_tokens.completion_tokens, None);
+
+        // Scenario: Zero token counts are valid
+        let result_zero_tokens = ExecutionResult {
+            success: true,
+            credential_id: Some("cred-3".to_string()),
+            model_id: Some("model-c".to_string()),
+            attempts: 1,
+            total_latency_ms: 50.0,
+            status_code: Some(200),
+            error: None,
+            prompt_tokens: Some(0),
+            completion_tokens: Some(0),
+        };
+        assert_eq!(result_zero_tokens.prompt_tokens, Some(0));
+        assert_eq!(result_zero_tokens.completion_tokens, Some(0));
+    }
 }
