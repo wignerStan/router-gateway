@@ -279,33 +279,69 @@ impl SmartRoutingConfig {
         }
     }
 
-    /// Validate configuration
-    pub fn validate(&mut self) -> Result<(), String> {
+    /// Validate configuration, returning warnings for any values that were corrected
+    pub fn validate(&mut self) -> Result<Vec<String>, String> {
+        let mut warnings = Vec::new();
+
         // Validate strategy
-        const VALID_STRATEGIES: &[&str] = &["weighted", "time_aware", "quota_aware", "adaptive"];
+        const VALID_STRATEGIES: &[&str] = &[
+            "weighted",
+            "time_aware",
+            "quota_aware",
+            "adaptive",
+            "policy_aware",
+        ];
         if !VALID_STRATEGIES.contains(&self.strategy.as_str()) {
+            warnings.push(format!(
+                "Invalid strategy '{}', reset to 'weighted'. Valid options: {:?}",
+                self.strategy, VALID_STRATEGIES
+            ));
             self.strategy = "weighted".to_string();
         }
 
         // Validate weight ranges
         if self.weight.success_rate_weight < 0.0 || self.weight.success_rate_weight > 1.0 {
+            warnings.push(format!(
+                "success_rate_weight {} out of range [0, 1], reset to 0.35",
+                self.weight.success_rate_weight
+            ));
             self.weight.success_rate_weight = 0.35;
         }
         if self.weight.latency_weight < 0.0 || self.weight.latency_weight > 1.0 {
+            warnings.push(format!(
+                "latency_weight {} out of range [0, 1], reset to 0.25",
+                self.weight.latency_weight
+            ));
             self.weight.latency_weight = 0.25;
         }
         if self.weight.health_weight < 0.0 || self.weight.health_weight > 1.0 {
+            warnings.push(format!(
+                "health_weight {} out of range [0, 1], reset to 0.20",
+                self.weight.health_weight
+            ));
             self.weight.health_weight = 0.20;
         }
         if self.weight.load_weight < 0.0 || self.weight.load_weight > 1.0 {
+            warnings.push(format!(
+                "load_weight {} out of range [0, 1], reset to 0.15",
+                self.weight.load_weight
+            ));
             self.weight.load_weight = 0.15;
         }
         if self.weight.priority_weight < 0.0 || self.weight.priority_weight > 1.0 {
+            warnings.push(format!(
+                "priority_weight {} out of range [0, 1], reset to 0.05",
+                self.weight.priority_weight
+            ));
             self.weight.priority_weight = 0.05;
         }
 
         // Validate time-aware config
         if self.time_aware.off_peak_factor <= 0.0 {
+            warnings.push(format!(
+                "off_peak_factor {} must be positive, reset to 1.2",
+                self.time_aware.off_peak_factor
+            ));
             self.time_aware.off_peak_factor = 1.2;
         }
 
@@ -317,11 +353,15 @@ impl SmartRoutingConfig {
         // Validate quota balance strategy
         const VALID_QUOTA_STRATEGIES: &[&str] = &["least_used", "round_robin", "adaptive"];
         if !VALID_QUOTA_STRATEGIES.contains(&self.quota_aware.quota_balance_strategy.as_str()) {
+            warnings.push(format!(
+                "Invalid quota_balance_strategy '{}', reset to 'adaptive'. Valid options: {:?}",
+                self.quota_aware.quota_balance_strategy, VALID_QUOTA_STRATEGIES
+            ));
             self.quota_aware.quota_balance_strategy = "adaptive".to_string();
         }
 
         self.normalize();
-        Ok(())
+        Ok(warnings)
     }
 
     /// Create a deep copy of the configuration
@@ -820,6 +860,85 @@ mod tests {
         assert_eq!(
             config.quota_aware.recovery_window_seconds, 3600,
             "Zero recovery_window should be reset to 3600"
+        );
+    }
+
+    #[test]
+    fn test_all_strategies_accepted_by_validate() {
+        let strategies = [
+            "weighted",
+            "time_aware",
+            "quota_aware",
+            "adaptive",
+            "policy_aware",
+        ];
+        for strategy in strategies {
+            let mut config = SmartRoutingConfig {
+                strategy: strategy.to_string(),
+                ..Default::default()
+            };
+            config.validate().unwrap();
+            assert_eq!(
+                config.strategy, strategy,
+                "Strategy '{strategy}' should be preserved after validation"
+            );
+        }
+    }
+
+    #[test]
+    fn test_invalid_strategy_reset_to_weighted() {
+        let mut config = SmartRoutingConfig {
+            strategy: "unknown_strategy".to_string(),
+            ..Default::default()
+        };
+        config.validate().unwrap();
+        assert_eq!(config.strategy, "weighted");
+    }
+
+    #[test]
+    fn test_validate_returns_warnings_for_corrected_values() {
+        let mut config = SmartRoutingConfig {
+            strategy: "unknown_strategy".to_string(),
+            weight: WeightConfig {
+                success_rate_weight: 5.0,
+                latency_weight: -1.0,
+                ..Default::default()
+            },
+            quota_aware: QuotaAwareConfig {
+                quota_balance_strategy: "bogus".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let warnings = config.validate().unwrap();
+        assert!(
+            !warnings.is_empty(),
+            "validate() should return warnings for corrected values"
+        );
+        assert!(
+            warnings.iter().any(|w| w.contains("strategy")),
+            "Warnings should mention strategy correction"
+        );
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.contains("success_rate_weight") || w.contains("weight")),
+            "Warnings should mention weight correction"
+        );
+        assert!(
+            warnings.iter().any(|w| w.contains("quota_balance")),
+            "Warnings should mention quota balance strategy correction"
+        );
+    }
+
+    #[test]
+    fn test_validate_no_warnings_for_valid_config() {
+        let mut config = SmartRoutingConfig::default();
+        let warnings = config.validate().unwrap();
+        assert!(
+            warnings.is_empty(),
+            "Valid config should produce no warnings, got: {:?}",
+            warnings
         );
     }
 
