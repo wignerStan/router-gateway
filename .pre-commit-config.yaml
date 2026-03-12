@@ -141,6 +141,26 @@ repos:
         always_run: true
         verbose: true
 
+      # post-merge re-syncs bd state after merge/pull
+      - id: bd-post-merge
+        name: bd (beads) post-merge sync
+        entry: bd hooks run post-merge
+        language: system
+        pass_filenames: false
+        stages: [post-merge]
+        always_run: true
+        verbose: true
+
+      # post-checkout re-syncs bd state after branch checkout
+      - id: bd-post-checkout
+        name: bd (beads) post-checkout sync
+        entry: bd hooks run post-checkout
+        language: system
+        pass_filenames: false
+        stages: [post-checkout]
+        always_run: true
+        verbose: true
+
 # ============================================
 # Configuration
 # ============================================
