@@ -244,6 +244,7 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .merge(public_routes)
         .merge(protected_routes)
+        .layer(axum::middleware::from_fn(security_headers_middleware))
         .layer(axum::middleware::from_fn_with_state(
             tracing_middleware,
             llm_tracing::tracing_middleware,
@@ -387,6 +388,41 @@ async fn auth_middleware(
             })),
         )),
     }
+}
+
+/// Middleware that adds standard security headers to all HTTP responses.
+async fn security_headers_middleware(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::http::header::HeaderName;
+    use axum::http::HeaderValue;
+
+    let mut response = next.run(req).await;
+
+    let headers = response.headers_mut();
+    headers.insert(
+        HeaderName::from_static("x-content-type-options"),
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(
+        HeaderName::from_static("x-frame-options"),
+        HeaderValue::from_static("DENY"),
+    );
+    headers.insert(
+        HeaderName::from_static("x-xss-protection"),
+        HeaderValue::from_static("1; mode=block"),
+    );
+    headers.insert(
+        HeaderName::from_static("referrer-policy"),
+        HeaderValue::from_static("strict-origin-when-cross-origin"),
+    );
+    headers.insert(
+        HeaderName::from_static("content-security-policy"),
+        HeaderValue::from_static("default-src 'none'; frame-ancestors 'none'"),
+    );
+
+    response
 }
 
 async fn health_check(State(state): State<AppState>) -> Json<HealthStatus> {
@@ -857,5 +893,38 @@ mod integration_tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_security_headers_present() {
+        let state = create_test_state();
+        let app = Router::new()
+            .route("/health", get(health_check))
+            .layer(axum::middleware::from_fn(security_headers_middleware))
+            .with_state(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let headers = response.headers();
+
+        assert_eq!(headers.get("X-Content-Type-Options").unwrap(), "nosniff");
+        assert_eq!(headers.get("X-Frame-Options").unwrap(), "DENY");
+        assert_eq!(headers.get("X-XSS-Protection").unwrap(), "1; mode=block");
+        assert!(
+            headers.get("Referrer-Policy").is_some(),
+            "Referrer-Policy header should be set"
+        );
+        assert!(
+            headers.get("Content-Security-Policy").is_some(),
+            "Content-Security-Policy header should be set"
+        );
     }
 }
