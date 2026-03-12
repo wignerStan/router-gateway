@@ -271,6 +271,11 @@ impl GatewayConfig {
             .map(|p| p.enabled)
             .unwrap_or(true) // Enabled by default if not configured
     }
+
+    /// Check if authentication is enabled (at least one auth token configured)
+    pub fn is_auth_enabled(&self) -> bool {
+        !self.server.auth_tokens.is_empty()
+    }
 }
 
 /// Expand a single environment variable reference
@@ -619,5 +624,24 @@ credentials:
     fn test_ssrf_reject_zero_network() {
         let result = validate_url_not_private("http://0.0.0.0/api");
         assert!(result.is_err());
+    }
+
+    // --- Auth enabled tests ---
+
+    #[test]
+    fn test_auth_disabled_when_no_tokens() {
+        let config = GatewayConfig::default();
+        assert!(!config.is_auth_enabled());
+    }
+
+    #[test]
+    fn test_auth_enabled_with_tokens() {
+        let yaml = r#"
+server:
+  auth_tokens:
+    - "my-secret-token"
+"#;
+        let config = GatewayConfig::from_yaml(yaml).unwrap();
+        assert!(config.is_auth_enabled());
     }
 }

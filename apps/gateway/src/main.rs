@@ -150,6 +150,14 @@ async fn main() -> anyhow::Result<()> {
         config.credentials.len()
     );
 
+    // Warn if authentication is disabled
+    if !config.is_auth_enabled() {
+        tracing::warn!(
+            "WARNING: No auth_tokens configured — authentication is DISABLED. \
+             This is not recommended for production deployments."
+        );
+    }
+
     // Initialize model registry
     let registry = ModelRegistry::default();
     tracing::info!("Model registry initialized");
