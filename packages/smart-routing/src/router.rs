@@ -368,7 +368,7 @@ impl Router {
         // Select the candidate with highest utility
         let best = candidates
             .iter()
-            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
         if let Some((candidate, utility)) = best {
             // Calculate weight
@@ -1019,6 +1019,44 @@ mod tests {
         assert!(
             plan.fallbacks.is_empty(),
             "Zero max_fallbacks should return no fallbacks"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_select_weighted_handles_nan_scores_without_panic() {
+        let config = RouterConfig {
+            use_bandit: false, // Force weighted selection
+            ..Default::default()
+        };
+        let mut router = Router::with_config(config);
+        router.add_credential("cred-1".to_string(), vec!["model-1".to_string()]);
+        router.add_credential("cred-2".to_string(), vec!["model-2".to_string()]);
+        router.set_model(
+            "model-1".to_string(),
+            create_test_model("model-1", "provider-a", 200000),
+        );
+        router.set_model(
+            "model-2".to_string(),
+            create_test_model("model-2", "provider-b", 200000),
+        );
+
+        let request = create_test_request(1000);
+        let auths = vec![create_test_auth("cred-1"), create_test_auth("cred-2")];
+
+        router.metrics().initialize_auth("cred-1").await;
+        router.metrics().initialize_auth("cred-2").await;
+
+        // Record a zero-latency result to potentially produce NaN in utility calculation
+        router.record_result("cred-1", true, 0.0, 200, 0.0).await;
+        router.record_result("cred-2", true, 0.0, 200, 0.0).await;
+
+        // This should NOT panic even if utility scores contain NaN
+        let plan = router.plan(&request, auths, None).await;
+
+        // Should still produce a valid plan
+        assert!(
+            plan.primary.is_some(),
+            "Should select a route even with potential NaN scores"
         );
     }
 
