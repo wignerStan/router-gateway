@@ -112,7 +112,7 @@ pub struct CredentialConfig {
 /// Routing policy configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoutingPolicyConfig {
-    /// Selection strategy: "weighted", "adaptive", "round_robin"
+    /// Selection strategy: "weighted", "time_aware", "quota_aware", "adaptive", "policy_aware"
     #[serde(default = "default_strategy")]
     pub strategy: String,
 
