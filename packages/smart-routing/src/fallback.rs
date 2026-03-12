@@ -41,6 +41,7 @@ impl Default for FallbackConfig {
 }
 
 /// Fallback planner for generating ordered fallback routes
+#[derive(Debug, Clone)]
 pub struct FallbackPlanner {
     config: FallbackConfig,
 }
