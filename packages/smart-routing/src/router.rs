@@ -275,30 +275,7 @@ impl Router {
             // Try to find a candidate from the preferred provider
             for (candidate, utility) in candidates {
                 if candidate.provider == preferred_provider {
-                    // Calculate weight
-                    let metrics = self.metrics().get_metrics(&candidate.credential_id).await;
-                    let health = self.health().get_status(&candidate.credential_id).await;
-
-                    let auth_info = AuthInfo {
-                        id: candidate.credential_id.clone(),
-                        priority: Some(0),
-                        quota_exceeded: false,
-                        unavailable: false,
-                        model_states: Vec::new(),
-                    };
-
-                    let weight_config = self.selector.config().weight.clone();
-                    let calculator = crate::weight::DefaultWeightCalculator::new(weight_config);
-                    let calculated_weight =
-                        calculator.calculate(&auth_info, metrics.as_ref(), health);
-
-                    return Some(RoutePlanItem {
-                        credential_id: candidate.credential_id.clone(),
-                        model_id: candidate.model_id.clone(),
-                        provider: candidate.provider.clone(),
-                        utility: *utility,
-                        weight: calculated_weight,
-                    });
+                    return Some(self.build_plan_item(candidate, *utility).await);
                 }
             }
         }
@@ -338,29 +315,7 @@ impl Router {
         // Find the selected candidate
         for (candidate, utility) in candidates {
             if candidate.credential_id == selected_id {
-                // Calculate weight
-                let metrics = self.metrics().get_metrics(&candidate.credential_id).await;
-                let health = self.health().get_status(&candidate.credential_id).await;
-
-                let auth_info = AuthInfo {
-                    id: candidate.credential_id.clone(),
-                    priority: Some(0),
-                    quota_exceeded: false,
-                    unavailable: false,
-                    model_states: Vec::new(),
-                };
-
-                let weight_config = self.selector.config().weight.clone();
-                let calculator = crate::weight::DefaultWeightCalculator::new(weight_config);
-                let calculated_weight = calculator.calculate(&auth_info, metrics.as_ref(), health);
-
-                return Some(RoutePlanItem {
-                    credential_id: candidate.credential_id.clone(),
-                    model_id: candidate.model_id.clone(),
-                    provider: candidate.provider.clone(),
-                    utility: *utility,
-                    weight: calculated_weight,
-                });
+                return Some(self.build_plan_item(candidate, *utility).await);
             }
         }
 
@@ -369,35 +324,13 @@ impl Router {
 
     /// Select using weighted selection
     async fn select_weighted(&self, candidates: &[(RouteCandidate, f64)]) -> Option<RoutePlanItem> {
-        // Select the candidate with highest utility
+        // Select the candidate with highest utility (NaN-safe)
         let best = candidates
             .iter()
             .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
         if let Some((candidate, utility)) = best {
-            // Calculate weight
-            let metrics = self.metrics().get_metrics(&candidate.credential_id).await;
-            let health = self.health().get_status(&candidate.credential_id).await;
-
-            let auth_info = AuthInfo {
-                id: candidate.credential_id.clone(),
-                priority: Some(0),
-                quota_exceeded: false,
-                unavailable: false,
-                model_states: Vec::new(),
-            };
-
-            let weight_config = self.selector.config().weight.clone();
-            let calculator = crate::weight::DefaultWeightCalculator::new(weight_config);
-            let calculated_weight = calculator.calculate(&auth_info, metrics.as_ref(), health);
-
-            Some(RoutePlanItem {
-                credential_id: candidate.credential_id.clone(),
-                model_id: candidate.model_id.clone(),
-                provider: candidate.provider.clone(),
-                utility: *utility,
-                weight: calculated_weight,
-            })
+            Some(self.build_plan_item(candidate, *utility).await)
         } else {
             None
         }
@@ -452,6 +385,32 @@ impl Router {
     /// Get config
     pub fn config(&self) -> &RouterConfig {
         &self.config
+    }
+
+    /// Build a RoutePlanItem from a candidate, calculating its weight.
+    async fn build_plan_item(&self, candidate: &RouteCandidate, utility: f64) -> RoutePlanItem {
+        let metrics = self.metrics().get_metrics(&candidate.credential_id).await;
+        let health = self.health().get_status(&candidate.credential_id).await;
+
+        let auth_info = AuthInfo {
+            id: candidate.credential_id.clone(),
+            priority: Some(0),
+            quota_exceeded: false,
+            unavailable: false,
+            model_states: Vec::new(),
+        };
+
+        let weight_config = self.selector.config().weight.clone();
+        let calculator = crate::weight::DefaultWeightCalculator::new(weight_config);
+        let calculated_weight = calculator.calculate(&auth_info, metrics.as_ref(), health);
+
+        RoutePlanItem {
+            credential_id: candidate.credential_id.clone(),
+            model_id: candidate.model_id.clone(),
+            provider: candidate.provider.clone(),
+            utility,
+            weight: calculated_weight,
+        }
     }
 }
 

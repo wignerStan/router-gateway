@@ -96,8 +96,12 @@ impl FallbackPlanner {
             return Vec::new();
         }
 
-        // Sort by weight (descending) - highest weight first
-        weighted_auths.sort_by(|a, b| b.weight.partial_cmp(&a.weight).unwrap());
+        // Sort by weight (descending) - highest weight first (NaN-safe)
+        weighted_auths.sort_by(|a, b| {
+            b.weight
+                .partial_cmp(&a.weight)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Apply provider diversity if enabled
         if self.config.enable_provider_diversity {

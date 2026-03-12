@@ -182,10 +182,8 @@ impl RouteStatistics {
         self.updated_at = Utc::now();
     }
 
-    /// Update overall statistics
-    fn update_overall(&mut self, outcome: &ExecutionOutcome) {
-        let stats = &mut self.overall;
-
+    /// Update a single BucketStatistics with an outcome
+    fn update_bucket_stats(stats: &mut BucketStatistics, outcome: &ExecutionOutcome) {
         stats.total_requests += 1;
         stats.last_updated = Utc::now();
 
@@ -202,12 +200,10 @@ impl RouteStatistics {
             stats.fallback_count += 1;
         }
 
-        // Update success rate
         if stats.total_requests > 0 {
             stats.success_rate = stats.success_count as f64 / stats.total_requests as f64;
         }
 
-        // Update latency
         let latency = outcome.latency_ms;
         if latency > 0.0 {
             if stats.avg_latency_ms == 0.0 {
@@ -225,11 +221,15 @@ impl RouteStatistics {
             }
         }
 
-        // Update tokens
         stats.total_tokens += outcome.total_tokens as u64;
         if stats.total_requests > 0 {
             stats.avg_tokens = stats.total_tokens as f64 / stats.total_requests as f64;
         }
+    }
+
+    /// Update overall statistics
+    fn update_overall(&mut self, outcome: &ExecutionOutcome) {
+        Self::update_bucket_stats(&mut self.overall, outcome);
     }
 
     /// Update time-bucketed statistics
@@ -238,50 +238,7 @@ impl RouteStatistics {
 
         for bucket in buckets {
             let stats = self.time_buckets.entry(bucket.clone()).or_default();
-
-            stats.total_requests += 1;
-            stats.last_updated = Utc::now();
-
-            if outcome.success {
-                stats.success_count += 1;
-            } else {
-                stats.failure_count += 1;
-                if let Some(ref error_class) = outcome.error_class {
-                    *stats.error_counts.entry(error_class.clone()).or_insert(0) += 1;
-                }
-            }
-
-            if outcome.used_fallback {
-                stats.fallback_count += 1;
-            }
-
-            // Update success rate
-            if stats.total_requests > 0 {
-                stats.success_rate = stats.success_count as f64 / stats.total_requests as f64;
-            }
-
-            // Update latency
-            let latency = outcome.latency_ms;
-            if latency > 0.0 {
-                if stats.avg_latency_ms == 0.0 {
-                    stats.avg_latency_ms = latency;
-                } else {
-                    stats.avg_latency_ms = 0.2 * latency + 0.8 * stats.avg_latency_ms;
-                }
-
-                if latency < stats.min_latency_ms {
-                    stats.min_latency_ms = latency;
-                }
-                if latency > stats.max_latency_ms {
-                    stats.max_latency_ms = latency;
-                }
-            }
-
-            // Update tokens
-            stats.total_tokens += outcome.total_tokens as u64;
-            if stats.total_requests > 0 {
-                stats.avg_tokens = stats.total_tokens as f64 / stats.total_requests as f64;
-            }
+            Self::update_bucket_stats(stats, outcome);
         }
     }
 

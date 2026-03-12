@@ -184,8 +184,8 @@ impl BanditPolicy {
             })
             .collect();
 
-        // Select route with highest sample
-        samples.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        // Select route with highest sample (NaN-safe: treat NaN as equal)
+        samples.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         Some(samples.remove(0).0)
     }
 
@@ -221,8 +221,8 @@ impl BanditPolicy {
             })
             .collect();
 
-        // Select route with highest weighted sample
-        samples.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        // Select route with highest weighted sample (NaN-safe: treat NaN as equal)
+        samples.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         Some(samples.remove(0).0)
     }
 
