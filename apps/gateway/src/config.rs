@@ -280,9 +280,50 @@ fn expand_env_var(value: &str) -> String {
     }
 }
 
+/// Constant-time comparison of two token strings to prevent timing attacks.
+/// Returns `true` if tokens are byte-equal, always comparing the full length
+/// of both strings regardless of where they differ.
+pub fn constant_time_token_eq(a: &str, b: &str) -> bool {
+    use subtle::ConstantTimeEq;
+    let a_bytes = a.as_bytes();
+    let b_bytes = b.as_bytes();
+    a_bytes.ct_eq(b_bytes).into()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_constant_time_token_eq_same_tokens() {
+        assert!(constant_time_token_eq(
+            "secret-token-123",
+            "secret-token-123"
+        ));
+    }
+
+    #[test]
+    fn test_constant_time_token_eq_different_tokens_same_length() {
+        assert!(!constant_time_token_eq(
+            "secret-token-123",
+            "secret-token-124"
+        ));
+    }
+
+    #[test]
+    fn test_constant_time_token_eq_different_lengths() {
+        assert!(!constant_time_token_eq("short", "much-longer-token"));
+    }
+
+    #[test]
+    fn test_constant_time_token_eq_empty_tokens() {
+        assert!(constant_time_token_eq("", ""));
+    }
+
+    #[test]
+    fn test_constant_time_token_eq_one_empty() {
+        assert!(!constant_time_token_eq("nonempty", ""));
+    }
 
     #[test]
     fn test_default_config() {

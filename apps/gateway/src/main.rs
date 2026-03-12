@@ -348,8 +348,14 @@ async fn auth_middleware(
         Some(header) => {
             // Check Bearer token format
             if let Some(token) = header.strip_prefix("Bearer ") {
-                // Validate against configured tokens
-                if state.config.server.auth_tokens.iter().any(|t| t == token) {
+                // Validate against configured tokens using constant-time comparison
+                if state
+                    .config
+                    .server
+                    .auth_tokens
+                    .iter()
+                    .any(|t| config::constant_time_token_eq(t, token))
+                {
                     return Ok(next.run(req).await);
                 }
             }
