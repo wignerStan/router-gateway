@@ -32,6 +32,35 @@ pub struct AuthHealth {
 }
 
 /// Health manager
+///
+/// Tracks health status for credentials/auths. Internally uses a `tokio::RwLock<HashMap>`
+/// for concurrent access.
+///
+/// # Clone Semantics
+///
+/// **Clones have independent storage.** `Clone::clone()` creates a new empty health map
+/// — it does **not** copy existing health state. This means:
+///
+/// - A clone starts with no recorded health events (all credentials default to `Healthy`)
+/// - Updates to the clone are invisible to the original, and vice versa
+/// - Only the `op_count` counter is shared between clones (via `Arc<AtomicI64>`)
+///
+/// If you need shared mutable health state across multiple owners, wrap the
+/// `HealthManager` in `Arc` instead of cloning it.
+///
+/// # Example
+///
+/// ```ignore
+/// let manager = HealthManager::new(config);
+/// manager.update_from_result("cred-1", false, 500).await;
+///
+/// let clone = manager.clone(); // clone has EMPTY health map
+/// assert_eq!(clone.get_status("cred-1").await, HealthStatus::Healthy);
+///
+/// // Use Arc for shared state instead
+/// let shared = Arc::new(manager);
+/// let shared2 = Arc::clone(&shared);
+/// ```
 pub struct HealthManager {
     health: tokio::sync::RwLock<std::collections::HashMap<String, AuthHealth>>,
     config: crate::config::HealthConfig,
@@ -40,6 +69,11 @@ pub struct HealthManager {
     op_count: std::sync::Arc<std::sync::atomic::AtomicI64>,
 }
 
+/// Clone creates a new HealthManager with **empty** health storage.
+///
+/// The clone inherits the same `config`, `max_entries`, and `cleanup_interval`,
+/// but starts with no recorded health events. The `op_count` is shared via `Arc`.
+/// See [`HealthManager`] struct docs for details.
 impl Clone for HealthManager {
     fn clone(&self) -> Self {
         Self {
@@ -972,6 +1006,54 @@ mod tests {
             manager.get_status("test-auth").await,
             HealthStatus::Unhealthy,
             "Status code 401 should immediately cause unhealthy regardless of threshold"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_clone_has_independent_storage() {
+        let config = HealthConfig::default();
+        let manager = HealthManager::new(config);
+
+        // Record a health event on the original
+        manager.update_from_result("auth-a", false, 500).await;
+        manager.update_from_result("auth-a", false, 500).await;
+        manager.update_from_result("auth-a", false, 500).await;
+        assert_eq!(
+            manager.get_status("auth-a").await,
+            HealthStatus::Unhealthy,
+            "original should see unhealthy after failures"
+        );
+
+        // Clone the manager
+        let mut cloned = manager.clone();
+        cloned.set_config(HealthConfig {
+            unhealthy_threshold: 10,
+            ..Default::default()
+        });
+
+        // The clone should have empty health storage (independent, not shared)
+        assert_eq!(
+            cloned.get_status("auth-a").await,
+            HealthStatus::Healthy,
+            "clone should start with empty health storage, not sharing original's state"
+        );
+
+        // Update the clone — original should not be affected
+        cloned.update_from_result("auth-b", false, 500).await;
+        assert_eq!(
+            manager.get_status("auth-b").await,
+            HealthStatus::Healthy,
+            "original should not see updates made to the clone"
+        );
+
+        // Update the original — clone should not be affected
+        manager.update_from_result("auth-c", false, 500).await;
+        manager.update_from_result("auth-c", false, 500).await;
+        manager.update_from_result("auth-c", false, 500).await;
+        assert_eq!(
+            cloned.get_status("auth-c").await,
+            HealthStatus::Healthy,
+            "clone should not see updates made to the original"
         );
     }
 }

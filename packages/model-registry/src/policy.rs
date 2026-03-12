@@ -10,6 +10,17 @@ use crate::categories::{
     CapabilityCategory, ContextWindowCategory, CostCategory, ProviderCategory, TierCategory,
 };
 
+/// Error type for policy loading operations
+#[derive(Debug, thiserror::Error)]
+pub enum PolicyLoadError {
+    #[error("I/O error: {0}")]
+    Io(String),
+    #[error("Parse error: {0}")]
+    Parse(String),
+    #[error("Schema validation error: {0}")]
+    Schema(String),
+}
+
 /// Routing policy that combines multiple dimension filters
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RoutingPolicy {
@@ -414,6 +425,70 @@ impl PolicyRegistry {
         let mut registry = Self { policies };
         registry.sort_by_priority();
         Ok(registry)
+    }
+
+    /// Load policies from a JSON file with schema validation.
+    ///
+    /// Expects the file format `{"policies": [...]}`.
+    /// Validates against the embedded JSON schema before parsing.
+    pub fn from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self, PolicyLoadError> {
+        let content = std::fs::read_to_string(path.as_ref())
+            .map_err(|e| PolicyLoadError::Io(e.to_string()))?;
+
+        let schema = Self::load_schema();
+        Self::validate_against_schema(&content, &schema)?;
+
+        // Extract the policies array from the {"policies": [...]} wrapper
+        let wrapper: serde_json::Value =
+            serde_json::from_str(&content).map_err(|e| PolicyLoadError::Parse(e.to_string()))?;
+        let policies_json = wrapper["policies"]
+            .as_array()
+            .ok_or_else(|| PolicyLoadError::Parse("missing 'policies' array".to_string()))?;
+
+        let policies: Vec<RoutingPolicy> = policies_json
+            .iter()
+            .map(|v| serde_json::from_value(v.clone()))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| PolicyLoadError::Parse(e.to_string()))?;
+
+        let mut registry = Self { policies };
+        registry.sort_by_priority();
+        Ok(registry)
+    }
+
+    /// Load the embedded JSON schema for policy validation.
+    pub fn load_schema() -> serde_json::Value {
+        serde_json::from_str(include_str!("../../../config/policies.schema.json"))
+            .expect("embedded policies.schema.json should be valid JSON")
+    }
+
+    /// Validate a JSON string against the policy schema.
+    ///
+    /// Returns `Ok(())` if valid, `Err` with a description of all violations.
+    pub fn validate_against_schema(
+        json: &str,
+        schema: &serde_json::Value,
+    ) -> Result<(), PolicyLoadError> {
+        let instance: serde_json::Value =
+            serde_json::from_str(json).map_err(|e| PolicyLoadError::Parse(e.to_string()))?;
+
+        let validator = jsonschema::validator_for(schema)
+            .map_err(|e| PolicyLoadError::Schema(e.to_string()))?;
+
+        if validator.is_valid(&instance) {
+            Ok(())
+        } else {
+            let mut errors: Vec<String> = validator
+                .validate(&instance)
+                .expect_err("validation should fail since is_valid returned false")
+                .map(|err| format!("  - {}", err))
+                .collect();
+            errors.sort();
+            Err(PolicyLoadError::Schema(format!(
+                "Schema validation failed:\n{}",
+                errors.join("\n")
+            )))
+        }
     }
 
     /// Export policies to JSON
@@ -1813,6 +1888,154 @@ mod matcher_tests {
         assert!(
             !policy.matches(&context_no_tenant),
             "Should not match when context value is None"
+        );
+    }
+
+    // ========================================
+    // Schema Validation Tests
+    // ========================================
+
+    #[test]
+    fn test_validate_schema_valid_policies_json() {
+        let schema = PolicyRegistry::load_schema();
+        let json = r#"{
+            "policies": [
+                {
+                    "id": "test_policy",
+                    "name": "Test Policy",
+                    "priority": 10,
+                    "enabled": true,
+                    "filters": {},
+                    "action": {"action_type": "prefer", "weight_factor": 1.5},
+                    "conditions": []
+                }
+            ]
+        }"#;
+        let result = PolicyRegistry::validate_against_schema(json, &schema);
+        assert!(
+            result.is_ok(),
+            "Valid policies JSON should pass schema validation: {result:?}"
+        );
+    }
+
+    #[test]
+    fn test_validate_schema_missing_required_field() {
+        let schema = PolicyRegistry::load_schema();
+        let json = r#"{
+            "policies": [
+                {
+                    "id": "no_name_policy",
+                    "priority": 10,
+                    "enabled": true,
+                    "filters": {},
+                    "action": {"action_type": "prefer"}
+                }
+            ]
+        }"#;
+        let result = PolicyRegistry::validate_against_schema(json, &schema);
+        assert!(
+            result.is_err(),
+            "Policy without required 'name' field should fail schema validation"
+        );
+    }
+
+    #[test]
+    fn test_validate_schema_invalid_action_type() {
+        let schema = PolicyRegistry::load_schema();
+        let json = r#"{
+            "policies": [
+                {
+                    "id": "bad_action",
+                    "name": "Bad Action",
+                    "priority": 10,
+                    "enabled": true,
+                    "filters": {},
+                    "action": {"action_type": "explode", "weight_factor": 1.0},
+                    "conditions": []
+                }
+            ]
+        }"#;
+        let result = PolicyRegistry::validate_against_schema(json, &schema);
+        assert!(
+            result.is_err(),
+            "Invalid action_type should fail schema validation"
+        );
+    }
+
+    #[test]
+    fn test_validate_schema_invalid_capability() {
+        let schema = PolicyRegistry::load_schema();
+        let json = r#"{
+            "policies": [
+                {
+                    "id": "bad_cap",
+                    "name": "Bad Cap",
+                    "priority": 10,
+                    "enabled": true,
+                    "filters": {
+                        "capabilities": [{"capability": "telekinesis", "mode": "require"}]
+                    },
+                    "action": {"action_type": "prefer"},
+                    "conditions": []
+                }
+            ]
+        }"#;
+        let result = PolicyRegistry::validate_against_schema(json, &schema);
+        assert!(
+            result.is_err(),
+            "Invalid capability value should fail schema validation"
+        );
+    }
+
+    #[test]
+    fn test_from_file_loads_and_validates_policies_json() {
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let policies_path = manifest_dir
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("config")
+            .join("policies.json");
+
+        let registry = PolicyRegistry::from_file(&policies_path);
+        assert!(
+            registry.is_ok(),
+            "config/policies.json should load successfully: {registry:?}"
+        );
+        let registry = registry.unwrap();
+        assert_eq!(
+            registry.all().len(),
+            10,
+            "Should load all 10 policies from config/policies.json"
+        );
+    }
+
+    #[test]
+    fn test_from_file_rejects_invalid_json() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), r#"{"policies": [{"id": 1, "name": "Bad"}]}"#).unwrap();
+
+        let result = PolicyRegistry::from_file(tmp.path());
+        assert!(
+            result.is_err(),
+            "Non-string id should fail schema validation"
+        );
+    }
+
+    #[test]
+    fn test_from_file_rejects_missing_schema_elements() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"{"policies": [{"priority": 5, "enabled": true, "filters": {}, "action": {"action_type": "prefer"}}]}"#,
+        )
+        .unwrap();
+
+        let result = PolicyRegistry::from_file(tmp.path());
+        assert!(
+            result.is_err(),
+            "Missing required fields should fail validation"
         );
     }
 }

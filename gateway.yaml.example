@@ -1,32 +1,104 @@
-# Sample gateway configuration
+# ============================================================================
+# LLM Gateway Configuration
+# ============================================================================
+# Copy this file to gateway.yaml and customize for your environment.
+#
+# Environment variable substitution is supported:
+#   ${VAR_NAME}        - resolves to the env var, or empty string if unset
+#   ${VAR_NAME:-default} - resolves to the env var, or the default value
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# Server configuration
+# ---------------------------------------------------------------------------
 server:
+  # Port to listen on (default: 3000)
   port: 3000
+
+  # Host to bind to (default: "0.0.0.0")
   host: "0.0.0.0"
+
+  # Request timeout in seconds (default: 120)
   timeout_secs: 120
 
+  # Bearer tokens for API authentication.
+  # If empty, authentication is disabled (not recommended for production).
+  # Pass these as the Authorization header: "Bearer <token>"
+  auth_tokens:
+    - ${GATEWAY_AUTH_TOKEN:-my-secret-token}
+
+# ---------------------------------------------------------------------------
+# Credential definitions
+# ---------------------------------------------------------------------------
+# Each credential represents an API key for a provider.
+# At least one credential is required for the gateway to function.
 credentials:
-  - id: anthropic-primary
-    provider: anthropic
-    api_key: ${ANTHROPIC_API_KEY}
+  - id: "anthropic-primary"
+    provider: "anthropic"
+    api_key: "${ANTHROPIC_API_KEY}"
+    # Optional: override the default provider base URL
+    # base_url: "https://api.my-proxy.com/v1"
+    # Optional: organization ID (for providers that support it)
+    # organization: "org-123"
+    allowed_models:
+      - "claude-sonnet-4-20250514"
+      - "claude-3-5-haiku-20241022"
     priority: 10
-    allowed_models:
-      - claude-3-opus
-      - claude-3-5-haiku
+    # Optional: daily request quota (total requests per day)
+    # daily_quota: 10000
+    # Optional: per-minute request limit
+    # rate_limit: 60
 
-  - id: openai-backup
-    provider: openai
-    api_key: ${OPENAI_API_KEY}
+  - id: "openai-backup"
+    provider: "openai"
+    api_key: "${OPENAI_API_KEY}"
+    allowed_models:
+      - "gpt-4o"
+      - "gpt-4o-mini"
     priority: 5
-    allowed_models:
-      - gpt-4o
+    daily_quota: 5000
+    rate_limit: 40
 
-  - id: google-vertex
-    provider: google
-    api_key: ${GOOGLE_API_KEY}
+  - id: "google-vertex"
+    provider: "google"
+    api_key: "${GOOGLE_API_KEY}"
+    base_url: "https://generativelanguage.googleapis.com/v1beta"
+    allowed_models:
+      - "gemini-2.0-flash"
     priority: 8
-    allowed_models:
-      - gemini-2.0-flash
 
+# ---------------------------------------------------------------------------
+# Routing configuration
+# ---------------------------------------------------------------------------
+# Controls how the gateway selects which credential to use for each request.
 routing:
-  strategy: weighted
+  # Selection strategy (default: "weighted")
+  # Options: "weighted", "adaptive", "round_robin", "time_aware", "quota_aware", "policy_aware"
+  strategy: "weighted"
+
+  # Enable session affinity so multi-turn conversations use the same credential (default: true)
   session_affinity: true
+
+  # Minimum number of healthy credentials required before the gateway reports degraded state (default: 1)
+  min_healthy_credentials: 1
+
+  # Number of fallback credentials to try if the primary fails (default: 2)
+  fallback_depth: 2
+
+# ---------------------------------------------------------------------------
+# Provider-specific settings
+# ---------------------------------------------------------------------------
+# Override defaults (base URL, timeout, custom headers) per provider.
+# Any provider not listed here uses built-in defaults and is enabled.
+providers:
+  # Example: disable a specific provider
+  # together:
+  #   enabled: false
+
+  # Example: add custom headers for a provider
+  # openai:
+  #   enabled: true
+  #   base_url: "https://api.openai.com/v1"
+  #   timeout_secs: 60
+  #   headers:
+  #     X-Custom-Header: "value"
