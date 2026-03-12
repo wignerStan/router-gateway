@@ -282,7 +282,13 @@ impl SmartRoutingConfig {
     /// Validate configuration
     pub fn validate(&mut self) -> Result<(), String> {
         // Validate strategy
-        const VALID_STRATEGIES: &[&str] = &["weighted", "time_aware", "quota_aware", "adaptive"];
+        const VALID_STRATEGIES: &[&str] = &[
+            "weighted",
+            "time_aware",
+            "quota_aware",
+            "adaptive",
+            "policy_aware",
+        ];
         if !VALID_STRATEGIES.contains(&self.strategy.as_str()) {
             self.strategy = "weighted".to_string();
         }
@@ -821,6 +827,38 @@ mod tests {
             config.quota_aware.recovery_window_seconds, 3600,
             "Zero recovery_window should be reset to 3600"
         );
+    }
+
+    #[test]
+    fn test_all_strategies_accepted_by_validate() {
+        let strategies = [
+            "weighted",
+            "time_aware",
+            "quota_aware",
+            "adaptive",
+            "policy_aware",
+        ];
+        for strategy in strategies {
+            let mut config = SmartRoutingConfig {
+                strategy: strategy.to_string(),
+                ..Default::default()
+            };
+            config.validate().unwrap();
+            assert_eq!(
+                config.strategy, strategy,
+                "Strategy '{strategy}' should be preserved after validation"
+            );
+        }
+    }
+
+    #[test]
+    fn test_invalid_strategy_reset_to_weighted() {
+        let mut config = SmartRoutingConfig {
+            strategy: "unknown_strategy".to_string(),
+            ..Default::default()
+        };
+        config.validate().unwrap();
+        assert_eq!(config.strategy, "weighted");
     }
 
     // ========================================
