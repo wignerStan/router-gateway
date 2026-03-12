@@ -71,3 +71,7 @@ out/
 # Gitleaks
 gitleaks-report.json
 .agents/
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
