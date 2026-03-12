@@ -39,6 +39,7 @@ pub enum TokenFitStatus {
 }
 
 /// Builder for route candidates
+#[derive(Debug, Clone)]
 pub struct CandidateBuilder {
     /// Credential ID to model ID mappings
     credential_models: HashMap<String, Vec<String>>,
