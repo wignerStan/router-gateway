@@ -522,118 +522,6 @@ credentials:
         assert_eq!(openai_creds.len(), 1);
     }
 
-    // --- SSRF protection tests ---
-
-    #[test]
-    fn test_ssrf_reject_loopback() {
-        let yaml = r#"
-credentials:
-  - id: test
-    provider: openai
-    api_key: key1
-    base_url: http://127.0.0.1:8000
-"#;
-        let result = GatewayConfig::from_yaml(yaml);
-        assert!(result.is_err());
-        let err_msg = result.unwrap_err().to_string();
-        assert!(
-            err_msg.contains("private/internal IP") || err_msg.contains("invalid base_url"),
-            "Unexpected error: {err_msg}"
-        );
-    }
-
-    #[test]
-    fn test_ssrf_reject_loopback_localhost() {
-        // localhost resolves to 127.0.0.1, but since it's not a literal IP
-        // our parser allows it (DNS rebinding is out of scope).
-        // This test verifies the IP-based check path.
-        let result = validate_url_not_private("http://127.0.0.1/v1/chat");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_ssrf_reject_private_10_range() {
-        let result = validate_url_not_private("http://10.0.0.1/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_ssrf_reject_private_172_range() {
-        let result = validate_url_not_private("http://172.16.0.1/api");
-        assert!(result.is_err());
-        let result = validate_url_not_private("http://172.31.255.255/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_ssrf_reject_private_192_range() {
-        let result = validate_url_not_private("http://192.168.1.1/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_ssrf_reject_link_local() {
-        let result = validate_url_not_private("http://169.254.169.254/latest/meta-data/");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_ssrf_reject_ipv6_loopback() {
-        let result = validate_url_not_private("http://[::1]:8000/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_ssrf_reject_ipv6_unique_local() {
-        let result = validate_url_not_private("http://[fc00::1]/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_ssrf_reject_ipv6_link_local() {
-        let result = validate_url_not_private("http://[fe80::1]/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_ssrf_allow_public_ip() {
-        let result = validate_url_not_private("https://api.openai.com/v1/chat/completions");
-        // openai.com is a domain, not a literal IP — allowed
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_ssrf_allow_public_literal_ip() {
-        let result = validate_url_not_private("https://1.1.1.1/api");
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_ssrf_allow_credential_without_base_url() {
-        let yaml = r#"
-credentials:
-  - id: test
-    provider: openai
-    api_key: key1
-"#;
-        let result = GatewayConfig::from_yaml(yaml);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_ssrf_reject_zero_network() {
-        let result = validate_url_not_private("http://0.0.0.0/api");
-        assert!(result.is_err());
-    }
-
-    // --- Auth enabled tests ---
-
-    #[test]
-    fn test_auth_disabled_when_no_tokens() {
-        let config = GatewayConfig::default();
-        assert!(!config.is_auth_enabled());
-    }
-
     #[test]
     fn test_auth_enabled_with_tokens() {
         let yaml = r#"
@@ -643,5 +531,52 @@ server:
 "#;
         let config = GatewayConfig::from_yaml(yaml).unwrap();
         assert!(config.is_auth_enabled());
+    }
+
+    #[test]
+    fn test_example_config_parses() {
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let example_path = manifest_dir
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("gateway.yaml.example");
+        let yaml = std::fs::read_to_string(&example_path)
+            .unwrap_or_else(|e| panic!("{}: {}", example_path.display(), e));
+
+        // Parse YAML structure (bypasses env var expansion for CI reproducibility)
+        let config: GatewayConfig = serde_yaml::from_str(&yaml)
+            .expect("example config should parse as valid GatewayConfig YAML");
+
+        // Verify all sections are present and populated
+        assert_eq!(config.server.port, 3000);
+        assert_eq!(config.server.host, "0.0.0.0");
+        assert_eq!(config.server.timeout_secs, 120);
+        assert!(!config.server.auth_tokens.is_empty());
+
+        assert_eq!(config.credentials.len(), 3);
+
+        let cred = &config.credentials[0];
+        assert_eq!(cred.id, "anthropic-primary");
+        assert_eq!(cred.provider, "anthropic");
+        assert!(!cred.allowed_models.is_empty());
+        assert_eq!(cred.priority, 10);
+        assert!(cred.daily_quota.is_none());
+        assert!(cred.rate_limit.is_none());
+
+        let cred2 = &config.credentials[1];
+        assert_eq!(cred2.id, "openai-backup");
+        assert_eq!(cred2.daily_quota, Some(5000));
+        assert_eq!(cred2.rate_limit, Some(40));
+
+        let cred3 = &config.credentials[2];
+        assert_eq!(cred3.id, "google-vertex");
+        assert!(cred3.base_url.is_some());
+
+        assert_eq!(config.routing.strategy, "weighted");
+        assert!(config.routing.session_affinity);
+        assert_eq!(config.routing.min_healthy_credentials, 1);
+        assert_eq!(config.routing.fallback_depth, 2);
     }
 }

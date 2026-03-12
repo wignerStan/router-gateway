@@ -14,6 +14,14 @@ pub enum TimeBucket {
     Weekday,
     /// Weekend
     Weekend,
+    /// Compound: weekday during peak hours
+    WeekdayPeak,
+    /// Compound: weekday during off-peak hours
+    WeekdayOffPeak,
+    /// Compound: weekend during peak hours
+    WeekendPeak,
+    /// Compound: weekend during off-peak hours
+    WeekendOffPeak,
     /// Hour of day (0-23)
     Hour(u8),
     /// Day of week (0=Sunday, 6=Saturday)
@@ -25,21 +33,31 @@ impl TimeBucket {
     pub fn from_timestamp(timestamp: DateTime<Utc>) -> Vec<TimeBucket> {
         let hour = timestamp.hour() as u8;
         let weekday = timestamp.weekday().num_days_from_sunday() as u8;
+        let is_peak = (9..21).contains(&hour);
+        let is_weekend = weekday == 0 || weekday == 6;
 
         let mut buckets = Vec::new();
 
-        // Peak/off-peak (9 AM - 9 PM)
-        if (9..21).contains(&hour) {
+        // Peak/off-peak
+        if is_peak {
             buckets.push(TimeBucket::Peak);
         } else {
             buckets.push(TimeBucket::OffPeak);
         }
 
         // Weekday/weekend
-        if weekday == 0 || weekday == 6 {
+        if is_weekend {
             buckets.push(TimeBucket::Weekend);
         } else {
             buckets.push(TimeBucket::Weekday);
+        }
+
+        // Compound buckets: weekday/weekend + peak/off-peak
+        match (is_weekend, is_peak) {
+            (false, true) => buckets.push(TimeBucket::WeekdayPeak),
+            (false, false) => buckets.push(TimeBucket::WeekdayOffPeak),
+            (true, true) => buckets.push(TimeBucket::WeekendPeak),
+            (true, false) => buckets.push(TimeBucket::WeekendOffPeak),
         }
 
         // Specific hour
@@ -164,10 +182,8 @@ impl RouteStatistics {
         self.updated_at = Utc::now();
     }
 
-    /// Update overall statistics
-    fn update_overall(&mut self, outcome: &ExecutionOutcome) {
-        let stats = &mut self.overall;
-
+    /// Update a single BucketStatistics with an outcome
+    fn update_bucket_stats(stats: &mut BucketStatistics, outcome: &ExecutionOutcome) {
         stats.total_requests += 1;
         stats.last_updated = Utc::now();
 
@@ -184,12 +200,10 @@ impl RouteStatistics {
             stats.fallback_count += 1;
         }
 
-        // Update success rate
         if stats.total_requests > 0 {
             stats.success_rate = stats.success_count as f64 / stats.total_requests as f64;
         }
 
-        // Update latency
         let latency = outcome.latency_ms;
         if latency > 0.0 {
             if stats.avg_latency_ms == 0.0 {
@@ -207,11 +221,15 @@ impl RouteStatistics {
             }
         }
 
-        // Update tokens
         stats.total_tokens += outcome.total_tokens as u64;
         if stats.total_requests > 0 {
             stats.avg_tokens = stats.total_tokens as f64 / stats.total_requests as f64;
         }
+    }
+
+    /// Update overall statistics
+    fn update_overall(&mut self, outcome: &ExecutionOutcome) {
+        Self::update_bucket_stats(&mut self.overall, outcome);
     }
 
     /// Update time-bucketed statistics
@@ -220,50 +238,7 @@ impl RouteStatistics {
 
         for bucket in buckets {
             let stats = self.time_buckets.entry(bucket.clone()).or_default();
-
-            stats.total_requests += 1;
-            stats.last_updated = Utc::now();
-
-            if outcome.success {
-                stats.success_count += 1;
-            } else {
-                stats.failure_count += 1;
-                if let Some(ref error_class) = outcome.error_class {
-                    *stats.error_counts.entry(error_class.clone()).or_insert(0) += 1;
-                }
-            }
-
-            if outcome.used_fallback {
-                stats.fallback_count += 1;
-            }
-
-            // Update success rate
-            if stats.total_requests > 0 {
-                stats.success_rate = stats.success_count as f64 / stats.total_requests as f64;
-            }
-
-            // Update latency
-            let latency = outcome.latency_ms;
-            if latency > 0.0 {
-                if stats.avg_latency_ms == 0.0 {
-                    stats.avg_latency_ms = latency;
-                } else {
-                    stats.avg_latency_ms = 0.2 * latency + 0.8 * stats.avg_latency_ms;
-                }
-
-                if latency < stats.min_latency_ms {
-                    stats.min_latency_ms = latency;
-                }
-                if latency > stats.max_latency_ms {
-                    stats.max_latency_ms = latency;
-                }
-            }
-
-            // Update tokens
-            stats.total_tokens += outcome.total_tokens as u64;
-            if stats.total_requests > 0 {
-                stats.avg_tokens = stats.total_tokens as f64 / stats.total_requests as f64;
-            }
+            Self::update_bucket_stats(stats, outcome);
         }
     }
 
@@ -691,5 +666,188 @@ mod tests {
 
         stats.update(&outcome);
         assert_eq!(stats.overall.fallback_count, 1);
+    }
+
+    // ========================================
+    // Compound Weekend/Weekday Bucket Tests
+    // ========================================
+
+    #[test]
+    fn test_compound_buckets_isolate_weekday_peak() {
+        // Monday 10:00 UTC -> weekday + peak
+        let ts = DateTime::parse_from_rfc3339("2026-03-09T10:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let buckets = TimeBucket::from_timestamp(ts);
+        assert!(
+            buckets.contains(&TimeBucket::WeekdayPeak),
+            "Monday 10am should be WeekdayPeak"
+        );
+        assert!(!buckets.contains(&TimeBucket::WeekdayOffPeak));
+        assert!(!buckets.contains(&TimeBucket::WeekendPeak));
+        assert!(!buckets.contains(&TimeBucket::WeekendOffPeak));
+    }
+
+    #[test]
+    fn test_compound_buckets_isolate_weekday_offpeak() {
+        // Tuesday 03:00 UTC -> weekday + off-peak
+        let ts = DateTime::parse_from_rfc3339("2026-03-10T03:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let buckets = TimeBucket::from_timestamp(ts);
+        assert!(
+            buckets.contains(&TimeBucket::WeekdayOffPeak),
+            "Tuesday 3am should be WeekdayOffPeak"
+        );
+        assert!(!buckets.contains(&TimeBucket::WeekdayPeak));
+        assert!(!buckets.contains(&TimeBucket::WeekendPeak));
+        assert!(!buckets.contains(&TimeBucket::WeekendOffPeak));
+    }
+
+    #[test]
+    fn test_compound_buckets_isolate_weekend_peak() {
+        // Saturday 14:00 UTC -> weekend + peak
+        let ts = DateTime::parse_from_rfc3339("2026-03-14T14:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let buckets = TimeBucket::from_timestamp(ts);
+        assert!(
+            buckets.contains(&TimeBucket::WeekendPeak),
+            "Saturday 2pm should be WeekendPeak"
+        );
+        assert!(!buckets.contains(&TimeBucket::WeekendOffPeak));
+        assert!(!buckets.contains(&TimeBucket::WeekdayPeak));
+        assert!(!buckets.contains(&TimeBucket::WeekdayOffPeak));
+    }
+
+    #[test]
+    fn test_compound_buckets_isolate_weekend_offpeak() {
+        // Sunday 02:00 UTC -> weekend + off-peak
+        let ts = DateTime::parse_from_rfc3339("2026-03-15T02:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let buckets = TimeBucket::from_timestamp(ts);
+        assert!(
+            buckets.contains(&TimeBucket::WeekendOffPeak),
+            "Sunday 2am should be WeekendOffPeak"
+        );
+        assert!(!buckets.contains(&TimeBucket::WeekendPeak));
+        assert!(!buckets.contains(&TimeBucket::WeekdayPeak));
+        assert!(!buckets.contains(&TimeBucket::WeekdayOffPeak));
+    }
+
+    #[test]
+    fn test_weekday_peak_boundary_hours() {
+        // Monday 08:59 -> weekday off-peak (just before peak)
+        let ts = DateTime::parse_from_rfc3339("2026-03-09T08:59:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let buckets = TimeBucket::from_timestamp(ts);
+        assert!(buckets.contains(&TimeBucket::WeekdayOffPeak));
+        assert!(buckets.contains(&TimeBucket::OffPeak));
+
+        // Monday 09:00 -> weekday peak (peak starts)
+        let ts = DateTime::parse_from_rfc3339("2026-03-09T09:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let buckets = TimeBucket::from_timestamp(ts);
+        assert!(buckets.contains(&TimeBucket::WeekdayPeak));
+        assert!(buckets.contains(&TimeBucket::Peak));
+
+        // Monday 20:59 -> weekday peak (just before off-peak)
+        let ts = DateTime::parse_from_rfc3339("2026-03-09T20:59:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let buckets = TimeBucket::from_timestamp(ts);
+        assert!(buckets.contains(&TimeBucket::WeekdayPeak));
+
+        // Monday 21:00 -> weekday off-peak (off-peak starts)
+        let ts = DateTime::parse_from_rfc3339("2026-03-09T21:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let buckets = TimeBucket::from_timestamp(ts);
+        assert!(buckets.contains(&TimeBucket::WeekdayOffPeak));
+    }
+
+    #[test]
+    fn test_stats_recorded_to_correct_compound_buckets() {
+        let mut stats = RouteStatistics::new("route-1".to_string());
+
+        // Record a weekday peak event (Monday 10am)
+        let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 200, 300, 200);
+        let ts = DateTime::parse_from_rfc3339("2026-03-09T10:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let mut outcome_wp = outcome.clone();
+        outcome_wp.timestamp = ts;
+        stats.update(&outcome_wp);
+
+        // Record a weekend off-peak event (Sunday 2am)
+        let mut outcome_wo = outcome.clone();
+        outcome_wo.timestamp = DateTime::parse_from_rfc3339("2026-03-15T02:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        stats.update(&outcome_wo);
+
+        // Verify compound buckets are independently populated
+        assert_eq!(
+            stats
+                .get_bucket_stats(&TimeBucket::WeekdayPeak)
+                .unwrap()
+                .total_requests,
+            1,
+            "WeekdayPeak should have exactly 1 request"
+        );
+        assert_eq!(
+            stats
+                .get_bucket_stats(&TimeBucket::WeekendOffPeak)
+                .unwrap()
+                .total_requests,
+            1,
+            "WeekendOffPeak should have exactly 1 request"
+        );
+        // Verify compound buckets that had no events return None or 0
+        assert!(
+            stats
+                .get_bucket_stats(&TimeBucket::WeekdayOffPeak)
+                .map(|s| s.total_requests)
+                .unwrap_or(0)
+                == 0,
+            "WeekdayOffPeak should have 0 requests"
+        );
+        assert!(
+            stats
+                .get_bucket_stats(&TimeBucket::WeekendPeak)
+                .map(|s| s.total_requests)
+                .unwrap_or(0)
+                == 0,
+            "WeekendPeak should have 0 requests"
+        );
+
+        // Verify parent buckets aggregate correctly
+        assert_eq!(
+            stats
+                .get_bucket_stats(&TimeBucket::Weekday)
+                .unwrap()
+                .total_requests,
+            1,
+            "Weekday should aggregate all weekday requests"
+        );
+        assert_eq!(
+            stats
+                .get_bucket_stats(&TimeBucket::Weekend)
+                .unwrap()
+                .total_requests,
+            1,
+            "Weekend should aggregate all weekend requests"
+        );
+        assert_eq!(
+            stats
+                .get_bucket_stats(&TimeBucket::Peak)
+                .unwrap()
+                .total_requests,
+            1,
+            "Peak should aggregate all peak requests"
+        );
     }
 }
