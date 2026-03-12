@@ -149,12 +149,6 @@ impl Router {
         self
     }
 
-    /// Set session ID for affinity
-    pub fn set_session_id(&mut self, _session_id: String) {
-        // Session affinity is handled during planning
-        // This is a placeholder for future implementation
-    }
-
     /// Plan a route for the given request
     ///
     /// # Arguments
@@ -201,6 +195,16 @@ impl Router {
         } else {
             self.select_best(&candidates_with_utility).await
         };
+
+        // Record session affinity after selection
+        if self.config.enable_session_affinity {
+            if let (Some(sid), Some(ref route)) = (session_id, &selected) {
+                let _ = self
+                    .session_manager
+                    .set_provider(sid.to_string(), route.provider.clone())
+                    .await;
+            }
+        }
 
         // Step 5: Generate fallback routes
         let primary_id = selected.as_ref().map(|s| s.credential_id.clone());
@@ -1102,6 +1106,99 @@ mod tests {
         assert!(
             plan.fallbacks.len() <= 2,
             "Should return available auths as fallbacks, not min_fallbacks"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_session_affinity_records_provider_after_routing() {
+        let config = RouterConfig {
+            use_bandit: false,
+            enable_session_affinity: true,
+            ..Default::default()
+        };
+        let mut router = Router::with_config(config);
+        router.add_credential("cred-1".to_string(), vec!["model-a".to_string()]);
+        router.set_model(
+            "model-a".to_string(),
+            create_test_model("model-a", "provider-a", 200000),
+        );
+
+        let request = create_test_request(1000);
+        let auths = vec![create_test_auth("cred-1")];
+
+        router.metrics().initialize_auth("cred-1").await;
+
+        let session_id = "affinity-test-session";
+
+        // Before planning, no affinity exists
+        assert!(
+            !router.session_manager().has_affinity(session_id).await,
+            "Should have no affinity before first plan call"
+        );
+
+        // Plan with session_id
+        let plan = router.plan(&request, auths, Some(session_id)).await;
+        assert!(plan.primary.is_some());
+
+        // After planning, affinity should be recorded
+        assert!(
+            router.session_manager().has_affinity(session_id).await,
+            "Should record session affinity after plan with session_id"
+        );
+
+        let preferred = router
+            .session_manager()
+            .get_preferred_provider(session_id)
+            .await;
+        assert_eq!(
+            preferred,
+            Some("provider-a".to_string()),
+            "Should record the selected provider in session affinity"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_session_affinity_prefers_cached_provider_over_higher_utility() {
+        let config = RouterConfig {
+            use_bandit: false,
+            enable_session_affinity: true,
+            ..Default::default()
+        };
+        let mut router = Router::with_config(config);
+        router.add_credential("cred-1".to_string(), vec!["model-a".to_string()]);
+        router.add_credential("cred-2".to_string(), vec!["model-b".to_string()]);
+        router.set_model(
+            "model-a".to_string(),
+            create_test_model("model-a", "provider-a", 128000),
+        );
+        router.set_model(
+            "model-b".to_string(),
+            create_test_model("model-b", "provider-b", 200000),
+        );
+
+        let request = create_test_request(1000);
+        let auths = vec![create_test_auth("cred-1"), create_test_auth("cred-2")];
+
+        router.metrics().initialize_auth("cred-1").await;
+        router.metrics().initialize_auth("cred-2").await;
+
+        let session_id = "sticky-session";
+
+        // Seed session affinity with provider-a (lower utility due to smaller context)
+        router
+            .session_manager()
+            .set_provider(session_id.to_string(), "provider-a".to_string())
+            .await
+            .unwrap();
+
+        // Plan with session: should prefer provider-a despite provider-b having higher utility
+        let plan = router.plan(&request, auths, Some(session_id)).await;
+        assert!(plan.primary.is_some());
+        let primary = plan.primary.unwrap();
+
+        assert_eq!(
+            primary.provider, "provider-a",
+            "Session affinity should prefer cached provider over higher utility alternative"
         );
     }
 }
