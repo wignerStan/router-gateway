@@ -102,32 +102,38 @@ impl ContextWindowCategory {
 pub enum ProviderCategory {
     // Major Cloud Providers
     Anthropic,
+    #[serde(rename = "openai")]
     OpenAI,
     Google,
 
     // Emerging AI Companies
-    XAI,        // xAI Grok
-    DeepSeek,   // DeepSeek
+    #[serde(rename = "xai")]
+    XAI, // xAI Grok
+    #[serde(rename = "deepseek")]
+    DeepSeek, // DeepSeek
     Mistral,    // Mistral AI
     Cohere,     // Cohere
     Perplexity, // Perplexity AI
 
     // Chinese Providers
-    Alibaba,   // Qwen/Tongyi
-    Zhipu,     // GLM/ChatGLM
-    Baidu,     // ERNIE/Wenxin
-    Moonshot,  // Kimi
+    Alibaba,  // Qwen/Tongyi
+    Zhipu,    // GLM/ChatGLM
+    Baidu,    // ERNIE/Wenxin
+    Moonshot, // Kimi
+    #[serde(rename = "bytedance")]
     ByteDance, // Doubao
 
     // Open Source / Community
-    Meta,       // Llama
-    MetaLlama,  // Alias for Meta
+    Meta, // Llama
+    #[serde(rename = "meta-llama")]
+    MetaLlama, // Alias for Meta
     Databricks, // Dolly
-    Stability,  // Stable LM
+    Stability, // Stable LM
 
     // Cloud Platforms
-    Amazon,   // AWS Bedrock
-    Azure,    // Azure OpenAI
+    Amazon, // AWS Bedrock
+    Azure,  // Azure OpenAI
+    #[serde(rename = "vertexai")]
     VertexAI, // GCP Vertex AI (alias for Google)
 
     // Other

@@ -5,6 +5,17 @@ pub use crate::categories::{
     CapabilityCategory, ContextWindowCategory, CostCategory, ProviderCategory, TierCategory,
 };
 
+/// Error type for policy loading operations
+#[derive(Debug, thiserror::Error)]
+pub enum PolicyLoadError {
+    #[error("I/O error: {0}")]
+    Io(String),
+    #[error("parse error: {0}")]
+    Parse(String),
+    #[error("schema validation failed: {0}")]
+    Schema(String),
+}
+
 /// Routing policy that combines multiple dimension filters
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RoutingPolicy {
