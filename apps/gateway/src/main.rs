@@ -90,13 +90,10 @@ async fn main() -> anyhow::Result<()> {
 fn load_config() -> anyhow::Result<GatewayConfig> {
     // Try to load from GATEWAY_CONFIG env var or default paths
     let config_path = std::env::var("GATEWAY_CONFIG").ok().or_else(|| {
-        // Check for common config file locations
-        for path in ["./gateway.yaml", "./config/gateway.yaml", "./gateway.yml"] {
-            if std::path::Path::new(path).exists() {
-                return Some(path.to_string());
-            }
-        }
-        None
+        ["./gateway.yaml", "./config/gateway.yaml", "./gateway.yml"]
+            .iter()
+            .find(|path| std::path::Path::new(path).exists())
+            .map(|path| path.to_string())
     });
 
     match config_path {
