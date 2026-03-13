@@ -3,6 +3,15 @@ use chrono::{DateTime, Datelike, Duration, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Smoothing factor for Exponentially Weighted Moving Average (EWMA) latency.
+const EWMA_ALPHA: f64 = 0.2;
+
+/// Start of peak hours (inclusive, 9 AM local time).
+const PEAK_HOUR_START: u32 = 9;
+
+/// End of peak hours (exclusive, 9 PM local time).
+const PEAK_HOUR_END: u32 = 21;
+
 /// Time bucket for statistics aggregation
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum TimeBucket {
@@ -31,9 +40,9 @@ pub enum TimeBucket {
 impl TimeBucket {
     /// Get time bucket from timestamp
     pub fn from_timestamp(timestamp: DateTime<Utc>) -> Vec<TimeBucket> {
-        let hour = timestamp.hour() as u8;
+        let hour = timestamp.hour();
         let weekday = timestamp.weekday().num_days_from_sunday() as u8;
-        let is_peak = (9..21).contains(&hour);
+        let is_peak = (PEAK_HOUR_START..PEAK_HOUR_END).contains(&hour);
         let is_weekend = weekday == 0 || weekday == 6;
 
         let mut buckets = Vec::new();
@@ -61,7 +70,7 @@ impl TimeBucket {
         }
 
         // Specific hour
-        buckets.push(TimeBucket::Hour(hour));
+        buckets.push(TimeBucket::Hour(hour as u8));
 
         // Specific day
         buckets.push(TimeBucket::DayOfWeek(weekday));
@@ -72,7 +81,7 @@ impl TimeBucket {
     /// Get peak/off-peak bucket
     pub fn peak_off_peak(timestamp: DateTime<Utc>) -> TimeBucket {
         let hour = timestamp.hour();
-        if (9..21).contains(&hour) {
+        if (PEAK_HOUR_START..PEAK_HOUR_END).contains(&hour) {
             TimeBucket::Peak
         } else {
             TimeBucket::OffPeak
@@ -188,8 +197,8 @@ fn update_bucket_stats(stats: &mut BucketStatistics, outcome: &ExecutionOutcome)
         if stats.avg_latency_ms == 0.0 {
             stats.avg_latency_ms = latency;
         } else {
-            // EWMA with alpha = 0.2
-            stats.avg_latency_ms = 0.2 * latency + 0.8 * stats.avg_latency_ms;
+            // EWMA smoothing
+            stats.avg_latency_ms = EWMA_ALPHA * latency + (1.0 - EWMA_ALPHA) * stats.avg_latency_ms;
         }
 
         if latency < stats.min_latency_ms {
@@ -799,20 +808,18 @@ mod tests {
             "WeekendOffPeak should have exactly 1 request"
         );
         // Verify compound buckets that had no events return None or 0
-        assert!(
+        assert_eq!(
             stats
                 .get_bucket_stats(&TimeBucket::WeekdayOffPeak)
-                .map(|s| s.total_requests)
-                .unwrap_or(0)
-                == 0,
+                .map_or(0, |s| s.total_requests),
+            0,
             "WeekdayOffPeak should have 0 requests"
         );
-        assert!(
+        assert_eq!(
             stats
                 .get_bucket_stats(&TimeBucket::WeekendPeak)
-                .map(|s| s.total_requests)
-                .unwrap_or(0)
-                == 0,
+                .map_or(0, |s| s.total_requests),
+            0,
             "WeekendPeak should have 0 requests"
         );
 
