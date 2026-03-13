@@ -41,6 +41,7 @@ impl Default for FallbackConfig {
 }
 
 /// Fallback planner for generating ordered fallback routes
+#[derive(Debug, Clone)]
 pub struct FallbackPlanner {
     config: FallbackConfig,
 }
@@ -95,8 +96,12 @@ impl FallbackPlanner {
             return Vec::new();
         }
 
-        // Sort by weight (descending) - highest weight first
-        weighted_auths.sort_by(|a, b| b.weight.partial_cmp(&a.weight).unwrap());
+        // Sort by weight (descending) - highest weight first (NaN-safe)
+        weighted_auths.sort_by(|a, b| {
+            b.weight
+                .partial_cmp(&a.weight)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Apply provider diversity if enabled
         if self.config.enable_provider_diversity {
@@ -248,12 +253,11 @@ impl FallbackPlanner {
         }
 
         // Fallback: first segment
-        let first = auth_id.split(&['-', '_', ':'][..]).next()?;
-        if first.is_empty() {
-            None
-        } else {
-            Some(first.to_string())
-        }
+        auth_id
+            .split(&['-', '_', ':'])
+            .next()
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
     }
 
     /// Get config
