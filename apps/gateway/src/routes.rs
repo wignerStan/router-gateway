@@ -490,6 +490,22 @@ mod integration_tests {
     use std::time::Instant;
     use tower::ServiceExt;
 
+    const MAX_RESPONSE_BYTES: usize = 4096;
+
+    const ERR_INVALID_REQUEST: &str = "invalid_request_error";
+    const ERR_CONFIG_ERROR: &str = "config_error";
+    const ERR_RATE_LIMIT: &str = "rate_limit_error";
+    const ERR_NO_ROUTE: &str = "no_route_available";
+
+    async fn read_json_body<T: serde::de::DeserializeOwned>(
+        response: axum::response::Response,
+    ) -> T {
+        let body_bytes = axum::body::to_bytes(response.into_body(), MAX_RESPONSE_BYTES)
+            .await
+            .expect("response body should be readable");
+        serde_json::from_slice(&body_bytes).expect("response body should be valid JSON")
+    }
+
     fn create_test_state() -> AppState {
         AppState {
             config: GatewayConfig::default(),
@@ -534,10 +550,7 @@ mod integration_tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(response.into_body(), 2048)
-            .await
-            .unwrap();
-        let list: Value = serde_json::from_slice(&body).unwrap();
+        let list: serde_json::Value = read_json_body(response).await;
         assert_eq!(list["count"], 1);
         assert_eq!(list["models"][0]["id"], "gpt-4");
     }
@@ -561,10 +574,7 @@ mod integration_tests {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), 1024)
-            .await
-            .unwrap();
-        let health: HealthStatus = serde_json::from_slice(&body).unwrap();
+        let health: HealthStatus = read_json_body(response).await;
 
         assert_eq!(health.status, "healthy");
         // uptime_secs can be 0 if the server started very recently
@@ -683,13 +693,13 @@ mod integration_tests {
 
         assert_eq!(headers.get("X-Content-Type-Options").unwrap(), "nosniff");
         assert_eq!(headers.get("X-Frame-Options").unwrap(), "DENY");
-        assert!(
-            headers.get("Referrer-Policy").is_some(),
-            "Referrer-Policy header should be set"
+        assert_eq!(
+            headers.get("Referrer-Policy").unwrap(),
+            "strict-origin-when-cross-origin"
         );
-        assert!(
-            headers.get("Content-Security-Policy").is_some(),
-            "Content-Security-Policy header should be set"
+        assert_eq!(
+            headers.get("Content-Security-Policy").unwrap(),
+            "default-src 'none'; frame-ancestors 'none'"
         );
     }
 
@@ -750,7 +760,10 @@ mod integration_tests {
 
     /// Register models in the router's candidate builder so that
     /// `build_candidates()` can produce route candidates from credentials.
-    fn register_models_in_state(state: &mut AppState) {
+    fn register_models_in_state(
+        state: &mut AppState,
+        caps: smart_routing::classification::RequiredCapabilities,
+    ) {
         for cred in &state.config.credentials {
             for model_id in &cred.allowed_models {
                 state.router.set_model(
@@ -764,10 +777,10 @@ mod integration_tests {
                         input_price_per_million: 1.0,
                         output_price_per_million: 2.0,
                         capabilities: ModelCapabilities {
-                            streaming: true,
-                            tools: true,
-                            vision: true,
-                            thinking: false,
+                            streaming: caps.streaming,
+                            tools: caps.tools,
+                            vision: caps.vision,
+                            thinking: caps.thinking,
                         },
                         rate_limits: RateLimits {
                             requests_per_minute: 60,
@@ -778,6 +791,18 @@ mod integration_tests {
                 );
             }
         }
+    }
+
+    fn register_models_in_state_all(state: &mut AppState) {
+        register_models_in_state(
+            state,
+            smart_routing::classification::RequiredCapabilities {
+                vision: true,
+                tools: true,
+                streaming: true,
+                thinking: false,
+            },
+        );
     }
 
     // ----------------------------------------------------------------
@@ -792,7 +817,6 @@ mod integration_tests {
         use super::*;
         use axum::body::Body;
         use axum::http::{Request, StatusCode};
-        use serde_json::Value;
         use tower::ServiceExt;
 
         #[tokio::test]
@@ -809,10 +833,7 @@ mod integration_tests {
             let response = app.oneshot(request).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK);
 
-            let body_bytes = axum::body::to_bytes(response.into_body(), 4096)
-                .await
-                .unwrap();
-            let value: Value = serde_json::from_slice(&body_bytes).unwrap();
+            let value = read_json_body::<serde_json::Value>(response).await;
 
             assert_eq!(value["name"], "Gateway API");
             assert_eq!(value["version"], "0.1.0");
@@ -840,10 +861,7 @@ mod integration_tests {
             let response = app.oneshot(request).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK);
 
-            let body_bytes = axum::body::to_bytes(response.into_body(), 4096)
-                .await
-                .unwrap();
-            let health: HealthStatus = serde_json::from_slice(&body_bytes).unwrap();
+            let health: HealthStatus = read_json_body(response).await;
 
             assert_eq!(health.status, "healthy");
             // uptime_secs is u64, always >= 0
@@ -884,10 +902,7 @@ mod integration_tests {
                 .insert(axum::extract::ConnectInfo(test_addr));
 
             let response = app.oneshot(request).await.unwrap();
-            let body_bytes = axum::body::to_bytes(response.into_body(), 4096)
-                .await
-                .unwrap();
-            let health: HealthStatus = serde_json::from_slice(&body_bytes).unwrap();
+            let health: HealthStatus = read_json_body(response).await;
 
             assert_eq!(health.credential_count, 2);
             assert_eq!(health.healthy_count, 2);
@@ -930,10 +945,7 @@ mod integration_tests {
                 .insert(axum::extract::ConnectInfo(test_addr));
 
             let response = app.oneshot(request).await.unwrap();
-            let body_bytes = axum::body::to_bytes(response.into_body(), 4096)
-                .await
-                .unwrap();
-            let health: HealthStatus = serde_json::from_slice(&body_bytes).unwrap();
+            let health: HealthStatus = read_json_body(response).await;
 
             assert_eq!(health.credential_count, 3);
             assert_eq!(health.healthy_count, 3);
@@ -970,7 +982,6 @@ mod integration_tests {
         use super::*;
         use axum::body::Body;
         use axum::http::{Request, StatusCode};
-        use serde_json::Value;
         use tower::ServiceExt;
 
         #[tokio::test]
@@ -1010,11 +1021,8 @@ mod integration_tests {
             let response = app.oneshot(request).await.unwrap();
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
-            let body_bytes = axum::body::to_bytes(response.into_body(), 4096)
-                .await
-                .unwrap();
-            let value: Value = serde_json::from_slice(&body_bytes).unwrap();
-            assert_eq!(value["error"]["type"], "invalid_request_error");
+            let value = read_json_body::<serde_json::Value>(response).await;
+            assert_eq!(value["error"]["type"], ERR_INVALID_REQUEST);
             assert!(value["error"]["message"]
                 .as_str()
                 .unwrap()
@@ -1038,10 +1046,7 @@ mod integration_tests {
             let response = app.oneshot(request).await.unwrap();
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
-            let body_bytes = axum::body::to_bytes(response.into_body(), 4096)
-                .await
-                .unwrap();
-            let value: Value = serde_json::from_slice(&body_bytes).unwrap();
+            let value = read_json_body::<serde_json::Value>(response).await;
             assert!(value["error"]["message"]
                 .as_str()
                 .unwrap()
@@ -1066,10 +1071,7 @@ mod integration_tests {
             let response = app.oneshot(request).await.unwrap();
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
-            let body_bytes = axum::body::to_bytes(response.into_body(), 4096)
-                .await
-                .unwrap();
-            let value: Value = serde_json::from_slice(&body_bytes).unwrap();
+            let value = read_json_body::<serde_json::Value>(response).await;
             assert!(value["error"]["message"]
                 .as_str()
                 .unwrap()
@@ -1097,11 +1099,8 @@ mod integration_tests {
             let response = app.oneshot(request).await.unwrap();
             assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
-            let body_bytes = axum::body::to_bytes(response.into_body(), 4096)
-                .await
-                .unwrap();
-            let value: Value = serde_json::from_slice(&body_bytes).unwrap();
-            assert_eq!(value["error"]["type"], "config_error");
+            let value = read_json_body::<serde_json::Value>(response).await;
+            assert_eq!(value["error"]["type"], ERR_CONFIG_ERROR);
         }
 
         #[tokio::test]
@@ -1131,19 +1130,10 @@ mod integration_tests {
         use super::*;
         use axum::body::Body;
         use axum::http::{Request, StatusCode};
-        use serde_json::Value;
         use tower::ServiceExt;
 
-        #[tokio::test]
-        async fn test_allows_requests_under_limit() {
-            let state = create_test_state_overrides(TestOverrides {
-                rate_limit: Some(5),
-                ..Default::default()
-            });
-            let app = build_full_app(state);
-            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
-
-            for _ in 0..5 {
+        async fn exhaust_rate_limit(app: &Router, test_addr: SocketAddr, limit: usize) {
+            for _ in 0..limit {
                 let mut request = Request::builder()
                     .uri("/health")
                     .body(Body::empty())
@@ -1157,6 +1147,18 @@ mod integration_tests {
         }
 
         #[tokio::test]
+        async fn test_allows_requests_under_limit() {
+            let state = create_test_state_overrides(TestOverrides {
+                rate_limit: Some(5),
+                ..Default::default()
+            });
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            exhaust_rate_limit(&app, test_addr, 5).await;
+        }
+
+        #[tokio::test]
         async fn test_blocks_requests_over_limit() {
             let state = create_test_state_overrides(TestOverrides {
                 rate_limit: Some(5),
@@ -1165,16 +1167,7 @@ mod integration_tests {
             let app = build_full_app(state);
             let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-            for _ in 0..5 {
-                let mut request = Request::builder()
-                    .uri("/health")
-                    .body(Body::empty())
-                    .unwrap();
-                request
-                    .extensions_mut()
-                    .insert(axum::extract::ConnectInfo(test_addr));
-                let _ = app.clone().oneshot(request).await.unwrap();
-            }
+            exhaust_rate_limit(&app, test_addr, 5).await;
 
             let mut request = Request::builder()
                 .uri("/health")
@@ -1186,11 +1179,8 @@ mod integration_tests {
             let response = app.oneshot(request).await.unwrap();
             assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 
-            let body_bytes = axum::body::to_bytes(response.into_body(), 4096)
-                .await
-                .unwrap();
-            let value: Value = serde_json::from_slice(&body_bytes).unwrap();
-            assert_eq!(value["error"]["type"], "rate_limit_error");
+            let value = read_json_body::<serde_json::Value>(response).await;
+            assert_eq!(value["error"]["type"], ERR_RATE_LIMIT);
         }
 
         #[tokio::test]
@@ -1243,14 +1233,7 @@ mod integration_tests {
             let app = build_full_app(state);
             let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-            let mut request = Request::builder()
-                .uri("/health")
-                .body(Body::empty())
-                .unwrap();
-            request
-                .extensions_mut()
-                .insert(axum::extract::ConnectInfo(test_addr));
-            let _ = app.clone().oneshot(request).await.unwrap();
+            exhaust_rate_limit(&app, test_addr, 1).await;
 
             let mut request = Request::builder()
                 .uri("/health")
@@ -1262,12 +1245,9 @@ mod integration_tests {
             let response = app.oneshot(request).await.unwrap();
             assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 
-            let body_bytes = axum::body::to_bytes(response.into_body(), 4096)
-                .await
-                .unwrap();
-            let value: Value = serde_json::from_slice(&body_bytes).unwrap();
+            let value = read_json_body::<serde_json::Value>(response).await;
 
-            assert_eq!(value["error"]["type"], "rate_limit_error");
+            assert_eq!(value["error"]["type"], ERR_RATE_LIMIT);
             assert!(value["error"]["message"]
                 .as_str()
                 .unwrap()
@@ -1283,15 +1263,7 @@ mod integration_tests {
             let app = build_full_app(state);
             let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-            let mut request = Request::builder()
-                .uri("/health")
-                .body(Body::empty())
-                .unwrap();
-            request
-                .extensions_mut()
-                .insert(axum::extract::ConnectInfo(test_addr));
-            let response = app.clone().oneshot(request).await.unwrap();
-            assert_eq!(response.status(), StatusCode::OK);
+            exhaust_rate_limit(&app, test_addr, 1).await;
 
             let mut request = Request::builder()
                 .uri("/health")
@@ -1316,7 +1288,7 @@ mod integration_tests {
         use super::*;
         use axum::body::Body;
         use axum::http::{Request, StatusCode};
-        use serde_json::{json, Value};
+        use serde_json::json;
         use tower::ServiceExt;
 
         #[tokio::test]
@@ -1408,13 +1380,10 @@ mod integration_tests {
             let response = app.oneshot(request).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK);
 
-            let body_bytes = axum::body::to_bytes(response.into_body(), 4096)
-                .await
-                .unwrap();
-            let value: Value = serde_json::from_slice(&body_bytes).unwrap();
+            let value = read_json_body::<serde_json::Value>(response).await;
 
             assert!(value["models"].is_array());
-            assert!(value["models"].as_array().unwrap().len() >= 1);
+            assert!(!value["models"].as_array().unwrap().is_empty());
             assert_eq!(value["count"], 1);
         }
     }
@@ -1423,7 +1392,7 @@ mod integration_tests {
         use super::*;
         use axum::body::Body;
         use axum::http::{Request, StatusCode};
-        use serde_json::{json, Value};
+        use serde_json::json;
         use tower::ServiceExt;
 
         fn chat_request_body() -> Body {
@@ -1473,11 +1442,8 @@ mod integration_tests {
             let response = app.oneshot(make_chat_request(test_addr)).await.unwrap();
             assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
-            let body_bytes = axum::body::to_bytes(response.into_body(), 4096)
-                .await
-                .unwrap();
-            let value: Value = serde_json::from_slice(&body_bytes).unwrap();
-            assert_eq!(value["error"]["type"], "no_route_available");
+            let value = read_json_body::<serde_json::Value>(response).await;
+            assert_eq!(value["error"]["type"], ERR_NO_ROUTE);
             assert!(value["error"]["message"]
                 .as_str()
                 .unwrap()
@@ -1496,12 +1462,9 @@ mod integration_tests {
             let response = app.oneshot(make_chat_request(test_addr)).await.unwrap();
             assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
-            let body_bytes = axum::body::to_bytes(response.into_body(), 4096)
-                .await
-                .unwrap();
-            let value: Value = serde_json::from_slice(&body_bytes).unwrap();
+            let value = read_json_body::<serde_json::Value>(response).await;
 
-            assert_eq!(value["error"]["type"], "no_route_available");
+            assert_eq!(value["error"]["type"], ERR_NO_ROUTE);
         }
 
         #[tokio::test]
@@ -1516,17 +1479,14 @@ mod integration_tests {
                 }],
                 ..Default::default()
             });
-            register_models_in_state(&mut state);
+            register_models_in_state_all(&mut state);
             let app = build_full_app(state);
             let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
             let response = app.oneshot(make_chat_request(test_addr)).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK);
 
-            let body_bytes = axum::body::to_bytes(response.into_body(), 4096)
-                .await
-                .unwrap();
-            let value: Value = serde_json::from_slice(&body_bytes).unwrap();
+            let value = read_json_body::<serde_json::Value>(response).await;
 
             let gw = &value["_gateway"];
             assert!(gw.is_object(), "Expected _gateway object in response");
@@ -1553,17 +1513,14 @@ mod integration_tests {
                 }],
                 ..Default::default()
             });
-            register_models_in_state(&mut state);
+            register_models_in_state_all(&mut state);
             let app = build_full_app(state);
             let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
             let response = app.oneshot(make_chat_request(test_addr)).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK);
 
-            let body_bytes = axum::body::to_bytes(response.into_body(), 4096)
-                .await
-                .unwrap();
-            let value: Value = serde_json::from_slice(&body_bytes).unwrap();
+            let value = read_json_body::<serde_json::Value>(response).await;
 
             let caps = &value["_gateway"]["classification"]["capabilities"];
             assert_eq!(caps["vision"], false);
@@ -1576,19 +1533,18 @@ mod integration_tests {
         use super::*;
         use axum::body::Body;
         use axum::http::{Request, StatusCode};
-        use serde_json::Value;
         use tower::ServiceExt;
 
         fn check_security_headers(headers: &axum::http::HeaderMap) {
             assert_eq!(headers.get("X-Content-Type-Options").unwrap(), "nosniff");
             assert_eq!(headers.get("X-Frame-Options").unwrap(), "DENY");
-            assert!(
-                headers.get("Referrer-Policy").is_some(),
-                "Referrer-Policy header should be set"
+            assert_eq!(
+                headers.get("Referrer-Policy").unwrap(),
+                "strict-origin-when-cross-origin"
             );
-            assert!(
-                headers.get("Content-Security-Policy").is_some(),
-                "Content-Security-Policy header should be set"
+            assert_eq!(
+                headers.get("Content-Security-Policy").unwrap(),
+                "default-src 'none'; frame-ancestors 'none'"
             );
         }
 
@@ -1689,11 +1645,8 @@ mod integration_tests {
             let response = app.oneshot(request).await.unwrap();
             assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 
-            let body_bytes = axum::body::to_bytes(response.into_body(), 4096)
-                .await
-                .unwrap();
-            let value: Value = serde_json::from_slice(&body_bytes).unwrap();
-            assert_eq!(value["error"]["type"], "rate_limit_error");
+            let value = read_json_body::<serde_json::Value>(response).await;
+            assert_eq!(value["error"]["type"], ERR_RATE_LIMIT);
         }
     }
 }
