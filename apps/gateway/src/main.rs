@@ -183,6 +183,132 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
+mod test_helpers {
+    use super::*;
+    use crate::config::CredentialConfig;
+    use crate::state::DEFAULT_RATE_LIMIT;
+    use axum::Router;
+    use llm_tracing::MemoryTraceCollector;
+    use smart_routing::{
+        config::HealthConfig, executor::ExecutorConfig, health::HealthManager,
+        metrics::MetricsCollector,
+    };
+
+    /// Configurable fields for customizing test application state.
+    /// Fields set to `None` use sensible defaults.
+    pub(crate) struct TestOverrides {
+        pub auth_tokens: Vec<String>,
+        pub credentials: Vec<CredentialConfig>,
+        pub rate_limit: Option<u64>,
+    }
+
+    impl Default for TestOverrides {
+        fn default() -> Self {
+            Self {
+                auth_tokens: vec!["test-token".to_string()],
+                credentials: vec![],
+                rate_limit: None,
+            }
+        }
+    }
+
+    /// Builds an [`AppState`] from the given overrides, using sensible defaults
+    /// for any field not provided.
+    pub(crate) fn create_test_state(overrides: TestOverrides) -> AppState {
+        let mut config = GatewayConfig::default();
+        config.server.auth_tokens = overrides.auth_tokens;
+        config.credentials = overrides.credentials;
+
+        let smart_router =
+            config
+                .credentials
+                .iter()
+                .fold(SmartRouter::new(), |mut router, cred| {
+                    router.add_credential(cred.id.clone(), cred.allowed_models.clone());
+                    router
+                });
+
+        let metrics = MetricsCollector::new();
+        let health = HealthManager::new(HealthConfig::default());
+        let executor = Arc::new(RouteExecutor::new(
+            ExecutorConfig::default(),
+            metrics,
+            health,
+        ));
+        let classifier = Arc::new(DefaultRequestClassifier);
+
+        let collector = Arc::new(MemoryTraceCollector::with_default_size());
+        let tracing_mw = TracingMiddleware::new(collector);
+
+        let credentials: Vec<AuthInfo> = config
+            .credentials
+            .iter()
+            .map(|c| AuthInfo {
+                id: c.id.clone(),
+                priority: Some(c.priority),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: vec![],
+            })
+            .collect();
+
+        let rate_limit = overrides.rate_limit.unwrap_or(DEFAULT_RATE_LIMIT);
+        let rate_limiter = Arc::new(RateLimiter::new(rate_limit));
+
+        AppState {
+            config,
+            registry: ModelRegistry::default(),
+            router: smart_router,
+            executor,
+            classifier,
+            tracing: tracing_mw.clone(),
+            start_time: Instant::now(),
+            credentials,
+            rate_limiter,
+        }
+    }
+
+    /// Constructs the complete Axum router with all middleware layers in
+    /// production order, matching what [`main()`] builds. Returns a [`Router`]
+    /// for use with [`tower::ServiceExt::oneshot()`].
+    ///
+    /// Insert [`ConnectInfo<SocketAddr>`] into each test request's extensions
+    /// to satisfy the rate limiter's address extractor.
+    pub(crate) fn build_full_app(state: AppState) -> Router {
+        let public_routes = Router::new()
+            .route("/", axum::routing::get(root))
+            .route("/health", axum::routing::get(health_check));
+
+        let protected_routes = Router::new()
+            .route("/api/models", axum::routing::get(list_models))
+            .route("/api/route", axum::routing::get(route_request))
+            .route(
+                "/v1/chat/completions",
+                axum::routing::post(chat_completions),
+            )
+            .route_layer(middleware::from_fn_with_state(
+                state.clone(),
+                auth_middleware,
+            ));
+
+        Router::new()
+            .merge(public_routes)
+            .merge(protected_routes)
+            .layer(middleware::from_fn_with_state(
+                state.clone(),
+                rate_limit_middleware,
+            ))
+            .layer(middleware::from_fn(security_headers_middleware))
+            .layer(middleware::from_fn_with_state(
+                state.tracing.clone(),
+                llm_tracing::tracing_middleware,
+            ))
+            .layer(TraceLayer::new_for_http())
+            .with_state(state)
+    }
+}
+
 /// Load configuration from file or environment
 fn load_config() -> anyhow::Result<GatewayConfig> {
     // Try to load from GATEWAY_CONFIG env var or default paths
