@@ -12,6 +12,8 @@ pub struct BanditPolicy {
     config: BanditConfig,
     /// Route statistics: (successes, failures, pulls)
     route_stats: HashMap<String, RouteStats>,
+    /// Route tier mapping
+    route_tiers: HashMap<String, Tier>,
     /// Utility estimator for combining metrics
     utility_estimator: UtilityEstimator,
 }
@@ -60,6 +62,8 @@ pub struct BanditConfig {
     pub use_utility_weighting: bool,
     /// Decay factor for old samples (0-1)
     pub sample_decay: f64,
+    /// Optional tier-based priors (overrides prior_successes/prior_failures when tier is known)
+    pub tier_priors: Option<TierPriors>,
 }
 
 impl Default for BanditConfig {
@@ -72,10 +76,53 @@ impl Default for BanditConfig {
             min_samples_for_thompson: 5,
             use_utility_weighting: true,
             sample_decay: 0.99,
+            tier_priors: None,
         }
     }
 }
 
+/// Model tier for prior configuration
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+pub enum Tier {
+    /// Flagship models (highest quality)
+    Flagship,
+    /// Standard models
+    #[default]
+    Standard,
+    /// Fast models (lowest latency)
+    Fast,
+}
+
+/// Tier-specific prior configuration for Thompson sampling
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TierPriors {
+    /// (alpha, beta) for flagship tier - higher prior = more optimistic
+    pub flagship: (f64, f64),
+    /// (alpha, beta) for standard tier
+    pub standard: (f64, f64),
+    /// (alpha, beta) for fast tier - lower prior = less optimistic
+    pub fast: (f64, f64),
+}
+
+impl Default for TierPriors {
+    fn default() -> Self {
+        Self {
+            flagship: (5.0, 1.0), // Highly optimistic
+            standard: (2.0, 2.0), // Neutral
+            fast: (1.0, 3.0),     // Slightly pessimistic (favor speed over quality)
+        }
+    }
+}
+
+impl TierPriors {
+    fn get(&self, tier: &Tier) -> (f64, f64) {
+        match tier {
+            Tier::Flagship => self.flagship,
+            Tier::Standard => self.standard,
+            Tier::Fast => self.fast,
+        }
+    }
+}
 impl Default for BanditPolicy {
     fn default() -> Self {
         Self::new()
@@ -88,6 +135,7 @@ impl BanditPolicy {
         Self {
             config: BanditConfig::default(),
             route_stats: HashMap::new(),
+            route_tiers: HashMap::new(),
             utility_estimator: UtilityEstimator::new(),
         }
     }
@@ -97,6 +145,7 @@ impl BanditPolicy {
         Self {
             config,
             route_stats: HashMap::new(),
+            route_tiers: HashMap::new(),
             utility_estimator: UtilityEstimator::new(),
         }
     }
@@ -109,6 +158,7 @@ impl BanditPolicy {
         Self {
             config,
             route_stats: HashMap::new(),
+            route_tiers: HashMap::new(),
             utility_estimator,
         }
     }
@@ -182,27 +232,22 @@ impl BanditPolicy {
 
         match stats {
             None => {
-                // Unknown route: use optimistic prior
-                let alpha = self.config.prior_successes;
-                let beta = self.config.prior_failures;
+                let (alpha, beta) = self.get_prior(route_id);
+                self.sample_beta(alpha, beta)
+            },
+            Some(s) if s.pulls < self.config.min_samples_for_thompson => {
+                let (alpha, beta) = self.get_prior(route_id);
                 self.sample_beta(alpha, beta)
             },
             Some(s) => {
-                if s.pulls < self.config.min_samples_for_thompson {
-                    // Not enough samples: use optimistic prior
-                    let alpha = self.config.prior_successes;
-                    let beta = self.config.prior_failures;
-                    self.sample_beta(alpha, beta)
-                } else {
-                    // Use actual statistics
-                    let alpha = s.successes;
-                    let beta = s.failures;
+                // Use actual statistics
+                let alpha = s.successes;
+                let beta = s.failures;
 
-                    // Apply diversity penalty
-                    let base_sample = self.sample_beta(alpha, beta);
-                    let penalty = s.diversity_penalty * self.config.diversity_weight;
-                    (base_sample - penalty).max(0.0)
-                }
+                // Apply diversity penalty
+                let base_sample = self.sample_beta(alpha, beta);
+                let penalty = s.diversity_penalty * self.config.diversity_weight;
+                (base_sample - penalty).max(0.0)
             },
         }
     }
@@ -325,6 +370,19 @@ impl BanditPolicy {
     /// Reset all statistics
     pub fn reset_all(&mut self) {
         self.route_stats.clear();
+    }
+
+    /// Set the tier for a route (used for tier-based priors)
+    pub fn set_route_tier(&mut self, route_id: &str, tier: Tier) {
+        self.route_tiers.insert(route_id.to_string(), tier);
+    }
+
+    /// Get the prior (alpha, beta) for a route, considering tier if configured
+    fn get_prior(&self, route_id: &str) -> (f64, f64) {
+        self.route_tiers
+            .get(route_id)
+            .and_then(|tier| self.config.tier_priors.as_ref().map(|tp| tp.get(tier)))
+            .unwrap_or((self.config.prior_successes, self.config.prior_failures))
     }
 
     /// Get utility estimator
@@ -798,6 +856,157 @@ mod tests {
         assert!(
             mean > 0.7,
             "Mean with optimistic prior (10,2) should be high: {}",
+            mean
+        );
+    }
+
+    // ============================================================
+    // Tier-based Priors Tests
+    // ============================================================
+
+    #[test]
+    fn test_tier_priors_flagship_higher_than_fast() {
+        // Flagship tier should have higher mean prior than fast tier
+        let tier_priors = TierPriors::default();
+        let (f_alpha, f_beta) = tier_priors.flagship;
+        let (s_alpha, s_beta) = tier_priors.fast;
+
+        let flagship_mean = f_alpha / (f_alpha + f_beta);
+        let fast_mean = s_alpha / (s_alpha + s_beta);
+
+        assert!(
+            flagship_mean > fast_mean,
+            "Flagship prior mean ({}) should be > fast prior mean ({})",
+            flagship_mean,
+            fast_mean
+        );
+    }
+
+    #[test]
+    fn test_tier_priors_distribution_shapes_differ() {
+        let config = BanditConfig {
+            tier_priors: Some(TierPriors::default()),
+            min_samples_for_thompson: 100, // Always use priors
+            ..Default::default()
+        };
+        let mut policy = BanditPolicy::with_config(config);
+
+        policy.set_route_tier("flagship-route", Tier::Flagship);
+        policy.set_route_tier("fast-route", Tier::Fast);
+
+        // Sample many times and compare means
+        let flagship_samples: Vec<f64> = (0..500)
+            .map(|_| policy.thompson_sample("flagship-route"))
+            .collect();
+        let fast_samples: Vec<f64> = (0..500)
+            .map(|_| policy.thompson_sample("fast-route"))
+            .collect();
+
+        let flagship_mean: f64 =
+            flagship_samples.iter().sum::<f64>() / flagship_samples.len() as f64;
+        let fast_mean: f64 = fast_samples.iter().sum::<f64>() / fast_samples.len() as f64;
+
+        // Flagship should have significantly higher samples than fast
+        assert!(
+            flagship_mean > fast_mean + 0.2,
+            "Flagship mean ({}) should be at least 0.2 higher than fast mean ({})",
+            flagship_mean,
+            fast_mean
+        );
+    }
+
+    #[test]
+    fn test_tier_priors_none_uses_default() {
+        // Without tier_priors configured, all routes use default priors
+        let config = BanditConfig {
+            tier_priors: None,
+            prior_successes: 3.0,
+            prior_failures: 1.0,
+            min_samples_for_thompson: 100,
+            ..Default::default()
+        };
+        let mut policy = BanditPolicy::with_config(config);
+
+        policy.set_route_tier("flagship-route", Tier::Flagship);
+        policy.set_route_tier("fast-route", Tier::Fast);
+
+        // Both should sample from Beta(3,1) regardless of tier
+        let flagship_samples: Vec<f64> = (0..200)
+            .map(|_| policy.thompson_sample("flagship-route"))
+            .collect();
+        let fast_samples: Vec<f64> = (0..200)
+            .map(|_| policy.thompson_sample("fast-route"))
+            .collect();
+
+        let flagship_mean: f64 =
+            flagship_samples.iter().sum::<f64>() / flagship_samples.len() as f64;
+        let fast_mean: f64 = fast_samples.iter().sum::<f64>() / fast_samples.len() as f64;
+
+        // Both means should be close to 3/(3+1) = 0.75
+        assert!(
+            (flagship_mean - 0.75).abs() < 0.15,
+            "Flagship mean ({}) should be near 0.75 without tier priors",
+            flagship_mean
+        );
+        assert!(
+            (fast_mean - 0.75).abs() < 0.15,
+            "Fast mean ({}) should be near 0.75 without tier priors",
+            fast_mean
+        );
+    }
+
+    #[test]
+    fn test_tier_priors_no_tier_set_uses_default() {
+        // Route without tier set falls back to default priors
+        let config = BanditConfig {
+            tier_priors: Some(TierPriors::default()),
+            prior_successes: 2.0,
+            prior_failures: 2.0,
+            min_samples_for_thompson: 100,
+            ..Default::default()
+        };
+        let policy = BanditPolicy::with_config(config);
+
+        // "unknown-tier-route" has no tier set
+        let samples: Vec<f64> = (0..200)
+            .map(|_| policy.thompson_sample("unknown-tier-route"))
+            .collect();
+        let mean: f64 = samples.iter().sum::<f64>() / samples.len() as f64;
+
+        // Should use default prior (2,2) -> mean = 0.5
+        assert!(
+            (mean - 0.5).abs() < 0.15,
+            "Untiered route mean ({}) should be near 0.5 (default prior)",
+            mean
+        );
+    }
+
+    #[test]
+    fn test_tier_priors_after_enough_samples_uses_stats() {
+        // After enough samples, actual stats override priors
+        let config = BanditConfig {
+            tier_priors: Some(TierPriors::default()),
+            min_samples_for_thompson: 3,
+            ..Default::default()
+        };
+        let mut policy = BanditPolicy::with_config(config);
+
+        policy.set_route_tier("flagship-route", Tier::Flagship);
+
+        // Record failures only (contradicts flagship's optimistic prior)
+        for _ in 0..10 {
+            policy.record_result("flagship-route", false, 0.1);
+        }
+
+        let samples: Vec<f64> = (0..200)
+            .map(|_| policy.thompson_sample("flagship-route"))
+            .collect();
+        let mean: f64 = samples.iter().sum::<f64>() / samples.len() as f64;
+
+        // After many failures, samples should be low despite flagship prior
+        assert!(
+            mean < 0.5,
+            "After many failures, mean ({}) should be low despite flagship prior",
             mean
         );
     }

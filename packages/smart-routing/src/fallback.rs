@@ -41,6 +41,7 @@ impl Default for FallbackConfig {
 }
 
 /// Fallback planner for generating ordered fallback routes
+#[derive(Debug, Clone)]
 pub struct FallbackPlanner {
     config: FallbackConfig,
 }
@@ -95,8 +96,12 @@ impl FallbackPlanner {
             return Vec::new();
         }
 
-        // Sort by weight (descending) - highest weight first
-        weighted_auths.sort_by(|a, b| b.weight.partial_cmp(&a.weight).unwrap());
+        // Sort by weight (descending) - highest weight first (NaN-safe)
+        weighted_auths.sort_by(|a, b| {
+            b.weight
+                .partial_cmp(&a.weight)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Apply provider diversity if enabled
         if self.config.enable_provider_diversity {
@@ -222,22 +227,37 @@ impl FallbackPlanner {
         auths
     }
 
-    /// Extract provider from auth ID
+    /// Extract provider from auth ID using known provider patterns.
     ///
-    /// Expected formats:
-    /// - "provider-name" -> "provider"
-    /// - "provider-key" -> "provider"
-    /// - "provider-model-key" -> "provider"
+    /// Matches against a known provider list (longest prefix first).
+    /// Falls back to first-segment heuristic for unrecognized providers.
     fn extract_provider(&self, auth_id: &str) -> Option<String> {
-        // Split by common delimiters
-        let parts: Vec<&str> = auth_id.split(&['-', '_', ':'][..]).collect();
-
-        if parts.is_empty() || parts[0].is_empty() {
-            None
-        } else {
-            // First part is typically the provider
-            Some(parts[0].to_string())
+        if auth_id.is_empty() {
+            return None;
         }
+
+        let lower = auth_id.to_lowercase();
+
+        // Try known providers (longest first for greedy match)
+        for provider in KNOWN_PROVIDERS {
+            if let Some(after) = lower.strip_prefix(provider) {
+                // Ensure the match ends at a delimiter or end of string
+                if after.is_empty()
+                    || after.starts_with('-')
+                    || after.starts_with('_')
+                    || after.starts_with(':')
+                {
+                    return Some(provider.to_string());
+                }
+            }
+        }
+
+        // Fallback: first segment
+        auth_id
+            .split(&['-', '_', ':'])
+            .next()
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
     }
 
     /// Get config
@@ -264,6 +284,33 @@ struct WeightedAuth {
     weight: f64,
     provider: Option<String>,
 }
+
+/// Known provider identifiers, ordered by length (longest first) for greedy matching.
+const KNOWN_PROVIDERS: &[&str] = &[
+    "azure-openai",
+    "amazon-bedrock",
+    "byte-dance",
+    "google-deepmind",
+    "alibaba-cloud",
+    "deepseek",
+    "openai",
+    "google",
+    "chrome",
+    "xai",
+    "mistral",
+    "cohere",
+    "perplexity",
+    "zhipu",
+    "baidu",
+    "moonshot",
+    "meta",
+    "azure",
+    "bedrock",
+    "alibaba",
+    "qwen",
+    "kimi",
+    "grok",
+];
 
 #[cfg(test)]
 mod tests {
@@ -521,6 +568,50 @@ mod tests {
         assert_eq!(planner.extract_provider(""), None);
     }
 
+    #[test]
+    fn test_extract_provider_multi_word_providers() {
+        let planner = FallbackPlanner::new();
+
+        // amazon-bedrock should be recognized as a single provider, not "amazon"
+        assert_eq!(
+            planner.extract_provider("amazon-bedrock-us-east-1-key"),
+            Some("amazon-bedrock".to_string())
+        );
+        assert_eq!(
+            planner.extract_provider("azure-openai-gpt4-key"),
+            Some("azure-openai".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_provider_nested_paths() {
+        let planner = FallbackPlanner::new();
+
+        // Standard single-segment providers still work
+        assert_eq!(
+            planner.extract_provider("deepseek-key"),
+            Some("deepseek".to_string())
+        );
+        assert_eq!(
+            planner.extract_provider("xai-grok-key"),
+            Some("xai".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_provider_unknown_prefix_falls_back() {
+        let planner = FallbackPlanner::new();
+
+        // Unknown provider falls back to first segment
+        assert_eq!(
+            planner.extract_provider("my-custom-provider-key"),
+            Some("my".to_string())
+        );
+        assert_eq!(
+            planner.extract_provider("single"),
+            Some("single".to_string())
+        );
+    }
     #[tokio::test]
     async fn test_limited_candidates_min_fallbacks() {
         let config = FallbackConfig {
