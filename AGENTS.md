@@ -32,10 +32,12 @@ A **local LLM gateway** written in Rust for intelligent request routing. Routes 
 This project enforces production-level code style using `rustfmt` and `clippy`. Adhere to the following conventions:
 
 ### General Idioms & Style
-
-- **Format strings**: Always inline `format!` args when possible (`format!("Hello, {name}")` instead of `format!("Hello, {}", name)`).
-- **If statements**: Always collapse if statements (`if x { if y { ... } }` becomes `if x && y { ... }`).
-- **Closures**: Use method references over closures when possible (`.map(String::from)` instead of `.map(|s| String::from(s))`).
+- **Cosmetic Discipline**: Adhere to standard naming (`snake_case`, `CamelCase`, `UPPER_SNAKE_CASE`). Group imports hierarchically.
+- **Borrowing over Cloning**: Prefer borrowing (`&T`) over `.clone()` to avoid unnecessary allocations.
+- **Prevent Early Allocation**: Do not collect into `Vec` unless explicitly necessary for returning or async bounds.
+- **Result over Panic**: Return `Result<T, E>`. Never `unwrap()` or `expect()` in production code. Use `thiserror` (lib) / `anyhow` (bin).
+- **Type State Pattern**: Use Type State for complex state machines to guarantee compile-time correctness.
+- **No Living Comments**: Don't write out-of-sync comments. Let code describe the *what* and comments the *why*.
 - **Match statements**: Make match statements exhaustive and avoid wildcard arms (`_`) whenever possible. Use explicit arms for maintainability.
 - **Range checking**: Use `(start..=end).contains(&val)` instead of manual `>=` and `<=` checks.
 - **Borrowing**: Prefer borrowing over cloning. Prevent early allocations.

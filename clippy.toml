@@ -1,15 +1,13 @@
+
 # Clippy Configuration
 msrv = "1.85"
 
-# Warn on manual map and and_then
 cognitive-complexity-threshold = 15
-
-# Enum sizes
 enum-variant-size-threshold = 256
 enum-variant-name-threshold = 3
-
-# Allow larger types in specific cases if needed, but keep a strict threshold
 type-complexity-threshold = 250
-
 too-many-lines-threshold = 500
 too-many-arguments-threshold = 7
+
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
