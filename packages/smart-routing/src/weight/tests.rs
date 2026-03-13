@@ -1,364 +1,10 @@
+use super::*;
 use crate::config::WeightConfig;
 use crate::health::HealthStatus;
 use crate::metrics::AuthMetrics;
-use std::any::Any;
-
-/// Weight calculator trait
-pub trait WeightCalculator: Send + Sync {
-    /// Calculate credential weight
-    fn calculate(
-        &self,
-        auth: &AuthInfo,
-        metrics: Option<&AuthMetrics>,
-        health: HealthStatus,
-    ) -> f64;
-
-    /// Allow downcasting for type-specific operations
-    fn as_any(&self) -> &dyn Any;
-}
-
-/// Auth info for weight calculation
-#[derive(Debug, Clone)]
-pub struct AuthInfo {
-    pub id: String,
-    pub priority: Option<i32>,
-    pub quota_exceeded: bool,
-    pub unavailable: bool,
-    pub model_states: Vec<ModelState>,
-}
-
-/// Model state information
-#[derive(Debug, Clone)]
-pub struct ModelState {
-    pub unavailable: bool,
-    pub quota_exceeded: bool,
-}
-
-/// Default weight calculator
-pub struct DefaultWeightCalculator {
-    config: WeightConfig,
-}
-
-/// Data availability assessment for planner mode adaptation
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DataAvailability {
-    /// Full data available - all metrics populated with sufficient history
-    Full,
-    /// Sparse data - some metrics missing or insufficient history
-    Sparse,
-    /// Missing state - critical metrics unavailable
-    Missing,
-}
-
-/// Planner mode for weight calculation adaptation
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PlannerMode {
-    /// Learned mode - use full weight calculation with all factors
-    Learned,
-    /// Heuristic mode - simplified calculation using available metrics
-    Heuristic,
-    /// Safe weighted mode - conservative defaults for missing state
-    SafeWeighted,
-    /// Deterministic fallback - predictable selection when errors occur
-    Deterministic,
-}
-
-impl DefaultWeightCalculator {
-    /// Create a new weight calculator
-    pub fn new(config: WeightConfig) -> Self {
-        Self { config }
-    }
-
-    /// Assess data availability from metrics
-    fn assess_data_availability(&self, metrics: Option<&AuthMetrics>) -> DataAvailability {
-        match metrics {
-            None => DataAvailability::Missing,
-            Some(m) => {
-                // Check for sufficient data
-                let has_requests = m.total_requests >= 10;
-                let has_latency = m.avg_latency_ms > 0.0;
-                let has_success_rate = m.success_rate >= 0.0;
-
-                if has_requests && has_latency && has_success_rate {
-                    DataAvailability::Full
-                } else if m.total_requests > 0 || has_latency || has_success_rate {
-                    DataAvailability::Sparse
-                } else {
-                    DataAvailability::Missing
-                }
-            },
-        }
-    }
-
-    /// Select planner mode based on data availability and error state
-    fn select_planner_mode(
-        &self,
-        data_availability: DataAvailability,
-        health: HealthStatus,
-    ) -> PlannerMode {
-        match (data_availability, health) {
-            // Full data with healthy/degraded state -> Learned mode
-            (DataAvailability::Full, HealthStatus::Healthy | HealthStatus::Degraded) => {
-                PlannerMode::Learned
-            },
-            // Sparse data -> Heuristic mode
-            (DataAvailability::Sparse, _) => PlannerMode::Heuristic,
-            // Missing state -> Safe weighted mode
-            (DataAvailability::Missing, HealthStatus::Healthy | HealthStatus::Degraded) => {
-                PlannerMode::SafeWeighted
-            },
-            // Unhealthy with full data -> Safe weighted (conservative)
-            (DataAvailability::Full, HealthStatus::Unhealthy) => PlannerMode::SafeWeighted,
-            // Unhealthy with missing data -> Deterministic fallback
-            (DataAvailability::Missing, HealthStatus::Unhealthy) => PlannerMode::Deterministic,
-        }
-    }
-
-    /// Calculate success rate score
-    fn calculate_success_rate_score(&self, metrics: Option<&AuthMetrics>) -> f64 {
-        metrics.map_or(0.5, |m| m.success_rate)
-    }
-
-    /// Calculate latency score (inverse function)
-    fn calculate_latency_score(&self, metrics: Option<&AuthMetrics>) -> f64 {
-        match metrics {
-            Some(m) if m.avg_latency_ms > 0.0 => {
-                // Use inverse function: score = 1 / (1 + latency/1000)
-                // 0ms -> 1.0, 1000ms -> 0.5, 3000ms -> 0.25, 10000ms -> 0.09
-                let score = 1.0 / (1.0 + m.avg_latency_ms / 1000.0);
-                score.clamp(0.0, 1.0)
-            },
-            _ => 0.5,
-        }
-    }
-
-    /// Calculate health status score
-    fn calculate_health_score(&self, health: HealthStatus) -> f64 {
-        match health {
-            HealthStatus::Healthy => 1.0,
-            HealthStatus::Degraded => 0.6,
-            HealthStatus::Unhealthy => 0.1,
-        }
-    }
-
-    /// Calculate load score based on request frequency and quota status
-    fn calculate_load_score(&self, auth: &AuthInfo, metrics: Option<&AuthMetrics>) -> f64 {
-        // Calculate recent request frequency score
-        let recent_request_score = metrics.map_or(1.0, |m| {
-            if m.total_requests > 0 {
-                // More recent requests = lower score (give other credentials a chance)
-                // Use log function for smoothing
-                1.0 / (1.0 + (m.total_requests as f64).ln() / 10.0)
-            } else {
-                1.0
-            }
-        });
-
-        // Calculate quota score
-        let quota_score = if auth.quota_exceeded { 0.0 } else { 1.0 };
-
-        // Calculate model state score
-        let model_state_score = if auth.model_states.is_empty() {
-            1.0
-        } else {
-            let unavailable_models =
-                auth.model_states.iter().filter(|s| s.unavailable).count() as f64;
-            let total_models = auth.model_states.len() as f64;
-            1.0 - (unavailable_models / total_models)
-        };
-
-        // Combined score - use weighted sum to avoid zero score from any single factor
-        recent_request_score * 0.4 + quota_score * 0.4 + model_state_score * 0.2
-    }
-
-    /// Calculate priority score
-    fn calculate_priority_score(&self, auth: &AuthInfo) -> f64 {
-        auth.priority.map_or(0.5, |priority| {
-            // Priority range: -100 to 100
-            // Convert to 0-1 score
-            let score = (priority as f64 + 100.0) / 200.0;
-            score.clamp(0.0, 1.0)
-        })
-    }
-}
-
-impl WeightCalculator for DefaultWeightCalculator {
-    /// Calculate credential weight with planner mode adaptation
-    /// Higher weight = higher selection probability
-    fn calculate(
-        &self,
-        auth: &AuthInfo,
-        metrics: Option<&AuthMetrics>,
-        health: HealthStatus,
-    ) -> f64 {
-        // Assess data availability and select planner mode
-        let data_availability = self.assess_data_availability(metrics);
-        let planner_mode = self.select_planner_mode(data_availability, health);
-
-        // Calculate weight based on planner mode
-        match planner_mode {
-            PlannerMode::Learned => self.calculate_learned(auth, metrics, health),
-            PlannerMode::Heuristic => self.calculate_heuristic(auth, metrics, health),
-            PlannerMode::SafeWeighted => self.calculate_safe_weighted(auth, metrics, health),
-            PlannerMode::Deterministic => self.calculate_deterministic(auth, health),
-        }
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-impl DefaultWeightCalculator {
-    /// Learned mode: Full weight calculation with all factors
-    fn calculate_learned(
-        &self,
-        auth: &AuthInfo,
-        metrics: Option<&AuthMetrics>,
-        health: HealthStatus,
-    ) -> f64 {
-        // 1. Calculate success rate score (0-1)
-        let success_rate_score = self.calculate_success_rate_score(metrics);
-
-        // 2. Calculate latency score (0-1), lower latency = higher score
-        let latency_score = self.calculate_latency_score(metrics);
-
-        // 3. Calculate health status score (0-1)
-        let health_score = self.calculate_health_score(health);
-
-        // 4. Calculate load score (0-1), lower load = higher score
-        let load_score = self.calculate_load_score(auth, metrics);
-
-        // 5. Calculate priority score (0-1)
-        let priority_score = self.calculate_priority_score(auth);
-
-        // Weighted sum
-        let mut total_weight = success_rate_score * self.config.success_rate_weight
-            + latency_score * self.config.latency_weight
-            + health_score * self.config.health_weight
-            + load_score * self.config.load_weight
-            + priority_score * self.config.priority_weight;
-
-        // Apply health status penalty
-        match health {
-            HealthStatus::Unhealthy => {
-                total_weight *= self.config.unhealthy_penalty;
-            },
-            HealthStatus::Degraded => {
-                total_weight *= self.config.degraded_penalty;
-            },
-            _ => {},
-        }
-
-        // Apply quota status penalty
-        if auth.quota_exceeded {
-            total_weight *= self.config.quota_exceeded_penalty;
-        }
-
-        // Apply unavailable status penalty
-        if auth.unavailable {
-            total_weight *= self.config.unavailable_penalty;
-        }
-
-        // Ensure weight is non-negative
-        total_weight.max(0.0)
-    }
-
-    /// Heuristic mode: Simplified calculation using available metrics
-    fn calculate_heuristic(
-        &self,
-        auth: &AuthInfo,
-        metrics: Option<&AuthMetrics>,
-        health: HealthStatus,
-    ) -> f64 {
-        // Use simplified scoring with available data
-        let health_score = self.calculate_health_score(health);
-        let priority_score = self.calculate_priority_score(auth);
-
-        // Use available metrics if present, otherwise defaults
-        let success_score = metrics.map_or(0.5, |m| m.success_rate);
-        let latency_score = metrics.map_or(0.5, |m| {
-            if m.avg_latency_ms > 0.0 {
-                (1.0 / (1.0 + m.avg_latency_ms / 1000.0)).clamp(0.0, 1.0)
-            } else {
-                0.5
-            }
-        });
-
-        // Simplified weighted sum (equal weights for available factors)
-        let total_weight = (success_score + latency_score + health_score + priority_score) / 4.0;
-
-        // Apply penalties
-        let mut weight = total_weight;
-        if auth.quota_exceeded {
-            weight *= self.config.quota_exceeded_penalty;
-        }
-        if auth.unavailable {
-            weight *= self.config.unavailable_penalty;
-        }
-
-        weight.max(0.0)
-    }
-
-    /// Safe weighted mode: Conservative defaults for missing state
-    fn calculate_safe_weighted(
-        &self,
-        auth: &AuthInfo,
-        _metrics: Option<&AuthMetrics>,
-        health: HealthStatus,
-    ) -> f64 {
-        // Use conservative baseline with health and priority only
-        let health_score = self.calculate_health_score(health);
-        let priority_score = self.calculate_priority_score(auth);
-
-        // Conservative scoring - emphasize stability
-        let total_weight = health_score * 0.7 + priority_score * 0.3;
-
-        // Apply strong penalties for any issues
-        let mut weight = total_weight;
-        match health {
-            HealthStatus::Unhealthy => {
-                weight *= self.config.unhealthy_penalty * 0.5; // Extra penalty
-            },
-            HealthStatus::Degraded => {
-                weight *= self.config.degraded_penalty;
-            },
-            _ => {},
-        }
-
-        if auth.quota_exceeded {
-            weight *= self.config.quota_exceeded_penalty * 0.5;
-        }
-        if auth.unavailable {
-            weight *= self.config.unavailable_penalty * 0.1;
-        }
-
-        weight.max(0.0)
-    }
-
-    /// Deterministic fallback: Predictable selection when errors occur
-    fn calculate_deterministic(&self, auth: &AuthInfo, health: HealthStatus) -> f64 {
-        // Use only static, deterministic factors
-        let priority_score = self.calculate_priority_score(auth);
-        let health_score = match health {
-            HealthStatus::Healthy => 1.0,
-            HealthStatus::Degraded => 0.5,
-            HealthStatus::Unhealthy => 0.1,
-        };
-
-        // Simple, predictable calculation
-        let mut weight = (priority_score + health_score) / 2.0;
-
-        // Apply binary penalties (either available or not)
-        if auth.quota_exceeded || auth.unavailable || matches!(health, HealthStatus::Unhealthy) {
-            weight = 0.0;
-        }
-
-        weight.max(0.0)
-    }
-}
 
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod tests {
     use super::*;
 
@@ -428,10 +74,7 @@ mod tests {
         let healthy_weight = calculator.calculate(&auth, Some(&metrics), HealthStatus::Healthy);
         let unhealthy_weight = calculator.calculate(&auth, Some(&metrics), HealthStatus::Unhealthy);
 
-        // The unhealthy weight should be significantly lower than healthy weight
         assert!(unhealthy_weight < healthy_weight);
-        // Unhealthy status applies a penalty, so unhealthy_weight should be approximately
-        // healthy_weight * unhealthy_penalty
         let expected_unhealthy = healthy_weight * config.unhealthy_penalty;
         assert!(
             (unhealthy_weight - expected_unhealthy).abs() < 0.01,
@@ -452,7 +95,6 @@ mod tests {
         let config = WeightConfig::default();
         let calculator = DefaultWeightCalculator::new(config);
 
-        // When metrics is None, should return default 0.5
         let auth = AuthInfo {
             id: "test-auth".to_string(),
             priority: Some(0),
@@ -482,7 +124,6 @@ mod tests {
             model_states: Vec::new(),
         };
 
-        // Test with perfect success rate
         let perfect_metrics = AuthMetrics {
             total_requests: 100,
             success_count: 100,
@@ -502,7 +143,6 @@ mod tests {
         let perfect_weight =
             calculator.calculate(&auth, Some(&perfect_metrics), HealthStatus::Healthy);
 
-        // Test with zero success rate
         let zero_metrics = AuthMetrics {
             total_requests: 100,
             success_count: 0,
@@ -521,7 +161,6 @@ mod tests {
 
         let zero_weight = calculator.calculate(&auth, Some(&zero_metrics), HealthStatus::Healthy);
 
-        // Perfect success rate should give higher weight
         assert!(
             perfect_weight > zero_weight,
             "Perfect success rate should yield higher weight"
@@ -541,7 +180,6 @@ mod tests {
             model_states: Vec::new(),
         };
 
-        // Test with very low latency (0ms)
         let low_latency_metrics = AuthMetrics {
             total_requests: 100,
             success_count: 100,
@@ -561,7 +199,6 @@ mod tests {
         let low_latency_weight =
             calculator.calculate(&auth, Some(&low_latency_metrics), HealthStatus::Healthy);
 
-        // Test with very high latency (10000ms)
         let high_latency_metrics = AuthMetrics {
             total_requests: 100,
             success_count: 100,
@@ -581,13 +218,11 @@ mod tests {
         let high_latency_weight =
             calculator.calculate(&auth, Some(&high_latency_metrics), HealthStatus::Healthy);
 
-        // Lower latency should give higher weight
         assert!(
             low_latency_weight > high_latency_weight,
             "Lower latency should yield higher weight"
         );
 
-        // Test with zero latency (edge case - should return default 0.5)
         let zero_latency_metrics = AuthMetrics {
             total_requests: 100,
             success_count: 100,
@@ -641,12 +276,10 @@ mod tests {
             last_failure_time: None,
         };
 
-        // Test all three health states
         let healthy_weight = calculator.calculate(&auth, Some(&metrics), HealthStatus::Healthy);
         let degraded_weight = calculator.calculate(&auth, Some(&metrics), HealthStatus::Degraded);
         let unhealthy_weight = calculator.calculate(&auth, Some(&metrics), HealthStatus::Unhealthy);
 
-        // Verify ordering: healthy > degraded > unhealthy
         assert!(
             healthy_weight > degraded_weight,
             "Healthy weight should be greater than degraded"
@@ -656,7 +289,6 @@ mod tests {
             "Degraded weight should be greater than unhealthy"
         );
 
-        // Verify all are non-negative
         assert!(
             healthy_weight >= 0.0,
             "Healthy weight should be non-negative"
@@ -676,7 +308,6 @@ mod tests {
         let config = WeightConfig::default();
         let calculator = DefaultWeightCalculator::new(config);
 
-        // Test with high request count (high load)
         let auth = AuthInfo {
             id: "test-auth".to_string(),
             priority: Some(0),
@@ -704,7 +335,6 @@ mod tests {
         let high_load_weight =
             calculator.calculate(&auth, Some(&high_load_metrics), HealthStatus::Healthy);
 
-        // Test with low request count (low load)
         let low_load_metrics = AuthMetrics {
             total_requests: 10,
             success_count: 9,
@@ -724,7 +354,6 @@ mod tests {
         let low_load_weight =
             calculator.calculate(&auth, Some(&low_load_metrics), HealthStatus::Healthy);
 
-        // Lower load should give higher or equal weight
         assert!(
             low_load_weight >= 0.0,
             "Low load weight should be non-negative"
@@ -756,7 +385,6 @@ mod tests {
             last_failure_time: None,
         };
 
-        // Auth without quota exceeded
         let auth_normal = AuthInfo {
             id: "test-auth".to_string(),
             priority: Some(0),
@@ -765,7 +393,6 @@ mod tests {
             model_states: Vec::new(),
         };
 
-        // Auth with quota exceeded
         let auth_quota = AuthInfo {
             id: "test-auth".to_string(),
             priority: Some(0),
@@ -779,12 +406,10 @@ mod tests {
         let quota_exceeded_weight =
             calculator.calculate(&auth_quota, Some(&metrics), HealthStatus::Healthy);
 
-        // Quota exceeded should significantly reduce weight
         assert!(
             quota_exceeded_weight < normal_weight,
             "Quota exceeded should reduce weight"
         );
-        // Verify quota penalty is applied (should be normal * quota_exceeded_penalty)
         let expected = normal_weight * config.quota_exceeded_penalty;
         assert!(
             (quota_exceeded_weight - expected).abs() < 0.01,
@@ -813,7 +438,6 @@ mod tests {
             last_failure_time: None,
         };
 
-        // Auth with all models available
         let auth_available = AuthInfo {
             id: "test-auth".to_string(),
             priority: Some(0),
@@ -831,7 +455,6 @@ mod tests {
             ],
         };
 
-        // Auth with some unavailable models
         let auth_partial = AuthInfo {
             id: "test-auth".to_string(),
             priority: Some(0),
@@ -854,7 +477,6 @@ mod tests {
         let partial_weight =
             calculator.calculate(&auth_partial, Some(&metrics), HealthStatus::Healthy);
 
-        // All available should give higher weight
         assert!(
             available_weight > partial_weight,
             "All available models should yield higher weight"
@@ -882,7 +504,6 @@ mod tests {
             last_failure_time: None,
         };
 
-        // Test maximum priority (100)
         let auth_max = AuthInfo {
             id: "test-auth".to_string(),
             priority: Some(100),
@@ -891,7 +512,6 @@ mod tests {
             model_states: Vec::new(),
         };
 
-        // Test minimum priority (-100)
         let auth_min = AuthInfo {
             id: "test-auth".to_string(),
             priority: Some(-100),
@@ -900,7 +520,6 @@ mod tests {
             model_states: Vec::new(),
         };
 
-        // Test None priority (should default)
         let auth_none = AuthInfo {
             id: "test-auth".to_string(),
             priority: None,
@@ -909,7 +528,6 @@ mod tests {
             model_states: Vec::new(),
         };
 
-        // Test zero priority
         let auth_zero = AuthInfo {
             id: "test-auth".to_string(),
             priority: Some(0),
@@ -923,7 +541,6 @@ mod tests {
         let none_weight = calculator.calculate(&auth_none, Some(&metrics), HealthStatus::Healthy);
         let zero_weight = calculator.calculate(&auth_zero, Some(&metrics), HealthStatus::Healthy);
 
-        // Verify ordering
         assert!(
             max_weight > zero_weight,
             "Max priority should give higher weight than zero"
@@ -933,7 +550,6 @@ mod tests {
             "Zero priority should give higher weight than min"
         );
 
-        // None should be in between (defaults to 0.5)
         assert!(
             none_weight > min_weight,
             "None priority should be higher than min"
@@ -943,7 +559,6 @@ mod tests {
             "None priority should be lower than max"
         );
 
-        // All should be non-negative
         assert!(max_weight >= 0.0);
         assert!(min_weight >= 0.0);
         assert!(none_weight >= 0.0);
@@ -958,7 +573,7 @@ mod tests {
             health_weight: 0.0,
             load_weight: 0.0,
             priority_weight: 0.0,
-            unhealthy_penalty: 0.0, // This would make weight zero or negative
+            unhealthy_penalty: 0.0,
             degraded_penalty: 0.0,
             quota_exceeded_penalty: 0.0,
             unavailable_penalty: 0.0,
@@ -973,7 +588,6 @@ mod tests {
             model_states: Vec::new(),
         };
 
-        // Even with zero success rate and unhealthy status
         let metrics = AuthMetrics {
             total_requests: 100,
             success_count: 0,
@@ -992,7 +606,6 @@ mod tests {
 
         let weight = calculator.calculate(&auth, Some(&metrics), HealthStatus::Unhealthy);
 
-        // Weight should be clamped to non-negative
         assert!(
             weight >= 0.0,
             "Weight should always be non-negative, got: {}",
@@ -1032,9 +645,6 @@ mod tests {
         let healthy_weight = calculator.calculate(&auth, Some(&metrics), HealthStatus::Healthy);
         let degraded_weight = calculator.calculate(&auth, Some(&metrics), HealthStatus::Degraded);
 
-        // Degraded weight should be less than healthy weight due to:
-        // 1. Lower health_score (0.6 vs 1.0 in weighted sum)
-        // 2. Additional degraded_penalty multiplier
         assert!(
             degraded_weight < healthy_weight,
             "Degraded weight ({}) should be less than healthy weight ({})",
@@ -1042,7 +652,6 @@ mod tests {
             healthy_weight
         );
 
-        // Verify degraded weight is still positive
         assert!(degraded_weight > 0.0, "Degraded weight should be positive");
     }
 
@@ -1088,7 +697,6 @@ mod tests {
         let unavailable_weight =
             calculator.calculate(&auth_unavailable, Some(&metrics), HealthStatus::Healthy);
 
-        // Unavailable penalty should be applied
         let expected = available_weight * config.unavailable_penalty;
         assert!(
             (unavailable_weight - expected).abs() < 0.01,
@@ -1101,7 +709,6 @@ mod tests {
         let config = WeightConfig::default();
         let calculator = DefaultWeightCalculator::new(config.clone());
 
-        // Auth with multiple issues: unhealthy + quota_exceeded + unavailable
         let auth = AuthInfo {
             id: "test-auth".to_string(),
             priority: Some(0),
@@ -1128,14 +735,11 @@ mod tests {
 
         let weight = calculator.calculate(&auth, Some(&metrics), HealthStatus::Unhealthy);
 
-        // Weight should still be non-negative even with multiple penalties
         assert!(
             weight >= 0.0,
             "Weight should be non-negative with combined penalties"
         );
 
-        // Weight should be very low due to stacked penalties
-        // unhealthy * quota_exceeded * unavailable
         let base_weight = calculator.calculate(
             &AuthInfo {
                 id: "test-auth".to_string(),
@@ -1175,7 +779,6 @@ mod tests {
             model_states: Vec::new(),
         };
 
-        // Metrics with NaN values
         let nan_metrics = AuthMetrics {
             total_requests: 100,
             success_count: 50,
@@ -1194,7 +797,6 @@ mod tests {
 
         let weight = calculator.calculate(&auth, Some(&nan_metrics), HealthStatus::Healthy);
 
-        // Weight should still be a valid number (not NaN)
         assert!(
             !weight.is_nan(),
             "Weight should not be NaN even with NaN metrics"
@@ -1218,7 +820,6 @@ mod tests {
             model_states: Vec::new(),
         };
 
-        // Metrics with infinity values
         let inf_metrics = AuthMetrics {
             total_requests: 100,
             success_count: 100,
@@ -1237,7 +838,6 @@ mod tests {
 
         let weight = calculator.calculate(&auth, Some(&inf_metrics), HealthStatus::Healthy);
 
-        // Weight should be finite (clamped)
         assert!(
             weight.is_finite(),
             "Weight should be finite even with Inf metrics"
@@ -1269,7 +869,6 @@ mod tests {
             last_failure_time: None,
         };
 
-        // Test extreme positive priority
         let auth_max = AuthInfo {
             id: "test-auth".to_string(),
             priority: Some(i32::MAX),
@@ -1283,7 +882,6 @@ mod tests {
             "Max priority should produce valid weight"
         );
 
-        // Test extreme negative priority
         let auth_min = AuthInfo {
             id: "test-auth".to_string(),
             priority: Some(i32::MIN),
@@ -1297,7 +895,6 @@ mod tests {
             "Min priority should produce valid weight"
         );
 
-        // Max priority should give higher weight
         assert!(
             weight_max > weight_min,
             "Max priority should give higher weight than min"
@@ -1317,7 +914,6 @@ mod tests {
             model_states: Vec::new(),
         };
 
-        // All zeros (except success_rate which is initialized to 1.0)
         let zero_metrics = AuthMetrics {
             total_requests: 0,
             success_count: 0,
@@ -1384,7 +980,6 @@ mod tests {
             calculator.calculate(&auth_normal, Some(&metrics), HealthStatus::Healthy);
         let quota_weight = calculator.calculate(&auth_quota, Some(&metrics), HealthStatus::Healthy);
 
-        // Quota exceeded should apply heavy penalty
         assert!(
             quota_weight < normal_weight * 0.5,
             "Quota exceeded should reduce weight by at least 50%: normal={}, quota={}",
@@ -1392,7 +987,6 @@ mod tests {
             quota_weight
         );
 
-        // Verify exact penalty
         let expected = normal_weight * config.quota_exceeded_penalty;
         assert!(
             (quota_weight - expected).abs() < 0.01,
@@ -1421,7 +1015,6 @@ mod tests {
             last_failure_time: None,
         };
 
-        // Auth with all models unavailable
         let auth_all_unavailable = AuthInfo {
             id: "test-auth".to_string(),
             priority: Some(0),
@@ -1443,7 +1036,6 @@ mod tests {
             ],
         };
 
-        // Auth with all models available
         let auth_all_available = AuthInfo {
             id: "test-auth".to_string(),
             priority: Some(0),
@@ -1481,7 +1073,6 @@ mod tests {
         let config = WeightConfig::default();
         let calculator = DefaultWeightCalculator::new(config);
 
-        // Full data
         let full_metrics = AuthMetrics {
             total_requests: 100,
             success_count: 95,
@@ -1498,7 +1089,6 @@ mod tests {
             last_failure_time: None,
         };
 
-        // Sparse data (< 10 requests)
         let sparse_metrics = AuthMetrics {
             total_requests: 5,
             success_count: 4,
@@ -1528,7 +1118,6 @@ mod tests {
             calculator.calculate(&auth, Some(&sparse_metrics), HealthStatus::Healthy);
         let none_weight = calculator.calculate(&auth, None, HealthStatus::Healthy);
 
-        // All should be valid
         assert!(full_weight > 0.0 && full_weight <= 1.0);
         assert!(sparse_weight > 0.0 && sparse_weight <= 1.0);
         assert!(none_weight > 0.0 && none_weight <= 1.0);
