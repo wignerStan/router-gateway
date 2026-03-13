@@ -650,7 +650,7 @@ impl SQLiteStore {
             })
             .map_err(|e| SqliteError::query("start_all_metrics_query", e))?
             .collect::<std::result::Result<Vec<_>, rusqlite::Error>>()
-            .map_err(|e| SqliteError::query("map_row_to_metric", e))?
+            .map_err(|e| SqliteError::query("map_row_to_metric", e))?;
 
         Ok(metrics_map.into_iter().collect())
     }
@@ -706,7 +706,7 @@ impl SQLiteStore {
             })
             .map_err(|e| SqliteError::query("start_all_health_query", e))?
             .collect::<std::result::Result<Vec<_>, rusqlite::Error>>()
-            .map_err(|e| SqliteError::query("map_row_to_health", e))?
+            .map_err(|e| SqliteError::query("map_row_to_health", e))?;
 
         Ok(health_map.into_iter().collect())
     }
