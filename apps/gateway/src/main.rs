@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tower_http::trace::TraceLayer;
@@ -218,6 +217,16 @@ async fn main() -> anyhow::Result<()> {
         "Rate limiter initialized: {} requests per minute per IP",
         DEFAULT_RATE_LIMIT
     );
+
+    // Periodically prune expired rate-limit buckets to bound memory growth.
+    let prune_limiter = Arc::clone(&rate_limiter);
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(120));
+        loop {
+            interval.tick().await;
+            prune_limiter.prune();
+        }
+    });
 
     let state = AppState {
         config,
@@ -452,7 +461,6 @@ struct RateLimiter {
     /// IP address -> (request count, window start time)
     buckets: Arc<Mutex<HashMap<String, (u64, Instant)>>>,
     max_requests: u64,
-    op_count: AtomicUsize,
 }
 
 impl RateLimiter {
@@ -460,24 +468,14 @@ impl RateLimiter {
         Self {
             buckets: Arc::new(Mutex::new(HashMap::new())),
             max_requests,
-            op_count: AtomicUsize::new(0),
         }
     }
 
     /// Check whether a request from the given IP should be allowed.
     /// Returns `true` if under the limit, `false` if rate limited.
-    /// Periodically prunes stale entries (inactive for >2 minutes) to prevent unbounded growth.
     fn check(&self, ip: &str) -> bool {
         let mut buckets = self.buckets.lock().expect("Rate limiter mutex poisoned");
         let now = Instant::now();
-
-        // Periodically prune stale entries every 1000 requests to avoid
-        // iterating the entire map on every single request under load.
-        #[allow(clippy::manual_is_multiple_of)]
-        if self.op_count.fetch_add(1, Ordering::Relaxed) % 1000 == 0 {
-            buckets
-                .retain(|_, (_, window_start)| now.duration_since(*window_start).as_secs() < 120);
-        }
 
         let (count, window_start) = buckets.entry(ip.to_string()).or_insert((0, now));
 
@@ -493,6 +491,14 @@ impl RateLimiter {
 
         *count += 1;
         true
+    }
+
+    /// Remove expired rate-limit entries to bound memory growth.
+    /// Called periodically from a background task.
+    fn prune(&self) {
+        let mut buckets = self.buckets.lock().expect("Rate limiter mutex poisoned");
+        let now = Instant::now();
+        buckets.retain(|_, (_, window_start)| now.duration_since(*window_start).as_secs() < 120);
     }
 }
 
