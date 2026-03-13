@@ -377,7 +377,7 @@ fn is_private_ip(ip: &IpAddr) -> bool {
             if octets[0] == 192 && octets[1] == 0 && (octets[2] == 0 || octets[2] == 2) {
                 return true;
             }
-            // Broadcast: 255.255.255.255/32
+            // Reserved for Future Use (includes broadcast): 255.0.0.0/8
             if octets[0] == 255 {
                 return true;
             }
