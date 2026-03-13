@@ -1,36 +1,45 @@
-# Gateway API
+# Gateway
 
-A smart routing gateway for LLM (Large Language Model) requests built with Rust, Axum, and Tokio.
-
-## Overview
-
-The Gateway API provides intelligent routing, model registry management, and comprehensive tracing for LLM applications. It acts as a central entry point for routing requests to appropriate language models based on various criteria including cost, performance, and capabilities.
+A local LLM gateway written in Rust for intelligent request routing. Routes LLM requests to optimal credentials based on health, latency, success rate, and configurable policies. Designed for local development and self-hosted deployments.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Gateway API                              │
-│                                                                   │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐      │
-│  │ Smart        │  │ Model        │  │ LLM              │      │
-│  │ Routing      │  │ Registry     │  │ Tracing          │      │
-│  │              │  │              │  │                  │      │
-│  │ - Weight     │  │ - Cache      │  │ - Spans          │      │
-│  │ - Health     │  │ - Fetcher    │  │ - Metrics        │      │
-│  │ - Selector   │  │ - Categories │  │ - Middleware     │      │
-│  └──────────────┘  └──────────────┘  └──────────────────┘      │
-│                                                                   │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              HTTP Layer (Axum)                            │   │
-│  │  /health   /api/models   /api/route   /                  │   │
-│  └──────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
+                           Request
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      Middleware Stack                         │
+│                                                             │
+│  Security Headers  │  Rate Limiter  │  LLM Tracing  │ Auth │
+└─────────────────────────────────────────────────────────────┘
+                             │
+              ┌──────────────┼──────────────┐
+              ▼              ▼              ▼
+        Public Routes  Protected Routes  Chat Completions
+        GET  /          GET  /api/models  POST /v1/chat/completions
+        GET  /health    GET  /api/route
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      Core Services                           │
+│                                                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
+│  │ Smart        │  │ Model        │  │ LLM              │  │
+│  │ Routing      │  │ Registry     │  │ Tracing          │  │
+│  │              │  │              │  │                  │  │
+│  │ Strategies:  │  │ 5-dimension  │  │ TraceSpan        │  │
+│  │ weighted     │  │ categorize   │  │ Metrics          │  │
+│  │ time_aware   │  │ 20+ providers│  │ Middleware       │  │
+│  │ quota_aware  │  │ Policy rules │  │                  │  │
+│  │ adaptive     │  │              │  │                  │  │
+│  └──────────────┘  └──────────────┘  └──────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                             │
+                             ▼
                     ┌─────────────────┐
                     │  External LLMs  │
-                    │  (OpenAI, etc.) │
+                    │  (20+ providers)│
                     └─────────────────┘
 ```
 
@@ -38,424 +47,281 @@ The Gateway API provides intelligent routing, model registry management, and com
 
 ### Smart Routing
 
-Intelligent request routing based on:
+Policy-based credential selection with five routing strategies and configurable weight factors.
 
-- **Weight-based selection**: Calculate optimal routes using configurable weights
-- **Health monitoring**: Track service health and availability
-- **Time-aware routing**: Consider request timing patterns
-- **Quota management**: Respect rate limits and quotas
-- **SQLite backend**: Persistent storage for metrics and health data
+**Strategies** (configured via `routing.strategy` in gateway.yaml):
+
+| Strategy       | Purpose                                                       |
+| -------------- | ------------------------------------------------------------- |
+| `weighted`     | Weighted random selection based on composite scores (default) |
+| `time_aware`   | Time-based credential preference with peak/off-peak slots     |
+| `quota_aware`  | Quota-balanced selection with reserve ratio                   |
+| `adaptive`     | Dynamically adjusts based on real-time metrics                |
+| `policy_aware` | Route based on model-registry policy rules                    |
+
+**Weight factors** (configurable via `SmartRoutingConfig.weight`):
+
+| Factor       | Default | Purpose                                    |
+| ------------ | ------- | ------------------------------------------ |
+| success_rate | 0.35    | Favor credentials with higher success rate |
+| latency      | 0.25    | Favor lower-latency credentials            |
+| health       | 0.20    | Prefer healthy over degraded/unhealthy     |
+| load         | 0.15    | Balance load across credentials            |
+| priority     | 0.05    | Manual priority override                   |
+
+**Health state machine**: `Healthy` -> `Degraded` (429/503) -> `Unhealthy` (401-403/500/502/504), with configurable cooldown periods and recovery thresholds.
 
 ### Model Registry
 
-Centralized model information management:
+Multi-dimension categorization for routing decisions with a built-in routing policy system.
 
-- **Caching**: TTL-based caching with background refresh
-- **Dynamic fetching**: Pluggable fetcher architecture
-- **Categorization**: Organize models by capabilities, tier, cost, and context window
-- **Type-safe**: Strongly typed model information
+| Dimension      | Categories                                 | Purpose             |
+| -------------- | ------------------------------------------ | ------------------- |
+| **Capability** | Vision, Tools, Streaming, Thinking         | Feature matching    |
+| **Tier**       | Flagship, Standard, Fast                   | Quality routing     |
+| **Cost**       | UltraPremium, Premium, Standard, Economy   | Cost optimization   |
+| **Context**    | Small (<32K) through Ultra (500K+)         | Context fitting     |
+| **Provider**   | 20+ providers                              | Vendor routing      |
+| **Modality**   | Text, Image, Audio, Video, Embedding, Code | Multi-modal routing |
+
+**Routing policies** support filters (capabilities, tiers, costs, providers, modalities), actions (prefer, avoid, block, weight), and conditional application (time-based, tenant-based, token-count). Policies are validated against a JSON schema (`config/policies.schema.json`).
 
 ### LLM Tracing
 
-Comprehensive request tracing and monitoring:
+Request/response observability via `TraceSpan`, `MemoryTraceCollector`, and `TracingMiddleware`. Tracks request ID, provider, model, tokens, latency, and errors with in-memory collection.
 
-- **Span tracking**: Distributed tracing for all LLM requests
-- **Metrics collection**: Performance and usage metrics
-- **Middleware integration**: Easy integration with Axum
-- **In-memory collection**: Built-in trace collector for development
+### Security
+
+- **SSRF protection**: Blocks private/reserved IPs (loopback, link-local, cloud metadata), including IPv4-mapped and IPv4-compatible IPv6 addresses
+- **Constant-time token comparison**: Uses `subtle::ConstantTimeEq` to prevent timing side-channels on auth tokens
+- **Rate limiting**: Per-IP rate limiting with configurable limits and periodic bucket pruning
+- **Security headers**: `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Content-Security-Policy` on all responses
+- **Fail-closed auth**: Rejects requests when no auth tokens are configured (unless `GATEWAY_ENV=development`)
 
 ## Project Structure
 
 ```
 gateway/
-├── apps/
-│   ├── gateway/          # Main gateway application
-│   └── cli/              # CLI tool (optional)
-├── packages/
-│   ├── smart-routing/    # Smart routing logic
-│   ├── model-registry/   # Model registry and caching
-│   ├── tracing/          # LLM request tracing
-│   └── core/             # Shared utilities
-└── Cargo.toml            # Workspace configuration
+  config/
+    policies.json            # Routing policy configuration
+    policies.schema.json     # JSON schema for policy validation
+  packages/
+    model-registry/          # Model metadata, 5-dimension categorization
+    smart-routing/           # Weighted credential selection, health tracking
+    tracing/                 # Request/response observability (package: llm-tracing)
+  apps/
+    gateway/                 # HTTP API server (Axum)
+    cli/                     # CLI management utility (package: my-cli)
 ```
+
+**Package names differ from directory names:**
+
+| Directory           | Package Name  |
+| ------------------- | ------------- |
+| `packages/tracing/` | `llm-tracing` |
+| `apps/cli/`         | `my-cli`      |
 
 ## Getting Started
 
 ### Prerequisites
 
-- Rust 1.70 or later
-- Cargo (comes with Rust)
+- Rust 1.85 or later
+- Cargo (included with Rust)
 
-### Building
+### Build
 
 ```bash
-# Build the entire workspace
-cargo build --workspace
-
-# Build specific package
-cargo build --package gateway
+cargo build
 ```
 
-### Running
+### Run
 
 ```bash
-# Run the gateway server
-cargo run --package gateway
+# Run the gateway (starts on 0.0.0.0:3000 by default)
+cargo run -p gateway
 
-# The server will start on http://localhost:3000
+# Run with debug logging
+RUST_LOG=debug cargo run -p gateway
+
+# Run with a specific config file
+GATEWAY_CONFIG=./gateway.yaml cargo run -p gateway
+```
+
+### Configuration
+
+The gateway loads configuration from (in order of precedence):
+
+1. `GATEWAY_CONFIG` environment variable
+2. `./gateway.yaml`
+3. `./config/gateway.yaml`
+4. `./gateway.yml`
+
+If no config file is found, defaults are used. Environment variable interpolation is supported in secret fields using `${VAR_NAME}` and `${VAR_NAME:-default}` syntax.
+
+```yaml
+server:
+  port: 3000
+  host: "0.0.0.0"
+  timeout_secs: 120
+  auth_tokens:
+    - "${GATEWAY_AUTH_TOKEN}"
+  trust_proxy_headers: false
+
+credentials:
+  - id: openai-primary
+    provider: openai
+    api_key: "${OPENAI_API_KEY}"
+    priority: 10
+    allowed_models:
+      - gpt-4o
+      - gpt-4o-mini
+  - id: anthropic-primary
+    provider: anthropic
+    api_key: "${ANTHROPIC_API_KEY}"
+    priority: 20
+    daily_quota: 10000
+
+routing:
+  strategy: weighted
+  session_affinity: true
+  min_healthy_credentials: 1
+  fallback_depth: 2
+
+providers:
+  openai:
+    enabled: true
+    base_url: "https://api.openai.com"
 ```
 
 ### Environment Variables
 
-```bash
-# Set log level (default: debug)
-export RUST_LOG="gateway=debug,tower_http=debug,axum=debug"
-
-# Run with custom log level
-RUST_LOG="info" cargo run --package gateway
-```
+| Variable         | Description                                                           | Default                                     |
+| ---------------- | --------------------------------------------------------------------- | ------------------------------------------- |
+| `GATEWAY_CONFIG` | Path to YAML configuration file                                       | auto-detected                               |
+| `RUST_LOG`       | Log level filter                                                      | `gateway=debug,tower_http=debug,axum=debug` |
+| `GATEWAY_ENV`    | Environment mode (`development` skips auth when no tokens configured) | -                                           |
 
 ## API Endpoints
 
-### GET `/health`
+### Public (no authentication required)
 
-Health check endpoint.
+#### `GET /`
 
-**Response:**
-
-```
-OK
-```
-
-### GET `/`
-
-API information endpoint.
-
-**Response:**
+Returns gateway info including name, version, and available features.
 
 ```json
 {
   "name": "Gateway API",
   "version": "0.1.0",
   "description": "Smart routing gateway for LLM requests",
-  "features": ["Smart Routing", "Model Registry", "LLM Tracing"]
+  "features": ["Smart Routing", "Model Registry", "LLM Tracing", "Health Management"]
 }
 ```
 
-### GET `/api/models`
+#### `GET /health`
 
-List available models.
-
-**Response:**
+Health check with credential status counts and uptime.
 
 ```json
 {
-  "models": [],
-  "count": 0,
-  "message": "Model registry integration pending"
+  "status": "healthy",
+  "uptime_secs": 3600,
+  "credential_count": 3,
+  "healthy_count": 3,
+  "degraded_count": 0,
+  "unhealthy_count": 0
 }
 ```
 
-### GET `/api/route`
+### Protected (requires `Authorization: Bearer <token>`)
 
-Example routing endpoint.
+#### `GET /api/models`
 
-**Response:**
+Lists available models from configured credentials.
 
-```json
-{
-  "routed_to": "example-model",
-  "status": "success",
-  "message": "Smart routing integration pending"
-}
-```
+#### `GET /api/route`
 
-## Usage Examples
+Plans a route for a sample request, returning the primary route and fallback chain with classification details.
 
-### Basic Usage
+#### `POST /v1/chat/completions`
 
-```bash
-# Start the gateway
-cargo run --package gateway
-
-# Test health endpoint
-curl http://localhost:3000/health
-
-# Test root endpoint
-curl http://localhost:3000/
-
-# Test models endpoint
-curl http://localhost:3000/api/models
-
-# Test routing endpoint
-curl http://localhost:3000/api/route
-```
-
-### Integration Testing
-
-The gateway includes integration tests that can be run with:
-
-```bash
-# Run all tests
-cargo test --workspace
-
-# Run gateway tests only
-cargo test --package gateway
-
-# Run with output
-cargo test --package gateway -- --nocapture
-```
-
-## Configuration
-
-### Smart Routing Configuration
-
-```rust
-use smart_routing::SmartRoutingConfig;
-
-let config = SmartRoutingConfig {
-    weight: WeightConfig::default(),
-    health: HealthConfig::default(),
-    time_aware: TimeAwareConfig::default(),
-    quota_aware: QuotaAwareConfig::default(),
-};
-```
-
-### SQLite Backend Configuration
-
-The smart routing package includes a SQLite backend for persistent storage of metrics and health data.
-
-#### Basic Setup
-
-```rust
-use smart_routing::sqlite::{SQLiteStore, SQLiteConfig};
-use smart_routing::sqlite::{SQLiteMetricsCollector, SQLiteHealthManager, SQLiteSelector};
-
-// Create SQLite store with in-memory database
-let config = SQLiteConfig {
-    database_path: ":memory:".to_string(),
-    ..Default::default()
-};
-
-let store = SQLiteStore::new(config).await?;
-
-// Or use file-based storage
-let config = SQLiteConfig {
-    database_path: "./routing.db".to_string(),
-    ..Default::default()
-};
-
-let store = SQLiteStore::new(config).await?;
-```
-
-#### Configuration Options
-
-```rust
-use smart_routing::sqlite::SQLiteConfig;
-
-let config = SQLiteConfig {
-    database_path: "./routing.db".to_string(),
-    max_history_entries: 10000,      // Maximum history entries to retain
-    history_ttl_days: 7,              // History retention period in days
-    connection_pool_size: 5,          // Number of connections in pool
-};
-```
-
-#### Metrics Collection
-
-```rust
-use smart_routing::sqlite::SQLiteMetricsCollector;
-
-let collector = SQLiteMetricsCollector::new(store);
-
-// Initialize an auth service
-collector.initialize_auth("my-auth-service").await;
-
-// Record requests
-collector
-    .record_request("my-auth-service", 150.0, true, 200)
-    .await;
-
-// Get metrics
-let metrics = collector.get_metrics("my-auth-service").await;
-if let Some(metrics) = metrics {
-    println!("Success rate: {}", metrics.success_rate);
-    println!("Average latency: {}ms", metrics.avg_latency_ms);
-}
-```
-
-#### Health Management
-
-```rust
-use smart_routing::sqlite::SQLiteHealthManager;
-
-let manager = SQLiteHealthManager::new(store);
-
-// Record successful request
-manager.record_success("my-auth-service").await;
-
-// Record failed request
-manager.record_failure("my-auth-service", 500).await;
-
-// Check health status
-let status = manager.get_status("my-auth-service").await;
-match status {
-    HealthStatus::Healthy => println!("Service is healthy"),
-    HealthStatus::Degraded => println!("Service is degraded"),
-    HealthStatus::Unhealthy => println!("Service is unhealthy"),
-}
-
-// Check if service is available (not in cooldown)
-let available = manager.is_available("my-auth-service").await;
-```
-
-#### Smart Selection with SQLite
-
-```rust
-use smart_routing::sqlite::SQLiteSelector;
-use smart_routing::{SmartRoutingConfig, AuthInfo};
-
-let config = SmartRoutingConfig::default();
-let selector = SQLiteSelector::new(store, config);
-
-let auths = vec![
-    AuthInfo {
-        id: "auth1".to_string(),
-        priority: Some(100),
-        quota_exceeded: false,
-        unavailable: false,
-        model_states: vec![],
-    },
-    AuthInfo {
-        id: "auth2".to_string(),
-        priority: Some(50),
-        quota_exceeded: false,
-        unavailable: false,
-        model_states: vec![],
-    },
-];
-
-// Select best auth based on weighted criteria
-let selected = selector.pick(auths).await;
-if let Some(auth_id) = selected {
-    println!("Selected auth: {}", auth_id);
-}
-
-// Precompute weights for batch operations
-let auth_ids = vec!["auth1".to_string(), "auth2".to_string()];
-selector.precompute_weights(auth_ids).await?;
-
-// Get selector statistics
-let stats = selector.get_stats();
-println!("Selections: {}", stats.select_count);
-println!("DB queries: {}", stats.db_queries);
-```
-
-#### Weight Calculation
-
-The SQLite selector uses SQL-based queries to calculate weights based on:
-
-- **Success Rate**: Higher success rate = higher weight
-- **Latency**: Lower latency = higher weight (normalized to max 500ms)
-- **Health Status**: Healthy > Degraded > Unhealthy
-- **Priority**: Configurable priority value (-100 to 100)
-- **Quota Status**: Services with available quota preferred
-- **Availability**: Unavailable services excluded
-
-The weight formula:
-
-```rust
-weight = success_rate_weight * success_rate
-       + latency_weight * latency_score
-       + health_weight * health_factor
-       + load_weight * load_score
-       + priority_weight * priority_score
-```
-
-Penalties are applied for:
-
-- Unhealthy services: `unhealthy_penalty`
-- Degraded services: `degraded_penalty`
-- Quota exceeded: `quota_exceeded_penalty`
-- Unavailable: `unavailable_penalty`
-
-#### Performance Considerations
-
-- Use in-memory database (`:memory:`) for testing and development
-- Use file-based database for production persistence
-- SQLite is ideal for single-instance deployments
-- For distributed deployments, consider implementing a PostgreSQL backend
-- Connection pooling reduces connection overhead
-- Indexes on auth_id ensure fast lookups
-
-### Model Registry Configuration
-
-```rust
-use model_registry::{Registry, RegistryConfig};
-
-let config = RegistryConfig {
-    fetcher: Arc::new(MyFetcher::new()),
-    ttl: chrono::Duration::hours(1),
-    enable_background_refresh: true,
-    refresh_interval: chrono::Duration::minutes(30),
-};
-
-let registry = Registry::with_config(config);
-```
+OpenAI-compatible chat completions endpoint. Proxies requests to the selected provider after classifying the request and planning the optimal route.
 
 ## Development
 
-### Running Tests
+### Quick Reference
 
-```bash
-# Run all tests in workspace
-cargo test --workspace
+| Task     | Command                     |
+| -------- | --------------------------- |
+| Build    | `cargo build`               |
+| Test     | `cargo test --workspace`    |
+| Run      | `cargo run -p gateway`      |
+| Dev mode | `just dev`                  |
+| Lint     | `cargo clippy --workspace`  |
+| Format   | `cargo fmt`                 |
+| Fast QA  | `just qa`                   |
+| Full QA  | `just qa-full`              |
+| Docs     | `cargo doc --no-deps --all` |
 
-# Run with clippy for linting
-cargo clippy --workspace
+### Quality Gates
 
-# Format code
-cargo fmt --all
-```
+The project uses a tiered verification system via `just`:
 
-### Building for Release
+- **Tier 1** (`just qa`): Format check, fast clippy, type check -- for pre-commit
+- **Tier 2** (`just qa-full`): Tier 1 + tests + security audit -- for pre-push/CI
 
-```bash
-# Build optimized release binary
-cargo build --release --package gateway
+### Workspace Lints
 
-# Run release binary
-./target/release/gateway
-```
+The workspace enforces strict lints at the workspace level: `clippy::all`, `clippy::pedantic`, `clippy::perf` (deny), and `clippy::nursery` (warn). `unwrap()`, `expect()`, and `panic!` are denied in production code. `unsafe_code` is forbidden.
 
-## Package Details
+## Package Reference
 
-### smart-routing
+### `smart-routing` (`packages/smart-routing/`)
 
-- **Path**: `packages/smart-routing/`
-- **Features**: Weight calculation, health management, smart selection
-- **Key types**: `Router`, `SmartSelector`, `WeightCalculator`
+Weighted credential selection with health tracking, time-aware routing, and policy-based dispatch.
 
-### model-registry
+| Type                 | Location                   |
+| -------------------- | -------------------------- |
+| `SmartRoutingConfig` | `src/config/mod.rs`        |
+| `WeightConfig`       | `src/config/mod.rs`        |
+| `HealthManager`      | `src/health/mod.rs`        |
+| `WeightCalculator`   | `src/weight/calculator.rs` |
+| `Router`             | `src/router/mod.rs`        |
+| `MetricsCollector`   | `src/metrics.rs`           |
 
-- **Path**: `packages/model-registry/`
-- **Features**: Model information caching, categorization, dynamic fetching
-- **Key types**: `Registry`, `ModelInfo`, `ModelFetcher`
+### `model-registry` (`packages/model-registry/`)
 
-### tracing
+Model metadata, 5-dimension categorization, and routing policy system with JSON schema validation.
 
-- **Path**: `packages/tracing/`
-- **Features**: Request tracing, metrics, middleware
-- **Key types**: `TraceSpan`, `TraceCollector`, `TracingMiddleware`
+| Type                  | Location                 |
+| --------------------- | ------------------------ |
+| `ModelInfo`           | `src/info.rs`            |
+| `Registry`            | `src/registry/mod.rs`    |
+| `ModelCategorization` | `src/categories.rs`      |
+| `RoutingPolicy`       | `src/policy/mod.rs`      |
+| `PolicyRegistry`      | `src/policy/registry.rs` |
+
+### `llm-tracing` (`packages/tracing/`)
+
+Request/response observability with in-memory trace collection and Axum middleware integration.
+
+| Type                   | Location            |
+| ---------------------- | ------------------- |
+| `TraceSpan`            | `src/trace.rs`      |
+| `MemoryTraceCollector` | `src/collector.rs`  |
+| `TracingMiddleware`    | `src/middleware.rs` |
+
+### `gateway` (`apps/gateway/`)
+
+HTTP API server with middleware stack, provider adapters, and route handlers.
+
+| Type              | Location         |
+| ----------------- | ---------------- |
+| `GatewayConfig`   | `src/config.rs`  |
+| `AppState`        | `src/state.rs`   |
+| Route handlers    | `src/routes.rs`  |
+| Provider adapters | `src/providers/` |
 
 ## License
 
-[Specify your license here]
-
-## Contributing
-
-Contributions are welcome! Please open an issue or submit a pull request.
-
-## Status
-
-This project is under active development. Some features are marked as "integration pending" and will be completed in future iterations.
+MIT OR Apache-2.0

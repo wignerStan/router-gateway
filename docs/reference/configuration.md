@@ -1,7 +1,7 @@
 # Configuration Reference
 
-> **Source:** `packages/smart-routing/src/config.rs`
-> **Last Updated:** 2025-02-17
+> **Source:** `packages/smart-routing/src/config/mod.rs`
+> **Last Updated:** 2026-03-13
 
 This document provides complete reference information for all configuration options in the Gateway smart routing system.
 
@@ -19,7 +19,7 @@ The Gateway uses a hierarchical configuration structure defined in Rust structs.
 
 The root configuration struct for smart routing.
 
-**Source:** `packages/smart-routing/src/config.rs:6-21`
+**Source:** `packages/smart-routing/src/config/mod.rs:25`
 
 | Field         | Type               | Default      | Description                             |
 | ------------- | ------------------ | ------------ | --------------------------------------- |
@@ -29,16 +29,18 @@ The root configuration struct for smart routing.
 | `health`      | `HealthConfig`     | See defaults | Health check configuration              |
 | `time_aware`  | `TimeAwareConfig`  | See defaults | Time-aware routing configuration        |
 | `quota_aware` | `QuotaAwareConfig` | See defaults | Quota-aware routing configuration       |
+| `policy`      | `PolicyConfig`     | See defaults | Policy-aware routing configuration      |
 | `log`         | `LogConfig`        | See defaults | Logging configuration                   |
 
 ### Routing Strategies
 
-| Strategy      | Description                                         |
-| ------------- | --------------------------------------------------- |
-| `weighted`    | Weighted selection based on performance metrics     |
-| `time_aware`  | Considers time-of-day for credential selection      |
-| `quota_aware` | Balances usage across credentials to respect quotas |
-| `adaptive`    | Dynamically selects strategy based on conditions    |
+| Strategy       | Description                                         |
+| -------------- | --------------------------------------------------- |
+| `weighted`     | Weighted selection based on performance metrics     |
+| `time_aware`   | Considers time-of-day for credential selection      |
+| `quota_aware`  | Balances usage across credentials to respect quotas |
+| `adaptive`     | Dynamically selects strategy based on conditions    |
+| `policy_aware` | Route based on model-registry policy rules          |
 
 ---
 
@@ -46,7 +48,7 @@ The root configuration struct for smart routing.
 
 Configuration for weighted routing calculations.
 
-**Source:** `packages/smart-routing/src/config.rs:24-44`
+**Source:** `packages/smart-routing/src/config/mod.rs:83`
 
 | Field                    | Type  | Default | Range   | Description                                       |
 | ------------------------ | ----- | ------- | ------- | ------------------------------------------------- |
@@ -76,7 +78,7 @@ if total != 1.0 {
 }
 ```
 
-**Source:** `packages/smart-routing/src/config.rs:204-219`
+**Source:** `packages/smart-routing/src/config/mod.rs:137`
 
 ---
 
@@ -84,7 +86,7 @@ if total != 1.0 {
 
 Configuration for credential health tracking.
 
-**Source:** `packages/smart-routing/src/config.rs:47-59`
+**Source:** `packages/smart-routing/src/config/time_quota.rs:8`
 
 | Field                     | Type                     | Default      | Description                                            |
 | ------------------------- | ------------------------ | ------------ | ------------------------------------------------------ |
@@ -119,7 +121,7 @@ Configuration for credential health tracking.
 
 Configuration for HTTP status code health classification.
 
-**Source:** `packages/smart-routing/src/config.rs:62-70`
+**Source:** `packages/smart-routing/src/config/time_quota.rs:23`
 
 | Field       | Type       | Default                          | Description                              |
 | ----------- | ---------- | -------------------------------- | ---------------------------------------- |
@@ -141,7 +143,7 @@ Configuration for HTTP status code health classification.
 
 Configuration for time-based routing optimization.
 
-**Source:** `packages/smart-routing/src/config.rs:73-83`
+**Source:** `packages/smart-routing/src/config/time_quota.rs:34`
 
 | Field                           | Type                           | Default | Description                             |
 | ------------------------------- | ------------------------------ | ------- | --------------------------------------- |
@@ -152,7 +154,7 @@ Configuration for time-based routing optimization.
 
 ### TimeSlot
 
-**Source:** `packages/smart-routing/src/config.rs:86-96`
+**Source:** `packages/smart-routing/src/config/time_quota.rs:47`
 
 | Field          | Type       | Range | Description                         |
 | -------------- | ---------- | ----- | ----------------------------------- |
@@ -190,7 +192,7 @@ Configuration for time-based routing optimization.
 
 Configuration for quota-balanced routing.
 
-**Source:** `packages/smart-routing/src/config.rs:99-109`
+**Source:** `packages/smart-routing/src/config/time_quota.rs:60`
 
 | Field                     | Type     | Default      | Description                                 |
 | ------------------------- | -------- | ------------ | ------------------------------------------- |
@@ -221,7 +223,7 @@ The `reserve_ratio` determines how much quota to reserve:
 
 Configuration for routing decision logging.
 
-**Source:** `packages/smart-routing/src/config.rs:112-118`
+**Source:** `packages/smart-routing/src/config/time_quota.rs:73`
 
 | Field     | Type     | Default  | Description                     |
 | --------- | -------- | -------- | ------------------------------- |
@@ -236,6 +238,21 @@ Configuration for routing decision logging.
 | `info`  | Routing decisions with credential selection    |
 | `warn`  | Only warnings (degraded/unhealthy credentials) |
 | `error` | Only errors (no available credentials)         |
+
+---
+
+## PolicyConfig
+
+Configuration for policy-aware routing.
+
+**Source:** `packages/smart-routing/src/config/mod.rs:47`
+
+| Field             | Type                 | Default | Description                                            |
+| ----------------- | -------------------- | ------- | ------------------------------------------------------ |
+| `enabled`         | `bool`               | `false` | Enable policy-aware routing                            |
+| `config_path`     | `Option<String>`     | `None`  | Path to policy configuration file (JSON)               |
+| `inline_policies` | `Vec<RoutingPolicy>` | `[]`    | Inline policy definitions (alternative to config file) |
+| `cache_enabled`   | `bool`               | `true`  | Cache policy evaluation results for performance        |
 
 ---
 
@@ -284,6 +301,12 @@ Configuration for routing decision logging.
   "log": {
     "enabled": false,
     "level": "info"
+  },
+  "policy": {
+    "enabled": false,
+    "config_path": null,
+    "inline_policies": [],
+    "cache_enabled": true
   }
 }
 ```
@@ -311,7 +334,7 @@ The configuration is automatically validated when loaded:
 4. **Time slot validation** - Hours clamped to 0-23, invalid days removed
 5. **Quota strategy validation** - Invalid strategies reset to `"adaptive"`
 
-**Source:** `packages/smart-routing/src/config.rs:244-286`
+**Source:** `packages/smart-routing/src/config/mod.rs:193`
 
 ---
 

@@ -22,7 +22,7 @@ Defines functional capabilities supported by a model.
 | `Streaming` | Streaming response support  | All models                              |
 | `Thinking`  | Extended thinking/reasoning | claude-sonnet-4, o1, gemini-2.5-flash   |
 
-**Implementation:** `packages/model-registry/src/categories.rs:6-22`
+**Implementation:** `packages/model-registry/src/categories.rs:8`
 
 ```rust
 pub enum CapabilityCategory {
@@ -43,7 +43,7 @@ Quality/performance tier for model selection.
 | `Standard` | Balanced quality/cost         | Default                            | claude-sonnet-4, gpt-4o                       |
 | `Fast`     | Lowest cost, highest speed    | Price ≤$1/1M or known fast ID      | claude-haiku-4, gpt-4o-mini, gemini-2.5-flash |
 
-**Implementation:** `packages/model-registry/src/categories.rs:25-43`
+**Implementation:** `packages/model-registry/src/categories.rs:29`
 
 ```rust
 pub enum TierCategory {
@@ -64,7 +64,7 @@ Pricing band based on input price per million tokens.
 | `Standard`     | $1-10/1M    | claude-sonnet-4, gpt-4o     |
 | `Economy`      | <$1/1M      | claude-haiku-4, gpt-4o-mini |
 
-**Implementation:** `packages/model-registry/src/categories.rs:46-67`
+**Implementation:** `packages/model-registry/src/categories.rs:51`
 
 ```rust
 pub enum CostCategory {
@@ -86,7 +86,7 @@ Context size band for request fitting.
 | `Large`  | 128K-500K   | claude-sonnet-4, gpt-4o, gemini-2.5-pro    |
 | `Ultra`  | ≥500K       | gemini-2.5-flash (1M), gemini-1.5-pro (2M) |
 
-**Implementation:** `packages/model-registry/src/categories.rs:70-91`
+**Implementation:** `packages/model-registry/src/categories.rs:76`
 
 ```rust
 pub enum ContextWindowCategory {
@@ -101,7 +101,7 @@ pub enum ContextWindowCategory {
 
 Model vendor for provider-specific routing.
 
-**Implementation:** `packages/model-registry/src/categories.rs:94-180`
+**Implementation:** `packages/model-registry/src/categories.rs:102`
 
 ```rust
 pub enum ProviderCategory {
@@ -316,7 +316,7 @@ async fn filter_by_provider(provider: ProviderCategory) -> Vec<ModelInfo>
 async fn find_best_fit(tokens: usize) -> Option<ModelInfo>
 ```
 
-**Implementation:** `packages/model-registry/src/registry.rs:305-430`
+**Implementation:** `packages/model-registry/src/registry/mod.rs:305-430`
 
 ---
 
@@ -403,4 +403,4 @@ pub struct ModelInfo {
 | Tier       | 3 (Flagship, Standard, Fast)           | Quality/speed selection |
 | Cost       | 4 (UltraPremium → Economy)             | Budget optimization     |
 | Context    | 4 (Small → Ultra)                      | Request fitting         |
-| Provider   | 3 (Anthropic, OpenAI, Google)          | Provider routing        |
+| Provider   | 20+ (see Provider Category above)      | Provider routing        |

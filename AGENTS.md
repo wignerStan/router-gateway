@@ -1,4 +1,4 @@
-# AGENTS.md
+# AGENT INSTRUCTIONS
 
 ## Project Overview
 
@@ -16,28 +16,44 @@ A **local LLM gateway** written in Rust for intelligent request routing. Routes 
 | `packages/tracing/` | `llm-tracing` |
 | `apps/cli/`         | `my-cli`      |
 
-## Build and test commands
+### Build and test commands
 
-| Task        | Command                    |
-| ----------- | -------------------------- |
-| Build       | `cargo build`              |
-| Test        | `cargo test --workspace`   |
-| Run Gateway | `cargo run -p gateway`     |
-| Lint        | `cargo clippy --workspace` |
-| Format      | `cargo fmt`                |
-| All Checks  | `just qa`                  |
+| Task        | Command                  |
+| ----------- | ------------------------ |
+| Build       | `cargo build`            |
+| Test        | `cargo test --workspace` |
+| Run Gateway | `cargo run -p gateway`   |
+| Lint        | `cargo lint`             |
+| Format      | `cargo fmt`              |
+| All Checks  | `just qa`                |
+
+### Known Pitfalls
+
+- All async operations use Tokio — always `.await` on registry/selector methods
+- `Registry::get()` requires model ID to be non-empty (returns error otherwise)
+- Health manager clones have independent storage (not shared state)
+- Trace collectors are not shared across clones (same pattern)
+- SQLite store requires `bundled` feature for cross-platform builds
+- Model registry cache TTL is 1 hour by default
+- Floating-point metrics may contain NaN values — always use `partial_cmp().unwrap_or(Ordering::Equal)` instead of `.unwrap()`
+- `constant_time_token_eq()` must be used for all auth token comparisons to prevent timing attacks
+
+### REFERENCE
+
+For architecture, features, configuration, API endpoints, and key types, see [README.md](README.md).
 
 ## Code style guidelines
 
 This project enforces production-level code style using `rustfmt` and `clippy`. Adhere to the following conventions:
 
 ### General Idioms & Style
+
 - **Cosmetic Discipline**: Adhere to standard naming (`snake_case`, `CamelCase`, `UPPER_SNAKE_CASE`). Group imports hierarchically.
 - **Borrowing over Cloning**: Prefer borrowing (`&T`) over `.clone()` to avoid unnecessary allocations.
 - **Prevent Early Allocation**: Do not collect into `Vec` unless explicitly necessary for returning or async bounds.
 - **Result over Panic**: Return `Result<T, E>`. Never `unwrap()` or `expect()` in production code. Use `thiserror` (lib) / `anyhow` (bin).
 - **Type State Pattern**: Use Type State for complex state machines to guarantee compile-time correctness.
-- **No Living Comments**: Don't write out-of-sync comments. Let code describe the *what* and comments the *why*.
+- **No Living Comments**: Don't write out-of-sync comments. Let code describe the _what_ and comments the _why_.
 - **Match statements**: Make match statements exhaustive and avoid wildcard arms (`_`) whenever possible. Use explicit arms for maintainability.
 - **Range checking**: Use `(start..=end).contains(&val)` instead of manual `>=` and `<=` checks.
 - **Borrowing**: Prefer borrowing over cloning. Prevent early allocations.
@@ -78,113 +94,14 @@ This project enforces production-level code style using `rustfmt` and `clippy`. 
 - **Sleeping**: Avoid `std::thread::sleep` in async contexts; always use `tokio::time::sleep`.
 - **Snapshot Testing**: Use snapshot testing (e.g., `cargo insta`) for output validation where appropriate.
 - **Test Errors**: Ensure unit tests exercise error conditions and not just the happy path.
-- **Code Style Enforcement**: All code changes **must** pass formatting and linting rules. Before finalizing changes run `cargo fmt`, `cargo clippy --workspace --all-targets` to fix lint issues, and `just qa` to run all project quality gates.
 
 ## Security considerations
 
-- Be mindful of avoiding `unwrap()` and `expect()` to prevent panic-induced Denial of Service (DoS) in the gateway.
-- See `SECURITY.md` in the repository root for vulnerability reporting procedures and further details on standard security practices.
-
-## Extra instructions
-
-### Project Structure
-
-```
-gateway/
-  packages/
-    model-registry/   # Model metadata, 5-dimension categorization
-    smart-routing/    # Weighted credential selection, health tracking
-    tracing/          # Request/response observability (llm-tracing)
-  apps/
-    gateway/          # HTTP API server (Axum on :3000)
-    cli/              # CLI management utility
-```
-
-### Architecture
-
-#### Smart Routing (`smart-routing`)
-
-Policy-based credential selection with configurable weights and strategies.
-
-**Routing Strategies** (configured via `SmartRoutingConfig.strategy`):
-
-- `weighted` - Weighted random selection based on scores
-- `time_aware` - Time-based credential preference (peak/off-peak)
-- `quota_aware` - Quota-balanced selection with reserve ratio
-- `adaptive` - Dynamically adjusts based on real-time metrics
-
-**Weight Factors** (configured via `WeightConfig`):
-| Factor | Default | Purpose |
-|--------|---------|---------|
-| success_rate | 0.35 | Favor credentials with higher success rate |
-| latency | 0.25 | Favor lower latency credentials |
-| health | 0.20 | Prefer healthy over degraded/unhealthy |
-| load | 0.15 | Balance load across credentials |
-| priority | 0.05 | Manual priority override |
-
-**Health States**: `Healthy` → `Degraded` (429/503) → `Unhealthy` (401-403/500/502/504)
-
-Key types: `SmartRoutingConfig`, `WeightConfig`, `HealthManager`, `WeightCalculator`
-
-#### Model Registry (`model-registry`)
-
-Multi-dimension categorization for routing decisions:
-
-| Dimension      | Categories                                                              | Purpose             |
-| -------------- | ----------------------------------------------------------------------- | ------------------- |
-| **Capability** | Vision, Tools, Streaming, Thinking                                      | Feature matching    |
-| **Tier**       | Flagship, Standard, Fast                                                | Quality routing     |
-| **Cost**       | UltraPremium, Premium, Standard, Economy                                | Cost optimization   |
-| **Context**    | Small (<32K) → Ultra (500K+)                                            | Context fitting     |
-| **Provider**   | 20+ providers (Anthropic, OpenAI, Google, xAI, DeepSeek, Mistral, etc.) | Vendor routing      |
-| **Modality**   | Text, Image, Audio, Video, Embedding, Code                              | Multi-modal routing |
-
-**Supported Providers**: Anthropic, OpenAI, Google, xAI (Grok), DeepSeek, Mistral, Cohere, Perplexity, Alibaba (Qwen), Zhipu (GLM), Baidu, Moonshot (Kimi), ByteDance, Meta (Llama), Amazon Bedrock, Azure, and more.
-
-**Routing Policy System**: Fine-grained routing rules based on multi-dimensional classification with:
-
-- Policy filters (capabilities, tiers, costs, providers, modalities)
-- Policy actions (prefer, avoid, block, weight)
-- Conditional application (time-based, tenant-based, token-count)
-
-Key types: `ModelInfo`, `ModelCategorization` trait, `Registry`, `RoutingPolicy`, `PolicyRegistry`
-
-#### LLM Tracing (`llm-tracing`)
-
-Request/response observability for debugging and analytics:
-
-- `TraceSpan`: Captures request ID, provider, model, tokens, latency, errors
-- `MemoryTraceCollector`: In-memory trace storage
-- `TracingMiddleware`: Axum middleware integration
-
-Key types: `TraceSpan`, `TraceCollector` trait, `TracingMiddleware`
-
-### Known Pitfalls
-
-- All async operations use Tokio - always `.await` on registry/selector methods
-- `Registry::get()` requires model ID to be non-empty (returns error otherwise)
-- Health manager clones have independent storage (not shared state)
-- Trace collectors are not shared across clones (same pattern)
-- SQLite store requires `bundled` feature for cross-platform builds
-- Model registry cache TTL is 1 hour by default
-
-### Reference Implementations
-
-| Pattern               | Location                                            |
-| --------------------- | --------------------------------------------------- |
-| SmartRoutingConfig    | `packages/smart-routing/src/config.rs:4-21`         |
-| WeightConfig defaults | `packages/smart-routing/src/config.rs:134-147`      |
-| Weight calculation    | `packages/smart-routing/src/weight.rs:112-166`      |
-| Health state machine  | `packages/smart-routing/src/health.rs:4-50`         |
-| Model categorization  | `packages/model-registry/src/categories.rs:146-277` |
-| Trace span            | `packages/tracing/src/trace.rs:5-35`                |
-| HTTP endpoint setup   | `apps/gateway/src/main.rs:43-48`                    |
-
-### Documentation
-
-- Model Classification: `docs/MODEL_CLASSIFICATION.md`
-- API Transformation: `docs/API_TRANSFORMATION.md`
-- Skills: `.agents/skills/`
+- No `unwrap()`/`expect()` in production — prevents DoS via panic.
+- Use `constant_time_token_eq()` for all auth token comparisons (timing side-channel prevention).
+- Use `partial_cmp().unwrap_or(Ordering::Equal)` for all float comparisons (NaN safety).
+- SSRF protection blocks private/reserved IPs and IPv6-mapped/compatible addresses.
+- See [SECURITY.md](SECURITY.md) for full security policy, deployment practices, and reporting procedures.
 
 <!-- BEGIN BEADS INTEGRATION -->
 
@@ -270,7 +187,7 @@ bd automatically syncs via Dolt:
 - ❌ Do NOT use external issue trackers
 - ❌ Do NOT duplicate tracking systems
 
-For more details, see README.md and docs/QUICKSTART.md.
+For more details, see README.md.
 
 <!-- END BEADS INTEGRATION -->
 
