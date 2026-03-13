@@ -1,3 +1,4 @@
+use super::error::{Result, SqliteError};
 use crate::config::SmartRoutingConfig;
 use crate::sqlite::store::SQLiteStore;
 use crate::weight::AuthInfo;
@@ -245,14 +246,14 @@ impl SQLiteSelector {
     }
 
     /// Precompute weights for batch operations
-    pub async fn precompute_weights(&self, auth_ids: Vec<String>) -> Result<(), String> {
+    pub async fn precompute_weights(&self, auth_ids: Vec<String>) -> Result<()> {
         if auth_ids.is_empty() {
             return Ok(());
         }
 
         // Convert auth_ids to JSON array
         let json_array = serde_json::to_string(&auth_ids)
-            .map_err(|e| format!("Failed to marshal auth IDs: {}", e))?;
+            .map_err(|e| SqliteError::Serialization(e.to_string()))?;
 
         // Get database connection
         let db = self.store.get_db().await;
@@ -280,33 +281,33 @@ impl SQLiteSelector {
 
         let mut stmt = db
             .prepare(query)
-            .map_err(|e| format!("Failed to prepare query: {}", e))?;
+            .map_err(|e| SqliteError::query("prepare_weight_query", e))?;
 
         let mut rows = stmt
             .query([&json_array])
-            .map_err(|e| format!("Failed to query weights: {}", e))?;
+            .map_err(|e| SqliteError::query("query_weights", e))?;
 
         let mut weights = HashMap::new();
 
         while let Some(row) = rows
             .next()
-            .map_err(|e| format!("Failed to read row: {}", e))?
+            .map_err(|e| SqliteError::query("read_weight_row", e))?
         {
             let auth_id: String = row
                 .get(0)
-                .map_err(|e| format!("Failed to get auth_id: {}", e))?;
+                .map_err(|e| SqliteError::query("get_weight_auth_id", e))?;
             let success_rate: f64 = row
                 .get(1)
-                .map_err(|e| format!("Failed to get success_rate: {}", e))?;
+                .map_err(|e| SqliteError::query("get_weight_success_rate", e))?;
             let latency: f64 = row
                 .get(2)
-                .map_err(|e| format!("Failed to get latency: {}", e))?;
+                .map_err(|e| SqliteError::query("get_weight_latency", e))?;
             let health_factor: f64 = row
                 .get(3)
-                .map_err(|e| format!("Failed to get health_factor: {}", e))?;
+                .map_err(|e| SqliteError::query("get_weight_health_factor", e))?;
             let available: i32 = row
                 .get(4)
-                .map_err(|e| format!("Failed to get available: {}", e))?;
+                .map_err(|e| SqliteError::query("get_weight_available", e))?;
 
             if available == 0 {
                 weights.insert(auth_id.clone(), 0.0);
@@ -333,14 +334,14 @@ impl SQLiteSelector {
     }
 
     /// Update weights in database
-    async fn update_weights(&self, weights: HashMap<String, f64>) -> Result<(), String> {
+    async fn update_weights(&self, weights: HashMap<String, f64>) -> Result<()> {
         let db = self.store.get_db().await;
         let db = db.lock().await;
 
         // Begin transaction
         let tx = db
             .unchecked_transaction()
-            .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+            .map_err(|e| SqliteError::query("begin_transaction", e))?;
 
         // Prepare insert statement
         let mut stmt = tx
@@ -354,22 +355,22 @@ impl SQLiteSelector {
                 strategy = excluded.strategy
         "#,
             )
-            .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+            .map_err(|e| SqliteError::query("prepare_weight_insert", e))?;
 
         for (auth_id, weight) in &weights {
             stmt.execute((&auth_id, weight, &self.config.strategy))
-                .map_err(|e| format!("Failed to execute statement: {}", e))?;
+                .map_err(|e| SqliteError::query("execute_weight_insert", e))?;
         }
 
         drop(stmt);
         tx.commit()
-            .map_err(|e| format!("Failed to commit transaction: {}", e))?;
+            .map_err(|e| SqliteError::query("commit_weight_transaction", e))?;
 
         Ok(())
     }
 
     /// Get top N auths by weight
-    pub async fn get_top_auths(&self, limit: usize) -> Result<Vec<String>, String> {
+    pub async fn get_top_auths(&self, limit: usize) -> Result<Vec<String>> {
         let db = self.store.get_db().await;
         let db = db.lock().await;
 
@@ -385,21 +386,21 @@ impl SQLiteSelector {
 
         let mut stmt = db
             .prepare(&query)
-            .map_err(|e| format!("Failed to prepare query: {}", e))?;
+            .map_err(|e| SqliteError::query("prepare_top_auths_query", e))?;
 
         let mut rows = stmt
             .query([&self.config.strategy])
-            .map_err(|e| format!("Failed to query top auths: {}", e))?;
+            .map_err(|e| SqliteError::query("query_top_auths", e))?;
 
         let mut auth_ids = Vec::new();
 
         while let Some(row) = rows
             .next()
-            .map_err(|e| format!("Failed to read row: {}", e))?
+            .map_err(|e| SqliteError::query("read_top_auth_row", e))?
         {
             let auth_id: String = row
                 .get(0)
-                .map_err(|e| format!("Failed to get auth_id: {}", e))?;
+                .map_err(|e| SqliteError::query("get_top_auth_id", e))?;
             auth_ids.push(auth_id);
         }
 

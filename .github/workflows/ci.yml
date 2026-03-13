@@ -72,14 +72,14 @@ jobs:
         run: just ci-lint
 
   msrv:
-    name: MSRV Check (1.83)
+    name: MSRV Check (1.85)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Rust 1.83
-        uses: dtolnay/rust-toolchain@1.83
+      - name: Set up Rust 1.85
+        uses: dtolnay/rust-toolchain@1.85
 
       - name: Cache cargo registry
         uses: Swatinem/rust-cache@v2

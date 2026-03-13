@@ -1,4 +1,6 @@
-msrv = "1.83"
+
+# Clippy Configuration
+msrv = "1.85"
 
 cognitive-complexity-threshold = 15
 enum-variant-size-threshold = 256
