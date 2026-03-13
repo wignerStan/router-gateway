@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tower_http::trace::TraceLayer;
@@ -270,7 +271,11 @@ async fn main() -> anyhow::Result<()> {
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }
@@ -447,6 +452,7 @@ struct RateLimiter {
     /// IP address -> (request count, window start time)
     buckets: Arc<Mutex<HashMap<String, (u64, Instant)>>>,
     max_requests: u64,
+    op_count: AtomicUsize,
 }
 
 impl RateLimiter {
@@ -454,18 +460,27 @@ impl RateLimiter {
         Self {
             buckets: Arc::new(Mutex::new(HashMap::new())),
             max_requests,
+            op_count: AtomicUsize::new(0),
         }
     }
 
     /// Check whether a request from the given IP should be allowed.
     /// Returns `true` if under the limit, `false` if rate limited.
-    /// Also prunes stale entries (inactive for >2 minutes) to prevent unbounded growth.
+    /// Periodically prunes stale entries (inactive for >2 minutes) to prevent unbounded growth.
     fn check(&self, ip: &str) -> bool {
         let mut buckets = self.buckets.lock().expect("Rate limiter mutex poisoned");
         let now = Instant::now();
 
-        // Prune stale entries to prevent unbounded memory growth
-        buckets.retain(|_, (_, window_start)| now.duration_since(*window_start).as_secs() < 120);
+        // Periodically prune stale entries every 1000 requests to avoid
+        // iterating the entire map on every single request under load.
+        if self
+            .op_count
+            .fetch_add(1, Ordering::Relaxed)
+            .is_multiple_of(1000)
+        {
+            buckets
+                .retain(|_, (_, window_start)| now.duration_since(*window_start).as_secs() < 120);
+        }
 
         let (count, window_start) = buckets.entry(ip.to_string()).or_insert((0, now));
 
@@ -490,9 +505,11 @@ impl RateLimiter {
 /// prevent header-spoofing bypasses.
 async fn rate_limit_middleware(
     axum::extract::State(state): axum::extract::State<AppState>,
+    axum::extract::ConnectInfo(addr): axum::extract::ConnectInfo<SocketAddr>,
     req: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> std::result::Result<axum::response::Response, (axum::http::StatusCode, Json<Value>)> {
+    let peer_ip = addr.ip().to_string();
     let client_ip = if state.config.server.trust_proxy_headers {
         req.headers()
             .get("x-forwarded-for")
@@ -501,9 +518,9 @@ async fn rate_limit_middleware(
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .or_else(|| req.headers().get("x-real-ip").and_then(|v| v.to_str().ok()))
-            .unwrap_or("unknown")
+            .unwrap_or(&peer_ip)
     } else {
-        "shared"
+        &peer_ip
     };
 
     if !state.rate_limiter.check(client_ip) {
@@ -1036,31 +1053,30 @@ mod integration_tests {
             ))
             .with_state(state);
 
+        let test_addr = SocketAddr::from(([127, 0, 0, 1], 12345));
+
         // First 3 requests should succeed
         for _ in 0..3 {
-            let response = app
-                .clone()
-                .oneshot(
-                    Request::builder()
-                        .uri("/health")
-                        .body(Body::empty())
-                        .unwrap(),
-                )
-                .await
+            let mut request = Request::builder()
+                .uri("/health")
+                .body(Body::empty())
                 .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+            let response = app.clone().oneshot(request).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK);
         }
 
         // 4th request should be rate limited (429)
-        let response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/health")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
+        let mut request = Request::builder()
+            .uri("/health")
+            .body(Body::empty())
             .unwrap();
+        request
+            .extensions_mut()
+            .insert(axum::extract::ConnectInfo(test_addr));
+        let response = app.oneshot(request).await.unwrap();
 
         assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
     }

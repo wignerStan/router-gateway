@@ -381,20 +381,10 @@ fn is_private_ip(ip: &IpAddr) -> bool {
             if let Some(v4) = v6.to_ipv4() {
                 return is_private_ip(&IpAddr::V4(v4));
             }
-            // Loopback: ::1
-            if v6.is_loopback() {
-                return true;
-            }
-            let segments = v6.segments();
-            // Private: fc00::/7 (unique local)
-            if (0xfc00..=0xfdff).contains(&segments[0]) {
-                return true;
-            }
-            // Link-local: fe80::/10
-            if (0xfe80..=0xfebf).contains(&segments[0]) {
-                return true;
-            }
-            false
+            // Combine loopback, unique local, and link-local into a single expression
+            v6.is_loopback()
+                || (0xfc00..=0xfdff).contains(&v6.segments()[0]) // Private: fc00::/7 (unique local)
+                || (0xfe80..=0xfebf).contains(&v6.segments()[0]) // Link-local: fe80::/10
         },
     }
 }
