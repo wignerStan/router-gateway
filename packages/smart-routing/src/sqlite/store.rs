@@ -1,3 +1,4 @@
+use super::error::{Result, SqliteError};
 use crate::health::{AuthHealth, HealthStatus};
 use crate::metrics::AuthMetrics;
 use chrono::{DateTime, Utc};
@@ -59,7 +60,7 @@ impl Default for SQLiteConfig {
 
 impl SQLiteStore {
     /// Create a new SQLite store
-    pub async fn new(config: SQLiteConfig) -> Result<Self, String> {
+    pub async fn new(config: SQLiteConfig) -> Result<Self> {
         let cfg = config.clone();
 
         // Build DSN with WAL mode if enabled
@@ -73,8 +74,7 @@ impl SQLiteStore {
         };
 
         // Open database connection
-        let conn =
-            Connection::open(&dsn).map_err(|e| format!("Failed to open SQLite database: {}", e))?;
+        let conn = Connection::open(&dsn)?;
 
         // Configure pragmas
         let store = Self {
@@ -92,7 +92,7 @@ impl SQLiteStore {
     }
 
     /// Configure SQLite pragmas
-    async fn configure_pragmas(&self, config: &SQLiteConfig) -> Result<(), String> {
+    async fn configure_pragmas(&self, config: &SQLiteConfig) -> Result<()> {
         let db = self.db.lock().await;
 
         // Configure cache size (negative value means KB)
@@ -100,35 +100,35 @@ impl SQLiteStore {
             &format!("PRAGMA cache_size = -{}", config.cache_size_mb * 1024),
             [],
         )
-        .map_err(|e| format!("Failed to set cache_size: {}", e))?;
+        .map_err(|e| SqliteError::query("set_cache_size", e))?;
 
         // Configure busy timeout using the rusqlite method
         db.busy_timeout(std::time::Duration::from_millis(
             config.busy_timeout_ms as u64,
         ))
-        .map_err(|e| format!("Failed to set busy_timeout: {}", e))?;
+        .map_err(|e| SqliteError::query("set_busy_timeout", e))?;
 
         // Enable foreign keys
         db.execute("PRAGMA foreign_keys = ON", [])
-            .map_err(|e| format!("Failed to enable foreign_keys: {}", e))?;
+            .map_err(|e| SqliteError::query("set_foreign_keys", e))?;
 
         // Set synchronous mode to NORMAL for performance
         db.execute("PRAGMA synchronous = NORMAL", [])
-            .map_err(|e| format!("Failed to set synchronous: {}", e))?;
+            .map_err(|e| SqliteError::query("set_synchronous", e))?;
 
         // Use memory for temp storage
         db.execute("PRAGMA temp_store = MEMORY", [])
-            .map_err(|e| format!("Failed to set temp_store: {}", e))?;
+            .map_err(|e| SqliteError::query("set_temp_store", e))?;
 
         // Enable memory-mapped I/O
         db.execute("PRAGMA mmap_size = 268435456", []) // 256MB
-            .map_err(|e| format!("Failed to set mmap_size: {}", e))?;
+            .map_err(|e| SqliteError::query("set_mmap_size", e))?;
 
         Ok(())
     }
 
     /// Create database tables
-    async fn create_tables(&self) -> Result<(), String> {
+    async fn create_tables(&self) -> Result<()> {
         let db = self.db.lock().await;
 
         // Auth metrics table
@@ -153,7 +153,7 @@ impl SQLiteStore {
             )",
             [],
         )
-        .map_err(|e| format!("Failed to create auth_metrics table: {}", e))?;
+        .map_err(|e| SqliteError::Schema { source: e })?;
 
         // Auth health table
         db.execute(
@@ -171,7 +171,7 @@ impl SQLiteStore {
             )",
             [],
         )
-        .map_err(|e| format!("Failed to create auth_health table: {}", e))?;
+        .map_err(|e| SqliteError::Schema { source: e })?;
 
         // Status code history table
         db.execute(
@@ -185,7 +185,7 @@ impl SQLiteStore {
             )",
             [],
         )
-        .map_err(|e| format!("Failed to create status_code_history table: {}", e))?;
+        .map_err(|e| SqliteError::Schema { source: e })?;
 
         // Auth weights table
         db.execute(
@@ -197,13 +197,13 @@ impl SQLiteStore {
             )",
             [],
         )
-        .map_err(|e| format!("Failed to create auth_weights table: {}", e))?;
+        .map_err(|e| SqliteError::Schema { source: e })?;
 
         Ok(())
     }
 
     /// Create database indexes
-    async fn create_indexes(&self) -> Result<(), String> {
+    async fn create_indexes(&self) -> Result<()> {
         let db = self.db.lock().await;
 
         let indexes = vec![
@@ -220,7 +220,7 @@ impl SQLiteStore {
 
         for idx in indexes {
             db.execute(idx, [])
-                .map_err(|e| format!("Failed to create index: {}", e))?;
+                .map_err(|e| SqliteError::Schema { source: e })?;
         }
 
         Ok(())
@@ -232,7 +232,7 @@ impl SQLiteStore {
     }
 
     /// Write metrics to database
-    pub async fn write_metrics(&self, auth_id: &str, metrics: &AuthMetrics) -> Result<(), String> {
+    pub async fn write_metrics(&self, auth_id: &str, metrics: &AuthMetrics) -> Result<()> {
         let db = self.db.lock().await;
 
         let last_request_time = metrics.last_request_time.to_rfc3339();
@@ -280,7 +280,7 @@ impl SQLiteStore {
                 last_failure_time,
             ],
         )
-        .map_err(|e| format!("Failed to write metrics: {}", e))?;
+        .map_err(|e| SqliteError::query("write_metrics", e))?;
 
         // Update cache
         if self
@@ -306,7 +306,7 @@ impl SQLiteStore {
     }
 
     /// Write health to database
-    pub async fn write_health(&self, auth_id: &str, health: &AuthHealth) -> Result<(), String> {
+    pub async fn write_health(&self, auth_id: &str, health: &AuthHealth) -> Result<()> {
         let db = self.db.lock().await;
 
         let status = format!("{:?}", health.status);
@@ -342,7 +342,7 @@ impl SQLiteStore {
                 error_counts,
             ],
         )
-        .map_err(|e| format!("Failed to write health: {}", e))?;
+        .map_err(|e| SqliteError::query("write_health", e))?;
 
         // Update cache
         if self
@@ -374,7 +374,7 @@ impl SQLiteStore {
         status_code: i32,
         latency_ms: f64,
         success: bool,
-    ) -> Result<(), String> {
+    ) -> Result<()> {
         let db = self.db.lock().await;
 
         db.execute(
@@ -387,13 +387,13 @@ impl SQLiteStore {
                 if success { 1 } else { 0 },
             ],
         )
-        .map_err(|e| format!("Failed to write status history: {}", e))?;
+        .map_err(|e| SqliteError::query("write_status_history", e))?;
 
         Ok(())
     }
 
     /// Load metrics from database
-    pub async fn load_metrics(&self, auth_id: &str) -> Result<Option<AuthMetrics>, String> {
+    pub async fn load_metrics(&self, auth_id: &str) -> Result<Option<AuthMetrics>> {
         // Check cache first
         if self
             .cache_enabled
@@ -421,7 +421,7 @@ impl SQLiteStore {
                 last_request_time, last_success_time, last_failure_time
                 FROM auth_metrics WHERE auth_id = ?1",
             )
-            .map_err(|e| format!("Failed to prepare metrics query: {}", e))?;
+            .map_err(|e| SqliteError::query("prepare_metrics_query", e))?;
 
         let result = stmt.query_row([auth_id], |row| {
             let last_request_time_str: String = row.get(10)?;
@@ -481,12 +481,12 @@ impl SQLiteStore {
                 Ok(Some(metrics))
             },
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(format!("Failed to load metrics: {}", e)),
+            Err(e) => Err(SqliteError::query("load_metrics", e)),
         }
     }
 
     /// Load health from database
-    pub async fn load_health(&self, auth_id: &str) -> Result<Option<AuthHealth>, String> {
+    pub async fn load_health(&self, auth_id: &str) -> Result<Option<AuthHealth>> {
         // Check cache first
         if self
             .cache_enabled
@@ -511,7 +511,7 @@ impl SQLiteStore {
                 last_status_change, last_check_time, unavailable_until, error_counts
                 FROM auth_health WHERE auth_id = ?1",
             )
-            .map_err(|e| format!("Failed to prepare health query: {}", e))?;
+            .map_err(|e| SqliteError::query("prepare_health_query", e))?;
 
         let result = stmt.query_row([auth_id], |row| {
             let status_str: String = row.get(0)?;
@@ -582,14 +582,12 @@ impl SQLiteStore {
                 Ok(Some(health))
             },
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(format!("Failed to load health: {}", e)),
+            Err(e) => Err(SqliteError::query("load_health", e)),
         }
     }
 
     /// Load all metrics from database
-    pub async fn load_all_metrics(
-        &self,
-    ) -> Result<std::collections::HashMap<String, AuthMetrics>, String> {
+    pub async fn load_all_metrics(&self) -> Result<std::collections::HashMap<String, AuthMetrics>> {
         let db = self.db.lock().await;
 
         let mut stmt = db
@@ -601,7 +599,7 @@ impl SQLiteStore {
                 last_request_time, last_success_time, last_failure_time
                 FROM auth_metrics",
             )
-            .map_err(|e| format!("Failed to prepare all metrics query: {}", e))?;
+            .map_err(|e| SqliteError::query("prepare_all_metrics_query", e))?;
 
         let metrics_map = stmt
             .query_map([], |row| {
@@ -650,17 +648,15 @@ impl SQLiteStore {
                     },
                 ))
             })
-            .map_err(|e| format!("Failed to map metrics: {}", e))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Failed to collect metrics: {}", e))?;
+            .map_err(|e| SqliteError::query("map_metrics", e))?
+            .collect::<std::result::Result<Vec<_>, rusqlite::Error>>()
+            .map_err(|e| SqliteError::query("collect_metrics", e))?;
 
         Ok(metrics_map.into_iter().collect())
     }
 
     /// Load all health from database
-    pub async fn load_all_health(
-        &self,
-    ) -> Result<std::collections::HashMap<String, AuthHealth>, String> {
+    pub async fn load_all_health(&self) -> Result<std::collections::HashMap<String, AuthHealth>> {
         let db = self.db.lock().await;
 
         let mut stmt = db
@@ -669,7 +665,7 @@ impl SQLiteStore {
                 last_status_change, last_check_time, unavailable_until, error_counts
                 FROM auth_health",
             )
-            .map_err(|e| format!("Failed to prepare all health query: {}", e))?;
+            .map_err(|e| SqliteError::query("prepare_all_health_query", e))?;
 
         let health_map = stmt
             .query_map([], |row| {
@@ -708,15 +704,15 @@ impl SQLiteStore {
                     },
                 ))
             })
-            .map_err(|e| format!("Failed to map health: {}", e))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Failed to collect health: {}", e))?;
+            .map_err(|e| SqliteError::query("map_health", e))?
+            .collect::<std::result::Result<Vec<_>, rusqlite::Error>>()
+            .map_err(|e| SqliteError::query("collect_health", e))?;
 
         Ok(health_map.into_iter().collect())
     }
 
     /// Cleanup old history records
-    pub async fn cleanup_old_history(&self, max_age_seconds: i64) -> Result<i64, String> {
+    pub async fn cleanup_old_history(&self, max_age_seconds: i64) -> Result<i64> {
         let cutoff = Utc::now() - chrono::Duration::seconds(max_age_seconds);
         let cutoff_str = cutoff.to_rfc3339();
 
@@ -727,18 +723,18 @@ impl SQLiteStore {
                 "DELETE FROM status_code_history WHERE timestamp < ?1",
                 [&cutoff_str],
             )
-            .map_err(|e| format!("Failed to cleanup old history: {}", e))?;
+            .map_err(|e| SqliteError::query("cleanup_old_history", e))?;
 
         Ok(result as i64)
     }
 
     /// Get history statistics
-    pub async fn get_history_stats(&self) -> Result<(i64, Option<DateTime<Utc>>), String> {
+    pub async fn get_history_stats(&self) -> Result<(i64, Option<DateTime<Utc>>)> {
         let db = self.db.lock().await;
 
         let mut stmt = db
             .prepare("SELECT COUNT(*), MIN(timestamp) FROM status_code_history")
-            .map_err(|e| format!("Failed to prepare history stats query: {}", e))?;
+            .map_err(|e| SqliteError::query("prepare_history_stats_query", e))?;
 
         stmt.query_row([], |row| {
             let count: i64 = row.get(0)?;
@@ -750,6 +746,6 @@ impl SQLiteStore {
 
             Ok((count, min_timestamp))
         })
-        .map_err(|e| format!("Failed to get history stats: {}", e))
+        .map_err(|e| SqliteError::query("get_history_stats", e))
     }
 }

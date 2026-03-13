@@ -8,6 +8,7 @@ mod tests;
 
 pub use collectors::SQLiteHealthManager;
 pub use collectors::SQLiteMetricsCollector;
+pub use error::{Result, SqliteError};
 pub use selector::SQLiteSelector;
 pub use selector::SelectorStats;
 pub use store::SQLiteConfig;
