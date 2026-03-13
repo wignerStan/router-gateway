@@ -14,7 +14,22 @@ impl PolicyRegistry {
         }
     }
 
-    /// Add a policy
+    /// Add a policy to the registry.
+    ///
+    /// Policies are sorted by priority (highest first) after insertion.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use model_registry::{PolicyRegistry, RoutingPolicy};
+    ///
+    /// let mut registry = PolicyRegistry::new();
+    /// let policy = RoutingPolicy::new("pol-1", "Prefer Flagship");
+    /// registry.add(policy);
+    ///
+    /// assert_eq!(registry.all().len(), 1);
+    /// assert!(registry.get("pol-1").is_some());
+    /// ```
     pub fn add(&mut self, policy: RoutingPolicy) {
         self.policies.push(policy);
         self.sort_by_priority();

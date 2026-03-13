@@ -36,7 +36,27 @@ pub struct TraceSpan {
 }
 
 impl TraceSpan {
-    /// Create a new trace span
+    /// Create a new trace span.
+    ///
+    /// Sets `start_time` to now. All optional fields (`end_time`, tokens,
+    /// etc.) start as `None` until explicitly set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use llm_tracing::TraceSpan;
+    ///
+    /// let span = TraceSpan::new(
+    ///     "req-123".to_string(),
+    ///     "openai".to_string(),
+    ///     "gpt-4".to_string(),
+    ///     Some("user-456".to_string()),
+    /// );
+    ///
+    /// assert_eq!(span.request_id, "req-123");
+    /// assert_eq!(span.provider, "openai");
+    /// assert!(span.end_time.is_none());
+    /// ```
     pub fn new(
         request_id: String,
         provider: String,

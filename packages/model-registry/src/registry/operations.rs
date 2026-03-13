@@ -4,6 +4,20 @@ use tokio::task::JoinSet;
 
 impl Registry {
     /// Creates a new model registry with default configuration.
+    ///
+    /// Uses a [`StaticFetcher`](crate::StaticFetcher) that returns no models.
+    /// Replace the fetcher via [`with_config`](Self::with_config) for real data.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use model_registry::Registry;
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let registry = Registry::new();
+    /// assert_eq!(registry.cached_count().await, 0);
+    /// # }
+    /// ```
     pub fn new() -> Self {
         Self::with_config(RegistryConfig::default())
     }

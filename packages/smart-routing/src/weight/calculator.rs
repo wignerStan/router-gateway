@@ -24,7 +24,26 @@ pub struct DefaultWeightCalculator {
 }
 
 impl DefaultWeightCalculator {
-    /// Create a new weight calculator
+    /// Create a new weight calculator with the given configuration.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use smart_routing::{DefaultWeightCalculator, WeightCalculator, WeightConfig, AuthInfo, HealthStatus};
+    ///
+    /// let calc = DefaultWeightCalculator::new(WeightConfig::default());
+    ///
+    /// let auth = AuthInfo {
+    ///     id: "cred-1".to_string(),
+    ///     priority: Some(0),
+    ///     quota_exceeded: false,
+    ///     unavailable: false,
+    ///     model_states: vec![],
+    /// };
+    ///
+    /// let weight = calc.calculate(&auth, None, HealthStatus::Healthy);
+    /// assert!(weight > 0.0, "healthy credential should have positive weight");
+    /// ```
     pub fn new(config: WeightConfig) -> Self {
         Self { config }
     }

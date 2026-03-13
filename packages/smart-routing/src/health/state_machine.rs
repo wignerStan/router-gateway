@@ -5,7 +5,24 @@ use std::sync::Arc;
 use super::{AuthHealth, HealthManager, HealthStatus};
 
 impl HealthManager {
-    /// Create a new health manager
+    /// Create a new health manager.
+    ///
+    /// New credentials default to [`HealthStatus::Healthy`] until
+    /// failures are recorded via [`update_from_result`](Self::update_from_result).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use smart_routing::{HealthManager, HealthConfig, HealthStatus};
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let config = HealthConfig::default();
+    /// let manager = HealthManager::new(config);
+    ///
+    /// // Unknown credentials default to Healthy
+    /// assert_eq!(manager.get_status("new-cred").await, HealthStatus::Healthy);
+    /// # }
+    /// ```
     pub fn new(config: crate::config::HealthConfig) -> Self {
         Self {
             health: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
