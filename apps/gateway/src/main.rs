@@ -183,7 +183,42 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Load configuration from file or environment
+fn load_config() -> anyhow::Result<GatewayConfig> {
+    // Try to load from GATEWAY_CONFIG env var or default paths
+    let config_path = std::env::var("GATEWAY_CONFIG").ok().or_else(|| {
+        // Check for common config file locations
+        for path in ["./gateway.yaml", "./config/gateway.yaml", "./gateway.yml"] {
+            if std::path::Path::new(path).exists() {
+                return Some(path.to_string());
+            }
+        }
+        None
+    });
+
+    match config_path {
+        Some(path) => {
+            tracing::info!("Loading configuration from {}", path);
+            match GatewayConfig::from_file(&path) {
+                Ok(config) => Ok(config),
+                Err(e) => {
+                    anyhow::bail!(
+                        "Failed to load config from {}: {}. Please fix the configuration file.",
+                        path,
+                        e
+                    );
+                },
+            }
+        },
+        None => {
+            tracing::info!("No configuration file found, using defaults");
+            Ok(GatewayConfig::default())
+        },
+    }
+}
+
 #[cfg(test)]
+#[allow(dead_code)]
 mod test_helpers {
     use super::*;
     use crate::config::CredentialConfig;
@@ -262,7 +297,7 @@ mod test_helpers {
             router: smart_router,
             executor,
             classifier,
-            tracing: tracing_mw.clone(),
+            tracing: tracing_mw,
             start_time: Instant::now(),
             credentials,
             rate_limiter,
@@ -306,39 +341,5 @@ mod test_helpers {
             ))
             .layer(TraceLayer::new_for_http())
             .with_state(state)
-    }
-}
-
-/// Load configuration from file or environment
-fn load_config() -> anyhow::Result<GatewayConfig> {
-    // Try to load from GATEWAY_CONFIG env var or default paths
-    let config_path = std::env::var("GATEWAY_CONFIG").ok().or_else(|| {
-        // Check for common config file locations
-        for path in ["./gateway.yaml", "./config/gateway.yaml", "./gateway.yml"] {
-            if std::path::Path::new(path).exists() {
-                return Some(path.to_string());
-            }
-        }
-        None
-    });
-
-    match config_path {
-        Some(path) => {
-            tracing::info!("Loading configuration from {}", path);
-            match GatewayConfig::from_file(&path) {
-                Ok(config) => Ok(config),
-                Err(e) => {
-                    anyhow::bail!(
-                        "Failed to load config from {}: {}. Please fix the configuration file.",
-                        path,
-                        e
-                    );
-                },
-            }
-        },
-        None => {
-            tracing::info!("No configuration file found, using defaults");
-            Ok(GatewayConfig::default())
-        },
     }
 }
