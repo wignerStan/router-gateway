@@ -335,6 +335,20 @@ pub fn constant_time_token_eq(a: &str, b: &str) -> bool {
     a_bytes.ct_eq(b_bytes).into()
 }
 
+/// Constant-time check whether `token` matches any entry in `configured_tokens`.
+/// Iterates over all configured tokens regardless of where a match occurs,
+/// preventing timing side-channels from leaking token ordering or count.
+pub fn constant_time_token_matches(token: &str, configured_tokens: &[String]) -> bool {
+    use subtle::ConstantTimeEq;
+    let token_bytes = token.as_bytes();
+    let mut result: u8 = 0;
+    for configured in configured_tokens {
+        let eq = configured.as_bytes().ct_eq(token_bytes).unwrap_u8();
+        result |= eq;
+    }
+    result != 0
+}
+
 /// Validate that a URL does not point to a private, loopback, link-local,
 /// or cloud metadata address. Returns `Ok(())` if the URL is safe, or an
 /// error describing the rejected address.
@@ -365,27 +379,82 @@ pub fn validate_url_not_private(url_str: &str) -> Result<()> {
 fn is_private_ip(ip: &IpAddr) -> bool {
     match ip {
         IpAddr::V4(v4) => {
+            let octets = v4.octets();
             // Use stdlib methods for standard private/loopback/link-local ranges
             v4.is_private()
                 || v4.is_loopback()
                 || v4.is_link_local()
                 // Zero network: 0.0.0.0/8
-                || v4.octets()[0] == 0
+                || octets[0] == 0
+                // IETF Protocol Assignments (192.0.0.0/24) and TEST-NET-1 (192.0.2.0/24)
+                || (octets[0] == 192
+                    && octets[1] == 0
+                    && (octets[2] == 0 || octets[2] == 2))
+                // TEST-NET-2 (198.51.100.0/24)
+                || (octets[0] == 198 && octets[1] == 51 && octets[2] == 100)
+                // TEST-NET-3 (203.0.113.0/24)
+                || (octets[0] == 203 && octets[1] == 0 && octets[2] == 113)
+                // Reserved for Future Use (includes broadcast): 255.0.0.0/8
+                || octets[0] == 255
         },
         IpAddr::V6(v6) => {
-            // Handle IPv4-mapped IPv6 addresses (e.g., ::ffff:127.0.0.1)
-            if let Some(v4) = v6.to_ipv4_mapped() {
-                return is_private_ip(&IpAddr::V4(v4));
+            // IPv4-mapped IPv6 (::ffff:x.x.x.x) — e.g. ::ffff:127.0.0.1 bypasses
+            // pure-IPv4 checks, so we unwrap the embedded IPv4 address and re-check.
+            if let Some(mapped) = is_ipv4_mapped(v6) {
+                return is_private_ip(&IpAddr::V4(mapped));
             }
-            // Handle IPv4-compatible IPv6 addresses (deprecated but still parsed)
-            if let Some(v4) = v6.to_ipv4() {
-                return is_private_ip(&IpAddr::V4(v4));
+
+            // IPv4-compatible IPv6 (::/96) — deprecated but still routable in some stacks.
+            // Guard: exclude the unspecified address (::) which is handled below.
+            if !v6.is_unspecified() && v6.segments()[0..6] == [0, 0, 0, 0, 0, 0] {
+                if let Some(v4) = ipv6_to_v4_compat(v6) {
+                    return is_private_ip(&IpAddr::V4(v4));
+                }
             }
-            // Combine loopback, unique local, and link-local into a single expression
+
+            let segments = v6.segments();
+            // Loopback: ::1
             v6.is_loopback()
-                || (0xfc00..=0xfdff).contains(&v6.segments()[0]) // Private: fc00::/7 (unique local)
-                || (0xfe80..=0xfebf).contains(&v6.segments()[0]) // Link-local: fe80::/10
+                // Private: fc00::/7 (unique local)
+                || (0xfc00..=0xfdff).contains(&segments[0])
+                // Link-local: fe80::/10
+                || (0xfe80..=0xfebf).contains(&segments[0])
+                // Unspecified: ::
+                || v6.is_unspecified()
+                // Multicast: ff00::/8
+                || segments[0] >= 0xff00
         },
+    }
+}
+
+/// Extract the embedded IPv4 address from an IPv4-mapped IPv6 address (::ffff:x.x.x.x).
+fn is_ipv4_mapped(v6: &std::net::Ipv6Addr) -> Option<std::net::Ipv4Addr> {
+    let segments = v6.segments();
+    if segments[0..6] == [0, 0, 0, 0, 0, 0xffff] {
+        Some(std::net::Ipv4Addr::new(
+            (segments[6] >> 8) as u8,
+            segments[6] as u8,
+            (segments[7] >> 8) as u8,
+            segments[7] as u8,
+        ))
+    } else {
+        None
+    }
+}
+
+/// Extract the embedded IPv4 address from an IPv4-compatible IPv6 address (::x.x.x.x).
+/// Only extracts when the low 32 bits are non-zero (i.e., not the unspecified address ::).
+fn ipv6_to_v4_compat(v6: &std::net::Ipv6Addr) -> Option<std::net::Ipv4Addr> {
+    let segments = v6.segments();
+    if segments[0..6] == [0, 0, 0, 0, 0, 0] && (segments[6] != 0 || segments[7] != 0) {
+        Some(std::net::Ipv4Addr::new(
+            (segments[6] >> 8) as u8,
+            segments[6] as u8,
+            (segments[7] >> 8) as u8,
+            segments[7] as u8,
+        ))
+    } else {
+        None
     }
 }
 
@@ -422,6 +491,35 @@ mod tests {
     #[test]
     fn test_constant_time_token_eq_one_empty() {
         assert!(!constant_time_token_eq("nonempty", ""));
+    }
+
+    #[test]
+    fn test_constant_time_token_matches_hit() {
+        let tokens = vec!["alpha".to_string(), "beta".to_string(), "gamma".to_string()];
+        assert!(constant_time_token_matches("beta", &tokens));
+    }
+
+    #[test]
+    fn test_constant_time_token_matches_miss() {
+        let tokens = vec!["alpha".to_string(), "beta".to_string()];
+        assert!(!constant_time_token_matches("delta", &tokens));
+    }
+
+    #[test]
+    fn test_constant_time_token_matches_empty_list() {
+        assert!(!constant_time_token_matches("anything", &[]));
+    }
+
+    #[test]
+    fn test_constant_time_token_matches_first() {
+        let tokens = vec!["first".to_string(), "second".to_string()];
+        assert!(constant_time_token_matches("first", &tokens));
+    }
+
+    #[test]
+    fn test_constant_time_token_matches_last() {
+        let tokens = vec!["first".to_string(), "last".to_string()];
+        assert!(constant_time_token_matches("last", &tokens));
     }
 
     #[test]
@@ -689,6 +787,66 @@ credentials:
     #[test]
     fn test_ssrf_allow_ipv4_mapped_public_ip() {
         let result = validate_url_not_private("http://[::ffff:1.1.1.1]/api");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_ssrf_reject_ietf_protocol_assignments() {
+        let result = validate_url_not_private("http://192.0.0.1/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_test_net_1() {
+        let result = validate_url_not_private("http://192.0.2.1/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_test_net_2() {
+        let result = validate_url_not_private("http://198.51.100.1/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_test_net_3() {
+        let result = validate_url_not_private("http://203.0.113.1/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_broadcast() {
+        let result = validate_url_not_private("http://255.255.255.255/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_ipv6_unspecified() {
+        let result = validate_url_not_private("http://[::]/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_ipv6_multicast() {
+        let result = validate_url_not_private("http://[ff02::1]/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_ipv4_compatible_loopback() {
+        let result = validate_url_not_private("http://[::127.0.0.1]/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_ipv4_compatible_private() {
+        let result = validate_url_not_private("http://[::192.168.1.1]/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_allow_public_ipv4_literal() {
+        let result = validate_url_not_private("https://8.8.8.8/api");
         assert!(result.is_ok());
     }
 
