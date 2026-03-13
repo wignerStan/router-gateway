@@ -405,11 +405,9 @@ fn is_private_ip(ip: &IpAddr) -> bool {
             }
 
             // IPv4-compatible IPv6 (::/96) — deprecated but still routable in some stacks.
-            // Guard: exclude the unspecified address (::) which is handled below.
-            if !v6.is_unspecified() && v6.segments()[0..6] == [0, 0, 0, 0, 0, 0] {
-                if let Some(v4) = ipv6_to_v4_compat(v6) {
-                    return is_private_ip(&IpAddr::V4(v4));
-                }
+            // ipv6_to_v4_compat handles the unspecified address (::) exclusion internally.
+            if let Some(v4) = ipv6_to_v4_compat(v6) {
+                return is_private_ip(&IpAddr::V4(v4));
             }
 
             let segments = v6.segments();
