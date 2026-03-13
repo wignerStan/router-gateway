@@ -278,5 +278,5 @@ This project enforces production-level code style using `rustfmt` and `clippy`. 
 All code changes **must** pass formatting and linting rules. Before finalizing changes:
 
 1. Run `cargo fmt`
-2. Run `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+2. Run `cargo lint`
 3. Run `just qa` to run all project quality gates.
