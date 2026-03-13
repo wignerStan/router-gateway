@@ -14,6 +14,7 @@ allow_licenses:
   - "ISC"
   - "Unicode-3.0"
   - "Unicode-DFS-2016"
+  - "Zlib"
 
 # Least Privilege Exceptions:
 # Specifically allow certain packages that have non-standard but safe licenses.
