@@ -73,7 +73,7 @@ credentials:
 # Controls how the gateway selects which credential to use for each request.
 routing:
   # Selection strategy (default: "weighted")
-  # Options: "weighted", "adaptive", "round_robin", "time_aware", "quota_aware", "policy_aware"
+  # Options: "weighted", "adaptive", "time_aware", "quota_aware", "policy_aware"
   strategy: "weighted"
 
   # Enable session affinity so multi-turn conversations use the same credential (default: true)
