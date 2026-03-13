@@ -110,6 +110,57 @@ repos:
         pass_filenames: false
         stages: [pre-push]
 
+      # --- bd (beads) integration ---
+      # pre-commit runs bd chained hooks (issue linking, checks)
+      - id: bd-pre-commit
+        name: bd (beads) pre-commit
+        entry: bd hooks run pre-commit
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        always_run: true
+        verbose: true
+
+      # pre-push runs bd chained hooks before push
+      - id: bd-pre-push
+        name: bd (beads) pre-push
+        entry: bd hooks run pre-push
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        always_run: true
+        verbose: true
+
+      # prepare-commit-msg adds agent identity trailers for forensics
+      - id: bd-prepare-commit-msg
+        name: bd (beads) agent trailer
+        entry: bd hooks run prepare-commit-msg
+        language: system
+        pass_filenames: false
+        stages: [prepare-commit-msg]
+        always_run: true
+        verbose: true
+
+      # post-merge re-syncs bd state after merge/pull
+      - id: bd-post-merge
+        name: bd (beads) post-merge sync
+        entry: bd hooks run post-merge
+        language: system
+        pass_filenames: false
+        stages: [post-merge]
+        always_run: true
+        verbose: true
+
+      # post-checkout re-syncs bd state after branch checkout
+      - id: bd-post-checkout
+        name: bd (beads) post-checkout sync
+        entry: bd hooks run post-checkout
+        language: system
+        pass_filenames: false
+        stages: [post-checkout]
+        always_run: true
+        verbose: true
+
 # ============================================
 # Configuration
 # ============================================
