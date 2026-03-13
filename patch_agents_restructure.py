@@ -1,4 +1,9 @@
-# AGENTS.md
+import re
+
+with open('AGENTS.md', 'r') as f:
+    content = f.read()
+
+new_content = """# AGENTS.md
 
 ## Project Overview
 
@@ -287,3 +292,7 @@ For more details, see README.md and docs/QUICKSTART.md.
 - Work is NOT complete until code is published
 - NEVER stop before publishing - that leaves work stranded locally
 - If publishing fails, resolve and retry until it succeeds
+"""
+
+with open('AGENTS.md', 'w') as f:
+    f.write(new_content)
