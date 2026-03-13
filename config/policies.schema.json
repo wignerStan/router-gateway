@@ -91,9 +91,32 @@
         "providers": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "other",
+              "x_a_i",
+              "zhipu",
+              "open_a_i",
+              "moonshot",
+              "meta",
+              "meta_llama",
+              "mistral",
+              "google",
+              "databricks",
+              "deep_seek",
+              "cohere",
+              "byte_dance",
+              "baidu",
+              "amazon",
+              "azure",
+              "alibaba",
+              "perplexity",
+              "stability",
+              "vertex_a_i",
+              "anthropic"
+            ]
           },
-          "description": "Allowed providers (snake_case enum: 'open_a_i', 'x_a_i', 'deep_seek', 'byte_dance', 'meta_llama', 'vertex_a_i')"
+          "description": "Allowed providers (matches ProviderCategory serde names)"
         },
         "modalities": {
           "type": "array",
@@ -140,9 +163,32 @@
         "preferred_providers": {
           "type": "array",
           "items": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "other",
+              "x_a_i",
+              "zhipu",
+              "open_a_i",
+              "moonshot",
+              "meta",
+              "meta_llama",
+              "mistral",
+              "google",
+              "databricks",
+              "deep_seek",
+              "cohere",
+              "byte_dance",
+              "baidu",
+              "amazon",
+              "azure",
+              "alibaba",
+              "perplexity",
+              "stability",
+              "vertex_a_i",
+              "anthropic"
+            ]
           },
-          "description": "Preferred providers in order"
+          "description": "Preferred providers in order (matches ProviderCategory serde names)"
         },
         "preferred_models": {
           "type": "array",

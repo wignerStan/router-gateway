@@ -82,21 +82,19 @@ impl PolicyRegistry {
             .map_err(|e| PolicyLoadError::Io(e.to_string()))?;
 
         let schema = Self::load_schema();
-        Self::validate_against_schema(&content, &schema)?;
+        let value = Self::validate_against_schema(&content, &schema)?;
 
-        let wrapper: serde_json::Value =
-            serde_json::from_str(&content).map_err(|e| PolicyLoadError::Parse(e.to_string()))?;
-        let policies_json = wrapper["policies"]
-            .as_array()
-            .ok_or_else(|| PolicyLoadError::Parse("missing 'policies' array".to_string()))?;
+        #[derive(serde::Deserialize)]
+        struct PoliciesFile {
+            policies: Vec<RoutingPolicy>,
+        }
 
-        let policies: Vec<RoutingPolicy> = policies_json
-            .iter()
-            .map(|v| serde_json::from_value(v.clone()))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| PolicyLoadError::Parse(e.to_string()))?;
+        let file: PoliciesFile =
+            serde_json::from_value(value).map_err(|e| PolicyLoadError::Parse(e.to_string()))?;
 
-        let mut registry = Self { policies };
+        let mut registry = Self {
+            policies: file.policies,
+        };
         registry.sort_by_priority();
         Ok(registry)
     }
@@ -109,11 +107,11 @@ impl PolicyRegistry {
 
     /// Validate a JSON string against the policy schema.
     ///
-    /// Returns `Ok(())` if valid, `Err` with a description of all violations.
+    /// Returns the parsed `serde_json::Value` if valid, `Err` with a description of all violations.
     pub fn validate_against_schema(
         json: &str,
         schema: &serde_json::Value,
-    ) -> Result<(), PolicyLoadError> {
+    ) -> Result<serde_json::Value, PolicyLoadError> {
         let instance: serde_json::Value =
             serde_json::from_str(json).map_err(|e| PolicyLoadError::Parse(e.to_string()))?;
 
@@ -121,7 +119,7 @@ impl PolicyRegistry {
             .map_err(|e| PolicyLoadError::Schema(e.to_string()))?;
 
         if validator.is_valid(&instance) {
-            Ok(())
+            Ok(instance)
         } else {
             let mut errors: Vec<String> = validator
                 .validate(&instance)
