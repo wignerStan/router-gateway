@@ -341,15 +341,22 @@ pub fn validate_url_not_private(url_str: &str) -> Result<()> {
 /// or cloud metadata range.
 fn is_private_ip(ip: &IpAddr) -> bool {
     match ip {
-        IpAddr::V4(v4) => is_private_ipv4(v4),
+        IpAddr::V4(v4) => {
+            // Use stdlib methods for standard private/loopback/link-local ranges
+            v4.is_private()
+                || v4.is_loopback()
+                || v4.is_link_local()
+                // Zero network: 0.0.0.0/8
+                || v4.octets()[0] == 0
+        },
         IpAddr::V6(v6) => {
             // Handle IPv4-mapped IPv6 addresses (e.g., ::ffff:127.0.0.1)
             if let Some(v4) = v6.to_ipv4_mapped() {
-                return is_private_ipv4(&v4);
+                return is_private_ip(&IpAddr::V4(v4));
             }
             // Handle IPv4-compatible IPv6 addresses (deprecated but still parsed)
             if let Some(v4) = v6.to_ipv4() {
-                return is_private_ipv4(&v4);
+                return is_private_ip(&IpAddr::V4(v4));
             }
             // Loopback: ::1
             if v6.is_loopback() {
@@ -367,35 +374,6 @@ fn is_private_ip(ip: &IpAddr) -> bool {
             false
         },
     }
-}
-
-fn is_private_ipv4(v4: &std::net::Ipv4Addr) -> bool {
-    let octets = v4.octets();
-    // Loopback: 127.0.0.0/8
-    if octets[0] == 127 {
-        return true;
-    }
-    // Private: 10.0.0.0/8
-    if octets[0] == 10 {
-        return true;
-    }
-    // Private: 172.16.0.0/12
-    if octets[0] == 172 && (16..=31).contains(&octets[1]) {
-        return true;
-    }
-    // Private: 192.168.0.0/16
-    if octets[0] == 192 && octets[1] == 168 {
-        return true;
-    }
-    // Link-local: 169.254.0.0/16 (includes cloud metadata 169.254.169.254)
-    if octets[0] == 169 && octets[1] == 254 {
-        return true;
-    }
-    // Zero network: 0.0.0.0/8
-    if octets[0] == 0 {
-        return true;
-    }
-    false
 }
 
 #[cfg(test)]

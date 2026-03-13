@@ -427,10 +427,6 @@ async fn security_headers_middleware(
         HeaderValue::from_static("DENY"),
     );
     headers.insert(
-        HeaderName::from_static("x-xss-protection"),
-        HeaderValue::from_static("1; mode=block"),
-    );
-    headers.insert(
         HeaderName::from_static("referrer-policy"),
         HeaderValue::from_static("strict-origin-when-cross-origin"),
     );
@@ -1018,7 +1014,6 @@ mod integration_tests {
 
         assert_eq!(headers.get("X-Content-Type-Options").unwrap(), "nosniff");
         assert_eq!(headers.get("X-Frame-Options").unwrap(), "DENY");
-        assert_eq!(headers.get("X-XSS-Protection").unwrap(), "1; mode=block");
         assert!(
             headers.get("Referrer-Policy").is_some(),
             "Referrer-Policy header should be set"
