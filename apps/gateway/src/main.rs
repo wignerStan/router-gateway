@@ -24,7 +24,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use config::GatewayConfig;
 use routes::{
     auth_middleware, chat_completions, health_check, list_models, rate_limit_middleware, root,
-    security_headers_middleware,
+    route_request, security_headers_middleware,
 };
 use state::{AppState, DefaultRequestClassifier, RateLimiter, DEFAULT_RATE_LIMIT};
 
@@ -148,7 +148,7 @@ async fn main() -> anyhow::Result<()> {
     // Protected routes (require authentication if auth_tokens configured)
     let protected_routes = Router::new()
         .route("/api/models", axum::routing::get(list_models))
-        .route("/api/route", axum::routing::get(routes::route_request))
+        .route("/api/route", axum::routing::get(route_request))
         .route(
             "/v1/chat/completions",
             axum::routing::post(chat_completions),

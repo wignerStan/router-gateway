@@ -134,7 +134,7 @@ impl ProviderResponse {
     pub fn has_tool_calls(&self) -> bool {
         self.tool_calls
             .as_ref()
-            .map(|t: &Vec<ToolCall>| !t.is_empty())
+            .map(|t| !t.is_empty())
             .unwrap_or(false)
     }
 }

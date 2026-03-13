@@ -383,6 +383,9 @@ pub(crate) async fn chat_completions(
     let provider = &primary.provider;
     let adapter: Box<dyn ProviderAdapter> = match provider.as_str() {
         "openai" | "azure-openai" => Box::new(providers::OpenAIAdapter::new()),
+        "google" => Box::new(providers::GoogleAdapter::new()),
+        "deepseek" => Box::new(providers::OpenAIAdapter::new()),
+        "mistral" | "mistral-large" => Box::new(providers::OpenAIAdapter::new()),
         _ => Box::new(providers::OpenAIAdapter::new()), // Default to OpenAI format
     };
 

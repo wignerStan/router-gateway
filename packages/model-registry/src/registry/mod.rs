@@ -73,7 +73,11 @@ impl Clone for Registry {
 
 impl Drop for Registry {
     fn drop(&mut self) {
-        self.shutdown_token.cancel();
+        // Only the instance that owns the background handle should trigger shutdown
+        if let Some(handle) = self._background_handle.take() {
+            self.shutdown_token.cancel();
+            handle.abort();
+        }
     }
 }
 
