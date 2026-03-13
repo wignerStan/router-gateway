@@ -4,7 +4,7 @@
 
 A **local LLM gateway** written in Rust for intelligent request routing. Routes LLM requests to optimal credentials based on health, latency, and success rate. Designed for local development and self-hosted deployments.
 
-**Stack**: Rust 1.75+, Tokio, Axum, SQLite
+**Stack**: Rust 1.83+, Tokio, Axum, SQLite
 **Focus**: Smart routing, model registry, LLM tracing
 
 ## Package Names
@@ -23,7 +23,7 @@ A **local LLM gateway** written in Rust for intelligent request routing. Routes 
 | Build       | `cargo build`                 |
 | Test        | `cargo test`                  |
 | Run Gateway | `cargo run -p gateway`        |
-| Lint        | `cargo clippy -- -D warnings` |
+| Lint        | `cargo lint` |
 | Format      | `cargo fmt`                   |
 | All Checks  | `just qa`                     |
 
@@ -278,5 +278,5 @@ This project enforces production-level code style using `rustfmt` and `clippy`. 
 All code changes **must** pass formatting and linting rules. Before finalizing changes:
 
 1. Run `cargo fmt`
-2. Run `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+2. Run `cargo lint`
 3. Run `just qa` to run all project quality gates.
