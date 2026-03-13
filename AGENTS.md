@@ -1,4 +1,5 @@
 # AGENT INSTRUCTIONS
+
 ## Project Overview
 
 A **local LLM gateway** written in Rust for intelligent request routing. Routes LLM requests to optimal credentials based on health, latency, and success rate. Designed for local development and self-hosted deployments.
@@ -17,14 +18,14 @@ A **local LLM gateway** written in Rust for intelligent request routing. Routes 
 
 ### Build and test commands
 
-| Task        | Command                    |
-| ----------- | -------------------------- |
-| Build       | `cargo build`              |
-| Test        | `cargo test --workspace`   |
-| Run Gateway | `cargo run -p gateway`     |
-| Lint        | `cargo lint` |
-| Format      | `cargo fmt`                |
-| All Checks  | `just qa`                  |
+| Task        | Command                  |
+| ----------- | ------------------------ |
+| Build       | `cargo build`            |
+| Test        | `cargo test --workspace` |
+| Run Gateway | `cargo run -p gateway`   |
+| Lint        | `cargo lint`             |
+| Format      | `cargo fmt`              |
+| All Checks  | `just qa`                |
 
 ### Known Pitfalls
 
@@ -35,12 +36,11 @@ A **local LLM gateway** written in Rust for intelligent request routing. Routes 
 - SQLite store requires `bundled` feature for cross-platform builds
 - Model registry cache TTL is 1 hour by default
 - Floating-point metrics may contain NaN values — always use `partial_cmp().unwrap_or(Ordering::Equal)` instead of `.unwrap()`
-- `constant_time_token_matches()` must be used for all auth token comparisons to prevent timing attacks
+- `constant_time_token_eq()` must be used for all auth token comparisons to prevent timing attacks
 
 ### REFERENCE
 
 For architecture, features, configuration, API endpoints, and key types, see [README.md](README.md).
-
 
 ## Code style guidelines
 
@@ -98,11 +98,10 @@ This project enforces production-level code style using `rustfmt` and `clippy`. 
 ## Security considerations
 
 - No `unwrap()`/`expect()` in production — prevents DoS via panic.
-- Use `constant_time_token_matches()` for all auth token comparisons (timing side-channel prevention).
+- Use `constant_time_token_eq()` for all auth token comparisons (timing side-channel prevention).
 - Use `partial_cmp().unwrap_or(Ordering::Equal)` for all float comparisons (NaN safety).
 - SSRF protection blocks private/reserved IPs and IPv6-mapped/compatible addresses.
 - See [SECURITY.md](SECURITY.md) for full security policy, deployment practices, and reporting procedures.
-
 
 <!-- BEGIN BEADS INTEGRATION -->
 
@@ -188,7 +187,7 @@ bd automatically syncs via Dolt:
 - ❌ Do NOT use external issue trackers
 - ❌ Do NOT duplicate tracking systems
 
-For more details, see README.md and docs/QUICKSTART.md.
+For more details, see README.md.
 
 <!-- END BEADS INTEGRATION -->
 

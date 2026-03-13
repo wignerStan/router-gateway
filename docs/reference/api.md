@@ -1,7 +1,7 @@
 # API Reference
 
 > **Source:** Gateway HTTP endpoints
-> **Last Updated:** 2025-02-17
+> **Last Updated:** 2026-03-13
 
 This document provides complete reference information for the Gateway HTTP API endpoints.
 
@@ -9,12 +9,13 @@ This document provides complete reference information for the Gateway HTTP API e
 
 The Gateway exposes a RESTful HTTP API for model discovery, health monitoring, and routing recommendations. All endpoints return JSON responses.
 
-| Endpoint          | Method | Description                |
-| ----------------- | ------ | -------------------------- |
-| `GET /`           | GET    | Service information        |
-| `GET /health`     | GET    | Health check status        |
-| `GET /api/models` | GET    | List available models      |
-| `GET /api/route`  | GET    | Get routing recommendation |
+| Endpoint                    | Method | Description                        |
+| --------------------------- | ------ | ---------------------------------- |
+| `GET /`                     | GET    | Service information                |
+| `GET /health`               | GET    | Health check status                |
+| `GET /api/models`           | GET    | List available models              |
+| `GET /api/route`            | GET    | Get routing recommendation         |
+| `POST /v1/chat/completions` | POST   | OpenAI-compatible chat completions |
 
 ---
 
@@ -28,26 +29,34 @@ Returns basic service information including version and status.
 
 ```http
 GET / HTTP/1.1
-Host: localhost:8080
+Host: localhost:3000
 ```
 
 #### Response
 
 ```json
 {
-  "name": "gateway",
+  "name": "Gateway API",
   "version": "0.1.0",
-  "status": "running"
+  "description": "Smart routing gateway for LLM requests",
+  "features": ["Smart Routing", "Model Registry", "LLM Tracing", "Health Management"],
+  "endpoints": {
+    "health": "/health",
+    "models": "/api/models",
+    "route": "/api/route"
+  }
 }
 ```
 
 #### Response Fields
 
-| Field     | Type   | Description                                               |
-| --------- | ------ | --------------------------------------------------------- |
-| `name`    | string | Service name                                              |
-| `version` | string | Service version (semver)                                  |
-| `status`  | string | Current service status (`running`, `stopped`, `degraded`) |
+| Field         | Type   | Description                       |
+| ------------- | ------ | --------------------------------- |
+| `name`        | string | Service name                      |
+| `version`     | string | Service version (semver)          |
+| `description` | string | Service description               |
+| `features`    | array  | List of available features        |
+| `endpoints`   | object | Map of feature names to API paths |
 
 #### Status Codes
 
@@ -65,46 +74,32 @@ Returns the health status of the gateway and its dependencies.
 
 ```http
 GET /health HTTP/1.1
-Host: localhost:8080
+Host: localhost:3000
 ```
 
 #### Response
 
-**Healthy Response:**
-
 ```json
 {
   "status": "healthy",
-  "timestamp": "2025-02-17T12:00:00Z",
-  "checks": {
-    "model_registry": "healthy",
-    "smart_routing": "healthy"
-  }
-}
-```
-
-**Degraded Response:**
-
-```json
-{
-  "status": "degraded",
-  "timestamp": "2025-02-17T12:00:00Z",
-  "checks": {
-    "model_registry": "healthy",
-    "smart_routing": "degraded"
-  },
-  "message": "Some credentials are unavailable"
+  "uptime_secs": 3600,
+  "credential_count": 3,
+  "healthy_count": 3,
+  "degraded_count": 0,
+  "unhealthy_count": 0
 }
 ```
 
 #### Response Fields
 
-| Field       | Type   | Description                                                |
-| ----------- | ------ | ---------------------------------------------------------- |
-| `status`    | string | Overall health status (`healthy`, `degraded`, `unhealthy`) |
-| `timestamp` | string | ISO 8601 timestamp of the health check                     |
-| `checks`    | object | Individual component health statuses                       |
-| `message`   | string | Optional message explaining degraded/unhealthy status      |
+| Field              | Type    | Description                                                |
+| ------------------ | ------- | ---------------------------------------------------------- |
+| `status`           | string  | Overall health status (`healthy`, `degraded`, `unhealthy`) |
+| `uptime_secs`      | integer | Gateway uptime in seconds                                  |
+| `credential_count` | integer | Total number of registered credentials                     |
+| `healthy_count`    | integer | Number of healthy credentials                              |
+| `degraded_count`   | integer | Number of degraded credentials                             |
+| `unhealthy_count`  | integer | Number of unhealthy credentials                            |
 
 #### Status Codes
 
@@ -123,7 +118,7 @@ Returns a list of all available models from the model registry.
 
 ```http
 GET /api/models HTTP/1.1
-Host: localhost:8080
+Host: localhost:3000
 Accept: application/json
 ```
 
@@ -140,43 +135,28 @@ Accept: application/json
 {
   "models": [
     {
-      "id": "gpt-4",
-      "name": "GPT-4",
+      "id": "gpt-4o",
       "provider": "openai",
-      "type": "chat",
-      "context_window": 8192,
-      "max_tokens": 4096,
-      "capabilities": ["chat", "function_calling", "vision"]
-    },
-    {
-      "id": "claude-3-opus",
-      "name": "Claude 3 Opus",
-      "provider": "anthropic",
-      "type": "chat",
-      "context_window": 200000,
-      "max_tokens": 4096,
-      "capabilities": ["chat", "function_calling", "vision", "thinking"]
+      "capabilities": [],
+      "context_window": 128000
     }
   ],
-  "count": 2,
-  "timestamp": "2025-02-17T12:00:00Z"
+  "count": 1,
+  "message": "Models loaded from configuration"
 }
 ```
 
 #### Response Fields
 
-| Field                     | Type    | Description                                    |
-| ------------------------- | ------- | ---------------------------------------------- |
-| `models`                  | array   | Array of model objects                         |
-| `models[].id`             | string  | Unique model identifier                        |
-| `models[].name`           | string  | Human-readable model name                      |
-| `models[].provider`       | string  | Provider name                                  |
-| `models[].type`           | string  | Model type (`chat`, `embedding`, `completion`) |
-| `models[].context_window` | integer | Maximum context window size                    |
-| `models[].max_tokens`     | integer | Maximum output tokens                          |
-| `models[].capabilities`   | array   | List of supported capabilities                 |
-| `count`                   | integer | Total number of models returned                |
-| `timestamp`               | string  | ISO 8601 timestamp                             |
+| Field                     | Type    | Description                        |
+| ------------------------- | ------- | ---------------------------------- |
+| `models`                  | array   | Array of model objects             |
+| `models[].id`             | string  | Unique model identifier            |
+| `models[].provider`       | string  | Provider name                      |
+| `models[].capabilities`   | array   | List of supported capabilities     |
+| `models[].context_window` | integer | Maximum context window size        |
+| `count`                   | integer | Total number of models returned    |
+| `message`                 | string  | Status message about model loading |
 
 #### Status Codes
 
@@ -195,7 +175,7 @@ Returns a routing recommendation based on the configured smart routing strategy.
 
 ```http
 GET /api/route?model=gpt-4 HTTP/1.1
-Host: localhost:8080
+Host: localhost:3000
 Accept: application/json
 ```
 
@@ -262,6 +242,37 @@ Accept: application/json
 
 ---
 
+### POST /v1/chat/completions
+
+OpenAI-compatible chat completions endpoint. Proxies requests to the selected provider after classifying the request and planning the optimal route.
+
+#### Request
+
+```http
+POST /v1/chat/completions HTTP/1.1
+Host: localhost:3000
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "model": "gpt-4o",
+  "messages": [
+    {"role": "user", "content": "Hello"}
+  ],
+  "stream": false
+}
+```
+
+#### Status Codes
+
+| Code | Description                             |
+| ---- | --------------------------------------- |
+| 200  | Success - Chat completion response      |
+| 401  | Unauthorized - Missing or invalid token |
+| 429  | Too Many Requests - Rate limit exceeded |
+
+---
+
 ## Error Responses
 
 All endpoints follow a consistent error response format:
@@ -300,13 +311,18 @@ All endpoints follow a consistent error response format:
 
 ## Rate Limiting
 
-API endpoints may be rate-limited. Rate limit headers are included in responses:
+API endpoints are rate-limited per IP address with a default limit of 60 requests per minute. When the limit is exceeded, the gateway returns a `429 Too Many Requests` response with a JSON error body:
 
-```http
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 95
-X-RateLimit-Reset: 1708180800
+```json
+{
+  "error": {
+    "code": "RATE_LIMITED",
+    "message": "Rate limit exceeded. Please retry later."
+  }
+}
 ```
+
+Expired rate limit buckets are pruned periodically in the background. No rate limit response headers are sent.
 
 ---
 

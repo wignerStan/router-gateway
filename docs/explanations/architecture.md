@@ -75,12 +75,6 @@ Request/response observability layer.
 - Tower middleware integration
 - Structured logging support
 
-### core
-
-Shared utilities and common types.
-
-**Purpose:** Reduce code duplication across packages.
-
 ---
 
 ## Key Design Decisions
@@ -201,8 +195,8 @@ Where:
 - priority_score: User-assigned priority (-100 to 100, normalized)
 
 Penalties multiply the final weight:
-- Unhealthy: * 0.1
-- Degraded: * 0.7
+- Unhealthy: * 0.01
+- Degraded: * 0.5
 - Quota exceeded: * 0.01
 - Unavailable: * 0.01
 ```
@@ -234,28 +228,30 @@ Penalties multiply the final weight:
 ## Package Dependencies
 
 ```
-                    +-------+
-                    | core  |
-                    +---+---+
-                        ^
-                        |
-        +---------------+---------------+
-        |               |               |
-+-------+-------+ +-----+-----+ +-------+-------+
-| model-registry | |   tracing | | smart-routing |
-+---------------+ +-----------+ +-------+-------+
-        ^                               ^
-        |                               |
-        +---------------+---------------+
-                        |
-                +-------+-------+
-                |    gateway    |
-                +---------------+
+                         +----------------+
+                         | model-registry |
+                         +-------+--------+
+                                 ^
+                                 |
+              +------------------+------------------+
+              |                                     |
+   +----------+-----------+              +---------+--------+
+   | smart-routing        |              | llm-tracing      |
+   +----------+-----------+              +------------------+
+              ^
+              |
+              +------------------+
+              |                  |
+   +----------+--------+  +------+------+
+   | gateway           |  | my-cli      |
+   +-------------------+  +-------------+
 ```
 
 **Dependency Rules:**
 
-- `core` has no internal dependencies (foundational)
-- Packages depend on `core` for shared types
-- `gateway` is the top-level aggregator
+- `model-registry` has no internal dependencies (leaf package)
+- `llm-tracing` has no internal dependencies (leaf package)
+- `smart-routing` depends on `model-registry`
+- `gateway` aggregates `smart-routing`, `model-registry`, and `llm-tracing`
+- `my-cli` is standalone with no internal dependencies
 - No circular dependencies between packages

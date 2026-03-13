@@ -7,7 +7,7 @@ Welcome! This tutorial will guide you through setting up and understanding the G
 Before starting, ensure you have Rust installed:
 
 ```bash
-# Check your Rust version (requires 1.75+)
+# Check your Rust version (requires 1.85+)
 rustc --version
 
 # If not installed, use rustup
@@ -59,7 +59,7 @@ Open a new terminal and try these endpoints:
 
 ```bash
 curl http://localhost:3000/health
-# Response: OK
+# Response: {"status":"healthy","uptime_secs":0,"credential_count":0,"healthy_count":0,"degraded_count":0,"unhealthy_count":0}
 ```
 
 ### API Info
@@ -73,14 +73,14 @@ curl http://localhost:3000/
 
 ```bash
 curl http://localhost:3000/api/models
-# Response: {"models":[],"count":0,...}
+# Response: {"models":[],"count":0,"message":"No models configured. Add credentials to gateway.yaml"}
 ```
 
 ### Route a Request
 
 ```bash
 curl http://localhost:3000/api/route
-# Response: {"routed_to":"example-model","status":"success",...}
+# Response: {"classification":{"format":"chat","streaming":false,"estimated_tokens":0},"plan":{"primary":{"credential_id":"...","provider":"..."},"fallbacks":[]}}
 ```
 
 ## Understanding Routing Strategies
@@ -110,10 +110,9 @@ gateway/
 │   ├── gateway/      # Main HTTP server (Axum)
 │   └── cli/          # Command-line interface
 └── packages/
-    ├── core/         # Shared types and utilities
     ├── smart-routing/    # Routing algorithms
     ├── model-registry/   # Model management
-    └── tracing/      # Request tracing
+    └── tracing/          # Request tracing
 ```
 
 ## Next Steps
@@ -125,4 +124,4 @@ Now that you have the gateway running:
 3. **Enable Tracing** - Set up observability for your requests
 4. **Deploy** - Run the gateway in production
 
-For more details, see the [How-To Guides](../how-to/index.md) or dive into the [Reference](../reference/index.md) documentation.
+For more details, see the [How-To Guides](../guides/) or dive into the [Reference](../reference/) documentation.

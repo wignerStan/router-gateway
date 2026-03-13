@@ -73,12 +73,13 @@ For reference, these patterns are implemented in CLIProxyAPI:
 
 ## Gateway API Endpoints
 
-| Endpoint          | Purpose                    |
-| ----------------- | -------------------------- |
-| `GET /`           | Service info               |
-| `GET /health`     | Health check               |
-| `GET /api/models` | List available models      |
-| `GET /api/route`  | Get routing recommendation |
+| Endpoint                    | Purpose                    |
+| --------------------------- | -------------------------- |
+| `GET /`                     | Service info               |
+| `GET /health`               | Health check               |
+| `GET /api/models`           | List available models      |
+| `GET /api/route`            | Get routing recommendation |
+| `POST /v1/chat/completions` | Proxy chat completions     |
 
 ## Configuration
 
@@ -87,13 +88,17 @@ Gateway routing is configured via `SmartRoutingConfig`:
 ```rust
 struct SmartRoutingConfig {
     enabled: bool,
-    strategy: String,      // "weighted", "time_aware", "quota_aware", "adaptive"
+    strategy: String,      // "weighted", "time_aware", "quota_aware", "adaptive", "policy_aware"
     weight: WeightConfig,  // Configurable weight factors
     health: HealthConfig,
+    time_aware: TimeAwareConfig,
+    quota_aware: QuotaAwareConfig,
+    policy: PolicyConfig,  // Policy-aware routing configuration
+    log: LogConfig,        // Routing decision logging
 }
 ```
 
-See `packages/smart-routing/src/config.rs` for full configuration options.
+See `packages/smart-routing/src/config/mod.rs` for full configuration options.
 
 ---
 

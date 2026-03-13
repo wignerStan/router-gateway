@@ -286,7 +286,7 @@ Weighted credential selection with health tracking, time-aware routing, and poli
 | `WeightConfig`       | `src/config/mod.rs`        |
 | `HealthManager`      | `src/health/mod.rs`        |
 | `WeightCalculator`   | `src/weight/calculator.rs` |
-| `Router`             | `src/router.rs`            |
+| `Router`             | `src/router/mod.rs`        |
 | `MetricsCollector`   | `src/metrics.rs`           |
 
 ### `model-registry` (`packages/model-registry/`)
@@ -296,7 +296,7 @@ Model metadata, 5-dimension categorization, and routing policy system with JSON 
 | Type                  | Location                 |
 | --------------------- | ------------------------ |
 | `ModelInfo`           | `src/info.rs`            |
-| `Registry`            | `src/registry.rs`        |
+| `Registry`            | `src/registry/mod.rs`    |
 | `ModelCategorization` | `src/categories.rs`      |
 | `RoutingPolicy`       | `src/policy/mod.rs`      |
 | `PolicyRegistry`      | `src/policy/registry.rs` |
