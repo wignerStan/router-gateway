@@ -16,3 +16,15 @@ pub use policy::{
     PolicyFilters, PolicyMatch, PolicyMatcher, PolicyRegistry, RoutingPolicy,
 };
 pub use registry::Registry;
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("model not found: {0}")]
+    ModelNotFound(String),
+    #[error("policy error: {0}")]
+    Policy(String),
+    #[error("cannot parse model ID: {0}")]
+    InvalidModelId(String),
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
