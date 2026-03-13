@@ -54,82 +54,7 @@ async fn main() -> anyhow::Result<()> {
         );
     }
 
-    // Initialize model registry
-    let registry = ModelRegistry::default();
-    tracing::info!("Model registry initialized");
-
-    // Initialize smart router and populate from config
-    let smart_router = config
-        .credentials
-        .iter()
-        .fold(SmartRouter::new(), |mut router, cred| {
-            router.add_credential(cred.id.clone(), cred.allowed_models.clone());
-            router
-        });
-
-    tracing::info!(
-        "Smart router initialized with {} credentials",
-        config.credentials.len()
-    );
-
-    // Initialize metrics and health for executor
-    let metrics = MetricsCollector::new();
-    let health = HealthManager::new(HealthConfig::default());
-
-    // Initialize route executor
-    let executor_config = ExecutorConfig::default();
-    let executor = Arc::new(RouteExecutor::new(executor_config, metrics, health));
-    tracing::info!("Route executor initialized");
-
-    // Initialize request classifier
-    let classifier = Arc::new(DefaultRequestClassifier);
-
-    // Initialize tracing middleware
-    let collector = Arc::new(MemoryTraceCollector::with_default_size());
-    let tracing_middleware = TracingMiddleware::new(collector);
-    tracing::info!("LLM tracing initialized");
-
-    // Convert credentials to AuthInfo for routing
-    let credentials: Vec<AuthInfo> = config
-        .credentials
-        .iter()
-        .map(|c| AuthInfo {
-            id: c.id.clone(),
-            priority: Some(c.priority),
-            quota_exceeded: false,
-            unavailable: false,
-            model_states: vec![],
-        })
-        .collect();
-
-    // Initialize rate limiter
-    let rate_limiter = Arc::new(RateLimiter::new(DEFAULT_RATE_LIMIT));
-    tracing::info!(
-        "Rate limiter initialized: {} requests per minute per IP",
-        DEFAULT_RATE_LIMIT
-    );
-
-    // Periodically prune expired rate-limit buckets to bound memory growth.
-    let prune_limiter = Arc::clone(&rate_limiter);
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(120));
-        loop {
-            interval.tick().await;
-            prune_limiter.prune();
-        }
-    });
-
-    let state = AppState {
-        config,
-        registry,
-        router: smart_router,
-        executor,
-        classifier,
-        tracing: tracing_middleware.clone(),
-        start_time: Instant::now(),
-        credentials,
-        rate_limiter,
-    };
+    let state = build_app_state(config, None);
 
     // Get host and port from config before moving state
     let port = state.config.server.port;
@@ -139,39 +64,17 @@ async fn main() -> anyhow::Result<()> {
         .context("Invalid host/port configuration")?;
     tracing::info!("Gateway listening on {}", addr);
 
-    // Build our application with routes
-    // Public routes (no authentication required)
-    let public_routes = Router::new()
-        .route("/", axum::routing::get(root))
-        .route("/health", axum::routing::get(health_check));
+    // Periodically prune expired rate-limit buckets to bound memory growth.
+    let prune_limiter = Arc::clone(&state.rate_limiter);
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(120));
+        loop {
+            interval.tick().await;
+            prune_limiter.prune();
+        }
+    });
 
-    // Protected routes (require authentication if auth_tokens configured)
-    let protected_routes = Router::new()
-        .route("/api/models", axum::routing::get(list_models))
-        .route("/api/route", axum::routing::get(route_request))
-        .route(
-            "/v1/chat/completions",
-            axum::routing::post(chat_completions),
-        )
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            auth_middleware,
-        ));
-
-    let app = Router::new()
-        .merge(public_routes)
-        .merge(protected_routes)
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            rate_limit_middleware,
-        ))
-        .layer(middleware::from_fn(security_headers_middleware))
-        .layer(middleware::from_fn_with_state(
-            tracing_middleware,
-            llm_tracing::tracing_middleware,
-        ))
-        .layer(TraceLayer::new_for_http())
-        .with_state(state);
+    let app = build_app_router(state);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(
@@ -217,18 +120,105 @@ fn load_config() -> anyhow::Result<GatewayConfig> {
     }
 }
 
+/// Creates the application state from the given config.
+///
+/// Shared by [`main()`] and test helpers to ensure production and test setups
+/// stay in sync. The `rate_limit` parameter overrides the default when
+/// provided.
+fn build_app_state(config: GatewayConfig, rate_limit: Option<u64>) -> AppState {
+    let smart_router = config
+        .credentials
+        .iter()
+        .fold(SmartRouter::new(), |mut router, cred| {
+            router.add_credential(cred.id.clone(), cred.allowed_models.clone());
+            router
+        });
+
+    let metrics = MetricsCollector::new();
+    let health = HealthManager::new(HealthConfig::default());
+
+    let executor = Arc::new(RouteExecutor::new(
+        ExecutorConfig::default(),
+        metrics,
+        health,
+    ));
+
+    let classifier = Arc::new(DefaultRequestClassifier);
+
+    let collector = Arc::new(MemoryTraceCollector::with_default_size());
+    let tracing_middleware = TracingMiddleware::new(collector);
+
+    let credentials: Vec<AuthInfo> = config
+        .credentials
+        .iter()
+        .map(|c| AuthInfo {
+            id: c.id.clone(),
+            priority: Some(c.priority),
+            quota_exceeded: false,
+            unavailable: false,
+            model_states: vec![],
+        })
+        .collect();
+
+    let rate_limit = rate_limit.unwrap_or(DEFAULT_RATE_LIMIT);
+    let rate_limiter = Arc::new(RateLimiter::new(rate_limit));
+
+    AppState {
+        config,
+        registry: ModelRegistry::default(),
+        router: smart_router,
+        executor,
+        classifier,
+        tracing: tracing_middleware,
+        start_time: Instant::now(),
+        credentials,
+        rate_limiter,
+    }
+}
+
+/// Constructs the complete Axum router with all middleware layers in
+/// production order.
+///
+/// Shared by [`main()`] and test helpers to guarantee the router structure
+/// never diverges between production and test builds.
+fn build_app_router(state: AppState) -> Router {
+    let public_routes = Router::new()
+        .route("/", axum::routing::get(root))
+        .route("/health", axum::routing::get(health_check));
+
+    let protected_routes = Router::new()
+        .route("/api/models", axum::routing::get(list_models))
+        .route("/api/route", axum::routing::get(route_request))
+        .route(
+            "/v1/chat/completions",
+            axum::routing::post(chat_completions),
+        )
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
+        ));
+
+    Router::new()
+        .merge(public_routes)
+        .merge(protected_routes)
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit_middleware,
+        ))
+        .layer(middleware::from_fn(security_headers_middleware))
+        .layer(middleware::from_fn_with_state(
+            state.tracing.clone(),
+            llm_tracing::tracing_middleware,
+        ))
+        .layer(TraceLayer::new_for_http())
+        .with_state(state)
+}
+
 #[cfg(test)]
 #[allow(dead_code)]
 mod test_helpers {
     use super::*;
-    use crate::config::CredentialConfig;
-    use crate::state::DEFAULT_RATE_LIMIT;
-    use axum::Router;
-    use llm_tracing::MemoryTraceCollector;
-    use smart_routing::{
-        config::HealthConfig, executor::ExecutorConfig, health::HealthManager,
-        metrics::MetricsCollector,
-    };
+    use config::CredentialConfig;
 
     /// Configurable fields for customizing test application state.
     /// Fields set to `None` use sensible defaults.
@@ -254,92 +244,16 @@ mod test_helpers {
         let mut config = GatewayConfig::default();
         config.server.auth_tokens = overrides.auth_tokens;
         config.credentials = overrides.credentials;
-
-        let smart_router =
-            config
-                .credentials
-                .iter()
-                .fold(SmartRouter::new(), |mut router, cred| {
-                    router.add_credential(cred.id.clone(), cred.allowed_models.clone());
-                    router
-                });
-
-        let metrics = MetricsCollector::new();
-        let health = HealthManager::new(HealthConfig::default());
-        let executor = Arc::new(RouteExecutor::new(
-            ExecutorConfig::default(),
-            metrics,
-            health,
-        ));
-        let classifier = Arc::new(DefaultRequestClassifier);
-
-        let collector = Arc::new(MemoryTraceCollector::with_default_size());
-        let tracing_mw = TracingMiddleware::new(collector);
-
-        let credentials: Vec<AuthInfo> = config
-            .credentials
-            .iter()
-            .map(|c| AuthInfo {
-                id: c.id.clone(),
-                priority: Some(c.priority),
-                quota_exceeded: false,
-                unavailable: false,
-                model_states: vec![],
-            })
-            .collect();
-
-        let rate_limit = overrides.rate_limit.unwrap_or(DEFAULT_RATE_LIMIT);
-        let rate_limiter = Arc::new(RateLimiter::new(rate_limit));
-
-        AppState {
-            config,
-            registry: ModelRegistry::default(),
-            router: smart_router,
-            executor,
-            classifier,
-            tracing: tracing_mw,
-            start_time: Instant::now(),
-            credentials,
-            rate_limiter,
-        }
+        build_app_state(config, overrides.rate_limit)
     }
 
     /// Constructs the complete Axum router with all middleware layers in
-    /// production order, matching what [`main()`] builds. Returns a [`Router`]
-    /// for use with [`tower::ServiceExt::oneshot()`].
+    /// production order. Returns a [`Router`] for use with
+    /// [`tower::ServiceExt::oneshot()`].
     ///
     /// Insert [`ConnectInfo<SocketAddr>`] into each test request's extensions
     /// to satisfy the rate limiter's address extractor.
     pub(crate) fn build_full_app(state: AppState) -> Router {
-        let public_routes = Router::new()
-            .route("/", axum::routing::get(root))
-            .route("/health", axum::routing::get(health_check));
-
-        let protected_routes = Router::new()
-            .route("/api/models", axum::routing::get(list_models))
-            .route("/api/route", axum::routing::get(route_request))
-            .route(
-                "/v1/chat/completions",
-                axum::routing::post(chat_completions),
-            )
-            .route_layer(middleware::from_fn_with_state(
-                state.clone(),
-                auth_middleware,
-            ));
-
-        Router::new()
-            .merge(public_routes)
-            .merge(protected_routes)
-            .layer(middleware::from_fn_with_state(
-                state.clone(),
-                rate_limit_middleware,
-            ))
-            .layer(middleware::from_fn(security_headers_middleware))
-            .layer(middleware::from_fn_with_state(
-                state.tracing.clone(),
-                llm_tracing::tracing_middleware,
-            ))
-            .layer(TraceLayer::new_for_http())
-            .with_state(state)
+        build_app_router(state)
     }
 }
