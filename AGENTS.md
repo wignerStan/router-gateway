@@ -32,12 +32,13 @@ A **local LLM gateway** written in Rust for intelligent request routing. Routes 
 This project enforces production-level code style using `rustfmt` and `clippy`. Adhere to the following conventions:
 
 ### General Idioms & Style
+
 - **Cosmetic Discipline**: Adhere to standard naming (`snake_case`, `CamelCase`, `UPPER_SNAKE_CASE`). Group imports hierarchically.
 - **Borrowing over Cloning**: Prefer borrowing (`&T`) over `.clone()` to avoid unnecessary allocations.
 - **Prevent Early Allocation**: Do not collect into `Vec` unless explicitly necessary for returning or async bounds.
 - **Result over Panic**: Return `Result<T, E>`. Never `unwrap()` or `expect()` in production code. Use `thiserror` (lib) / `anyhow` (bin).
 - **Type State Pattern**: Use Type State for complex state machines to guarantee compile-time correctness.
-- **No Living Comments**: Don't write out-of-sync comments. Let code describe the *what* and comments the *why*.
+- **No Living Comments**: Don't write out-of-sync comments. Let code describe the _what_ and comments the _why_.
 - **Match statements**: Make match statements exhaustive and avoid wildcard arms (`_`) whenever possible. Use explicit arms for maintainability.
 - **Range checking**: Use `(start..=end).contains(&val)` instead of manual `>=` and `<=` checks.
 - **Borrowing**: Prefer borrowing over cloning. Prevent early allocations.
@@ -83,7 +84,10 @@ This project enforces production-level code style using `rustfmt` and `clippy`. 
 ## Security considerations
 
 - Be mindful of avoiding `unwrap()` and `expect()` to prevent panic-induced Denial of Service (DoS) in the gateway.
-- See `SECURITY.md` in the repository root for vulnerability reporting procedures and further details on standard security practices.
+- **SSRF Protection**: Gateway blocks private/reserved IP ranges (RFC 1918, link-local, loopback, broadcast) and IPv6-mapped/compatible addresses. See `config.rs:is_ipv4_mapped()` and `validate_url()` for the full blocklist.
+- **Constant-Time Token Comparison**: Auth tokens are compared using `constant_time_token_matches()` (bitwise OR iteration, no short-circuit) to prevent timing side-channel attacks.
+- **NaN Safety**: All floating-point comparisons use `partial_cmp().unwrap_or(Ordering::Equal)` to prevent panics on NaN values from division-by-zero or missing metrics.
+- See `SECURITY.md` in the repository root for vulnerability reporting procedures and deployment best practices.
 
 ## Extra instructions
 
@@ -91,6 +95,9 @@ This project enforces production-level code style using `rustfmt` and `clippy`. 
 
 ```
 gateway/
+  config/
+    policies.json          # Routing policy configuration
+    policies.schema.json   # JSON schema for policy validation
   packages/
     model-registry/   # Model metadata, 5-dimension categorization
     smart-routing/    # Weighted credential selection, health tracking
@@ -126,6 +133,11 @@ Policy-based credential selection with configurable weights and strategies.
 
 Key types: `SmartRoutingConfig`, `WeightConfig`, `HealthManager`, `WeightCalculator`
 
+**Statistics Buckets**: Weekend/weekday isolation with compound `TimeBucket` variants:
+
+- `WeekdayPeak`, `WeekdayOffPeak`, `WeekendPeak`, `WeekendOffPeak`
+- `update_bucket_stats()` free function deduplicates stat updates across buckets
+
 #### Model Registry (`model-registry`)
 
 Multi-dimension categorization for routing decisions:
@@ -149,6 +161,12 @@ Multi-dimension categorization for routing decisions:
 
 Key types: `ModelInfo`, `ModelCategorization` trait, `Registry`, `RoutingPolicy`, `PolicyRegistry`
 
+**Policy Validation**: JSON schema validation for policy configuration files:
+
+- `policies.schema.json` defines the schema for `config/policies.json`
+- `PolicyRegistry::from_file()` and `validate_against_schema()` for loading and validation
+- `PolicyLoadError` enum with `Io`, `Parse`, `Schema` variants
+
 #### LLM Tracing (`llm-tracing`)
 
 Request/response observability for debugging and analytics:
@@ -167,18 +185,24 @@ Key types: `TraceSpan`, `TraceCollector` trait, `TracingMiddleware`
 - Trace collectors are not shared across clones (same pattern)
 - SQLite store requires `bundled` feature for cross-platform builds
 - Model registry cache TTL is 1 hour by default
+- Floating-point metrics may contain NaN values — always use `partial_cmp().unwrap_or(Ordering::Equal)` instead of `.unwrap()`
+- `constant_time_token_matches()` must be used for all auth token comparisons to prevent timing attacks
 
 ### Reference Implementations
 
-| Pattern               | Location                                            |
-| --------------------- | --------------------------------------------------- |
-| SmartRoutingConfig    | `packages/smart-routing/src/config.rs:4-21`         |
-| WeightConfig defaults | `packages/smart-routing/src/config.rs:134-147`      |
-| Weight calculation    | `packages/smart-routing/src/weight.rs:112-166`      |
-| Health state machine  | `packages/smart-routing/src/health.rs:4-50`         |
-| Model categorization  | `packages/model-registry/src/categories.rs:146-277` |
-| Trace span            | `packages/tracing/src/trace.rs:5-35`                |
-| HTTP endpoint setup   | `apps/gateway/src/main.rs:43-48`                    |
+| Pattern               | Location                                                    |
+| --------------------- | ----------------------------------------------------------- |
+| SmartRoutingConfig    | `packages/smart-routing/src/config/mod.rs:25`               |
+| WeightConfig defaults | `packages/smart-routing/src/config/mod.rs:119`              |
+| Weight calculation    | `packages/smart-routing/src/weight/calculator.rs`           |
+| Health state machine  | `packages/smart-routing/src/health/mod.rs`                  |
+| Statistics buckets    | `packages/smart-routing/src/statistics.rs`                  |
+| SSRF protection       | `apps/gateway/src/config.rs` (is_ipv4_mapped, validate_url) |
+| Token comparison      | `apps/gateway/src/config.rs` (constant_time_token_matches)  |
+| Model categorization  | `packages/model-registry/src/categories.rs`                 |
+| Policy validation     | `packages/model-registry/src/policy/registry.rs`            |
+| Trace span            | `packages/tracing/src/trace.rs`                             |
+| HTTP endpoint setup   | `apps/gateway/src/main.rs`                                  |
 
 ### Documentation
 
