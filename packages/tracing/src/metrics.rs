@@ -28,6 +28,7 @@ pub struct TraceMetrics {
 
 /// Metrics aggregated per provider
 #[derive(Debug, Clone, Default)]
+#[non_exhaustive]
 pub struct ProviderMetrics {
     pub total_requests: u64,
     pub successful_requests: u64,
@@ -38,6 +39,7 @@ pub struct ProviderMetrics {
 
 /// Metrics aggregated per model
 #[derive(Debug, Clone, Default)]
+#[non_exhaustive]
 pub struct ModelMetrics {
     pub total_requests: u64,
     pub successful_requests: u64,

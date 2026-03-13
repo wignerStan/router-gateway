@@ -1,3 +1,8 @@
+//! Thread-safe model registry with caching, coalesced fetches, and background refresh.
+//!
+//! The registry wraps a [`ModelFetcher`] and caches results with configurable TTL.
+//! Concurrent fetches for the same model ID are coalesced into a single request.
+
 use crate::categories::{
     CapabilityCategory, ContextWindowCategory, CostCategory, ModelCategorization, ProviderCategory,
     TierCategory,

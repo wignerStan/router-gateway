@@ -1,3 +1,9 @@
+//! Intelligent credential selection for LLM request routing.
+//!
+//! Provides health-aware, latency-optimized routing based on success rates,
+//! configurable weight factors, and multiple selection strategies including
+//! weighted random, time-aware, quota-aware, and adaptive routing.
+
 pub mod bandit;
 pub mod candidate;
 pub mod classification;

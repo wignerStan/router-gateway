@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 /// Represents a single LLM request/response trace
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct TraceSpan {
     /// Unique identifier for this trace
     pub trace_id: Uuid,
