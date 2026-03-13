@@ -149,12 +149,6 @@ impl Router {
         self
     }
 
-    /// Set session ID for affinity
-    pub fn set_session_id(&mut self, _session_id: String) {
-        // Session affinity is handled during planning
-        // This is a placeholder for future implementation
-    }
-
     /// Plan a route for the given request
     ///
     /// # Arguments
@@ -201,6 +195,16 @@ impl Router {
         } else {
             self.select_best(&candidates_with_utility).await
         };
+
+        // Record session affinity after selection
+        if self.config.enable_session_affinity {
+            if let (Some(sid), Some(ref route)) = (session_id, &selected) {
+                let _ = self
+                    .session_manager
+                    .set_provider(sid.to_string(), route.provider.clone())
+                    .await;
+            }
+        }
 
         // Step 5: Generate fallback routes
         let primary_id = selected.as_ref().map(|s| s.credential_id.clone());
@@ -368,7 +372,7 @@ impl Router {
         // Select the candidate with highest utility
         let best = candidates
             .iter()
-            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
         if let Some((candidate, utility)) = best {
             // Calculate weight
@@ -460,18 +464,13 @@ impl Default for Router {
 impl Clone for Router {
     fn clone(&self) -> Self {
         Self {
-            candidate_builder: CandidateBuilder::new(),
-            constraint_filter: ConstraintFilter::new(),
-            utility_estimator: UtilityEstimator::new(),
+            candidate_builder: self.candidate_builder.clone(),
+            constraint_filter: self.constraint_filter.clone(),
+            utility_estimator: self.utility_estimator.clone(),
             bandit_policy: Arc::clone(&self.bandit_policy),
-            selector: SmartSelector::new(crate::config::SmartRoutingConfig::default()),
-            fallback_planner: FallbackPlanner::with_config(FallbackConfig {
-                max_fallbacks: self.config.max_fallbacks,
-                min_fallbacks: self.config.min_fallbacks,
-                enable_provider_diversity: self.config.enable_provider_diversity,
-                prefer_diverse_providers: self.config.enable_provider_diversity,
-            }),
-            session_manager: SessionAffinityManager::new(),
+            selector: self.selector.clone(),
+            fallback_planner: self.fallback_planner.clone(),
+            session_manager: self.session_manager.clone(),
             config: self.config.clone(),
         }
     }
@@ -634,33 +633,46 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_router_clone_independence() {
+    async fn test_router_clone_preserves_credentials() {
         let mut router1 = Router::new();
-        router1.add_credential("cred-1".to_string(), vec!["claude-3-opus".to_string()]);
+        router1.add_credential("cred-1".to_string(), vec!["model-a".to_string()]);
         router1.set_model(
-            "claude-3-opus".to_string(),
-            create_test_model("claude-3-opus", "anthropic", 200000),
+            "model-a".to_string(),
+            create_test_model("model-a", "provider-a", 200000),
         );
+        router1.add_disabled_provider("blocked".to_string());
 
-        let mut router2 = router1.clone();
+        let router2 = router1.clone();
 
-        // Both should be valid independent instances, but clone creates fresh state
-        // So we need to register credentials on router2 as well
-        router2.add_credential("cred-1".to_string(), vec!["claude-3-opus".to_string()]);
-        router2.set_model(
-            "claude-3-opus".to_string(),
-            create_test_model("claude-3-opus", "anthropic", 200000),
-        );
-
+        // Clone should preserve credentials - no need to re-register
         let request = create_test_request(1000);
         let auths = vec![create_test_auth("cred-1")];
 
         router2.metrics().initialize_auth("cred-1").await;
         let plan = router2.plan(&request, auths, None).await;
 
-        assert!(plan.primary.is_some());
+        assert!(
+            plan.primary.is_some(),
+            "Clone should preserve registered credentials"
+        );
     }
 
+    #[tokio::test]
+    async fn test_router_clone_preserves_bandit_state() {
+        let router1 = Router::new();
+        router1.metrics().initialize_auth("cred-1").await;
+        router1.record_result("cred-1", true, 100.0, 200, 0.8).await;
+
+        let router2 = router1.clone();
+
+        // Bandit state is shared via Arc - both see the same recorded result
+        let bandit = router2.bandit_policy().lock().await;
+        let stats = bandit.get_stats("cred-1");
+        assert!(stats.is_some(), "Clone should preserve bandit policy state");
+        let s = stats.unwrap();
+        assert_eq!(s.pulls, 1);
+        assert_eq!(s.last_utility, 0.8);
+    }
     #[tokio::test]
     async fn test_router_record_result() {
         let router = Router::new();
@@ -1023,6 +1035,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_select_weighted_handles_nan_scores_without_panic() {
+        let config = RouterConfig {
+            use_bandit: false, // Force weighted selection
+            ..Default::default()
+        };
+        let mut router = Router::with_config(config);
+        router.add_credential("cred-1".to_string(), vec!["model-1".to_string()]);
+        router.add_credential("cred-2".to_string(), vec!["model-2".to_string()]);
+        router.set_model(
+            "model-1".to_string(),
+            create_test_model("model-1", "provider-a", 200000),
+        );
+        router.set_model(
+            "model-2".to_string(),
+            create_test_model("model-2", "provider-b", 200000),
+        );
+
+        let request = create_test_request(1000);
+        let auths = vec![create_test_auth("cred-1"), create_test_auth("cred-2")];
+
+        router.metrics().initialize_auth("cred-1").await;
+        router.metrics().initialize_auth("cred-2").await;
+
+        // Record a zero-latency result to potentially produce NaN in utility calculation
+        router.record_result("cred-1", true, 0.0, 200, 0.0).await;
+        router.record_result("cred-2", true, 0.0, 200, 0.0).await;
+
+        // This should NOT panic even if utility scores contain NaN
+        let plan = router.plan(&request, auths, None).await;
+
+        // Should still produce a valid plan
+        assert!(
+            plan.primary.is_some(),
+            "Should select a route even with potential NaN scores"
+        );
+    }
+
+    #[tokio::test]
     async fn test_router_fallback_count_with_limited_candidates() {
         let config = RouterConfig {
             max_fallbacks: 10,
@@ -1056,6 +1106,99 @@ mod tests {
         assert!(
             plan.fallbacks.len() <= 2,
             "Should return available auths as fallbacks, not min_fallbacks"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_session_affinity_records_provider_after_routing() {
+        let config = RouterConfig {
+            use_bandit: false,
+            enable_session_affinity: true,
+            ..Default::default()
+        };
+        let mut router = Router::with_config(config);
+        router.add_credential("cred-1".to_string(), vec!["model-a".to_string()]);
+        router.set_model(
+            "model-a".to_string(),
+            create_test_model("model-a", "provider-a", 200000),
+        );
+
+        let request = create_test_request(1000);
+        let auths = vec![create_test_auth("cred-1")];
+
+        router.metrics().initialize_auth("cred-1").await;
+
+        let session_id = "affinity-test-session";
+
+        // Before planning, no affinity exists
+        assert!(
+            !router.session_manager().has_affinity(session_id).await,
+            "Should have no affinity before first plan call"
+        );
+
+        // Plan with session_id
+        let plan = router.plan(&request, auths, Some(session_id)).await;
+        assert!(plan.primary.is_some());
+
+        // After planning, affinity should be recorded
+        assert!(
+            router.session_manager().has_affinity(session_id).await,
+            "Should record session affinity after plan with session_id"
+        );
+
+        let preferred = router
+            .session_manager()
+            .get_preferred_provider(session_id)
+            .await;
+        assert_eq!(
+            preferred,
+            Some("provider-a".to_string()),
+            "Should record the selected provider in session affinity"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_session_affinity_prefers_cached_provider_over_higher_utility() {
+        let config = RouterConfig {
+            use_bandit: false,
+            enable_session_affinity: true,
+            ..Default::default()
+        };
+        let mut router = Router::with_config(config);
+        router.add_credential("cred-1".to_string(), vec!["model-a".to_string()]);
+        router.add_credential("cred-2".to_string(), vec!["model-b".to_string()]);
+        router.set_model(
+            "model-a".to_string(),
+            create_test_model("model-a", "provider-a", 128000),
+        );
+        router.set_model(
+            "model-b".to_string(),
+            create_test_model("model-b", "provider-b", 200000),
+        );
+
+        let request = create_test_request(1000);
+        let auths = vec![create_test_auth("cred-1"), create_test_auth("cred-2")];
+
+        router.metrics().initialize_auth("cred-1").await;
+        router.metrics().initialize_auth("cred-2").await;
+
+        let session_id = "sticky-session";
+
+        // Seed session affinity with provider-a (lower utility due to smaller context)
+        router
+            .session_manager()
+            .set_provider(session_id.to_string(), "provider-a".to_string())
+            .await
+            .unwrap();
+
+        // Plan with session: should prefer provider-a despite provider-b having higher utility
+        let plan = router.plan(&request, auths, Some(session_id)).await;
+        assert!(plan.primary.is_some());
+        let primary = plan.primary.unwrap();
+
+        assert_eq!(
+            primary.provider, "provider-a",
+            "Session affinity should prefer cached provider over higher utility alternative"
         );
     }
 }

@@ -34,6 +34,7 @@ impl FilterResult {
 }
 
 /// Hard constraint filter for route candidates
+#[derive(Clone)]
 pub struct ConstraintFilter {
     /// Disabled providers (empty = no restrictions)
     disabled_providers: Vec<String>,
