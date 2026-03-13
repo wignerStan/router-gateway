@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 /// Authentication metrics
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,7 +43,7 @@ const EWMA_ALPHA: f64 = 0.3;
 
 /// Metrics collector
 pub struct MetricsCollector {
-    metrics: tokio::sync::RwLock<std::collections::HashMap<String, AuthMetrics>>,
+    metrics: Arc<tokio::sync::RwLock<std::collections::HashMap<String, AuthMetrics>>>,
     max_entries: usize,
     cleanup_interval: i64,
     op_count: std::sync::Arc<std::sync::atomic::AtomicI64>,
@@ -51,7 +52,7 @@ pub struct MetricsCollector {
 impl Clone for MetricsCollector {
     fn clone(&self) -> Self {
         Self {
-            metrics: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            metrics: Arc::clone(&self.metrics),
             max_entries: self.max_entries,
             cleanup_interval: self.cleanup_interval,
             op_count: std::sync::Arc::clone(&self.op_count),
@@ -63,7 +64,7 @@ impl MetricsCollector {
     /// Create a new metrics collector
     pub fn new() -> Self {
         Self {
-            metrics: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            metrics: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
             max_entries: 10_000,
             cleanup_interval: 100,
             op_count: std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0)),
@@ -73,7 +74,7 @@ impl MetricsCollector {
     /// Create a metrics collector with a limit
     pub fn with_limit(max_entries: usize) -> Self {
         Self {
-            metrics: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            metrics: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
             max_entries: if max_entries > 0 { max_entries } else { 10_000 },
             cleanup_interval: 100,
             op_count: std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0)),
@@ -484,20 +485,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_clone_creates_independent_metrics() {
+    async fn test_clone_shares_metrics_storage() {
         let collector1 = MetricsCollector::new();
         collector1.initialize_auth("auth-1").await;
 
         let collector2 = collector1.clone();
 
-        // Clone should have independent metrics storage
+        // Clone shares the same metrics storage via Arc
         collector2.initialize_auth("auth-2").await;
 
-        // Collector1 should not see auth-2
-        assert!(collector1.get_metrics("auth-2").await.is_none());
+        // Collector1 should see auth-2 (shared state)
+        assert!(collector1.get_metrics("auth-2").await.is_some());
 
-        // Collector2 should have auth-2
-        assert!(collector2.get_metrics("auth-2").await.is_some());
+        // Collector2 should see auth-1 (shared state)
+        assert!(collector2.get_metrics("auth-1").await.is_some());
     }
 
     #[tokio::test]
