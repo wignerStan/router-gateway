@@ -1,6 +1,5 @@
-# AGENTS.md
-
-<!-- Project Overview -->
+# AGENT INSTRUCTIONS
+## Project Overview
 
 A **local LLM gateway** written in Rust for intelligent request routing. Routes LLM requests to optimal credentials based on health, latency, and success rate. Designed for local development and self-hosted deployments.
 
@@ -16,18 +15,34 @@ A **local LLM gateway** written in Rust for intelligent request routing. Routes 
 | `packages/tracing/` | `llm-tracing` |
 | `apps/cli/`         | `my-cli`      |
 
-<!-- Build and test commands -->
+### Build and test commands
 
 | Task        | Command                    |
 | ----------- | -------------------------- |
 | Build       | `cargo build`              |
 | Test        | `cargo test --workspace`   |
 | Run Gateway | `cargo run -p gateway`     |
-| Lint        | `cargo clippy --workspace` |
+| Lint        | `cargo lint` |
 | Format      | `cargo fmt`                |
 | All Checks  | `just qa`                  |
 
-<!-- Code style guidelines -->
+### Known Pitfalls
+
+- All async operations use Tokio — always `.await` on registry/selector methods
+- `Registry::get()` requires model ID to be non-empty (returns error otherwise)
+- Health manager clones have independent storage (not shared state)
+- Trace collectors are not shared across clones (same pattern)
+- SQLite store requires `bundled` feature for cross-platform builds
+- Model registry cache TTL is 1 hour by default
+- Floating-point metrics may contain NaN values — always use `partial_cmp().unwrap_or(Ordering::Equal)` instead of `.unwrap()`
+- `constant_time_token_matches()` must be used for all auth token comparisons to prevent timing attacks
+
+### REFERENCE
+
+For architecture, features, configuration, API endpoints, and key types, see [README.md](README.md).
+
+
+## Code style guidelines
 
 This project enforces production-level code style using `rustfmt` and `clippy`. Adhere to the following conventions:
 
@@ -71,7 +86,7 @@ This project enforces production-level code style using `rustfmt` and `clippy`. 
 - All async operations use Tokio. Always `.await` on registry/selector methods.
 - Maintain clear boundaries between async and sync code.
 
-<!-- Testing instructions -->
+## Testing instructions
 
 - **Deep Equals**: Prefer deep equals comparisons whenever possible. Perform `assert_eq!()` on entire objects rather than individual fields. Use `pretty_assertions::assert_eq` for clearer diffs.
 - **Environment**: Avoid mutating process environment in tests; prefer passing environment-derived flags or dependencies from above.
@@ -79,9 +94,8 @@ This project enforces production-level code style using `rustfmt` and `clippy`. 
 - **Sleeping**: Avoid `std::thread::sleep` in async contexts; always use `tokio::time::sleep`.
 - **Snapshot Testing**: Use snapshot testing (e.g., `cargo insta`) for output validation where appropriate.
 - **Test Errors**: Ensure unit tests exercise error conditions and not just the happy path.
-- **Code Style Enforcement**: All code changes **must** pass formatting and linting rules. Before finalizing changes run `cargo fmt`, `cargo clippy --workspace --all-targets` to fix lint issues, and `just qa` to run all project quality gates.
 
-<!-- Security considerations -->
+## Security considerations
 
 - No `unwrap()`/`expect()` in production — prevents DoS via panic.
 - Use `constant_time_token_matches()` for all auth token comparisons (timing side-channel prevention).
@@ -89,20 +103,6 @@ This project enforces production-level code style using `rustfmt` and `clippy`. 
 - SSRF protection blocks private/reserved IPs and IPv6-mapped/compatible addresses.
 - See [SECURITY.md](SECURITY.md) for full security policy, deployment practices, and reporting procedures.
 
-<!-- Project details -->
-
-For architecture, features, configuration, API endpoints, and key types, see [README.md](README.md).
-
-<!-- Known Pitfalls -->
-
-- All async operations use Tokio — always `.await` on registry/selector methods
-- `Registry::get()` requires model ID to be non-empty (returns error otherwise)
-- Health manager clones have independent storage (not shared state)
-- Trace collectors are not shared across clones (same pattern)
-- SQLite store requires `bundled` feature for cross-platform builds
-- Model registry cache TTL is 1 hour by default
-- Floating-point metrics may contain NaN values — always use `partial_cmp().unwrap_or(Ordering::Equal)` instead of `.unwrap()`
-- `constant_time_token_matches()` must be used for all auth token comparisons to prevent timing attacks
 
 <!-- BEGIN BEADS INTEGRATION -->
 
