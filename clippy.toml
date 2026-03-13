@@ -11,5 +11,5 @@ enum-variant-name-threshold = 3
 # Allow larger types in specific cases if needed, but keep a strict threshold
 type-complexity-threshold = 250
 
-# Ignore test directories for some rules
-# allow-unwrap-in-tests = true # Not supported directly in clippy.toml, handled via lints
+too-many-lines-threshold = 500
+too-many-arguments-threshold = 7

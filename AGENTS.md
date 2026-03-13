@@ -7,7 +7,7 @@ A **local LLM gateway** written in Rust for intelligent request routing. Routes 
 **Stack**: Rust 1.83+, Tokio, Axum, SQLite
 **Focus**: Smart routing, model registry, LLM tracing
 
-## Package Names
+### Package Names
 
 > **Note:** Directory names differ from Cargo package names:
 
@@ -16,18 +16,71 @@ A **local LLM gateway** written in Rust for intelligent request routing. Routes 
 | `packages/tracing/` | `llm-tracing` |
 | `apps/cli/`         | `my-cli`      |
 
-## Quick Start
+## Build and test commands
 
 | Task        | Command                       |
 | ----------- | ----------------------------- |
 | Build       | `cargo build`                 |
-| Test        | `cargo test`                  |
+| Test        | `cargo test --workspace`      |
 | Run Gateway | `cargo run -p gateway`        |
-| Lint        | `cargo lint` |
+| Lint        | `cargo clippy --workspace`    |
 | Format      | `cargo fmt`                   |
 | All Checks  | `just qa`                     |
 
-## Project Structure
+## Code style guidelines
+
+This project enforces production-level code style using `rustfmt` and `clippy`. Adhere to the following conventions:
+
+### General Idioms & Style
+- **Format strings**: Always inline `format!` args when possible (`format!("Hello, {name}")` instead of `format!("Hello, {}", name)`).
+- **If statements**: Always collapse if statements (`if x { if y { ... } }` becomes `if x && y { ... }`).
+- **Closures**: Use method references over closures when possible (`.map(String::from)` instead of `.map(|s| String::from(s))`).
+- **Match statements**: Make match statements exhaustive and avoid wildcard arms (`_`) whenever possible. Use explicit arms for maintainability.
+- **Range checking**: Use `(start..=end).contains(&val)` instead of manual `>=` and `<=` checks.
+- **Borrowing**: Prefer borrowing over cloning. Prevent early allocations.
+- **Iterators**: Prefer `.iter()` and iterator combinators over manual `for` loops for zero-cost abstractions and better readability.
+- **Passing by Value vs Reference**: Follow official guidelines for when to pass by value (e.g. `Copy` traits) vs by reference.
+
+### Error Handling
+- **Result over Panic**: Prefer returning `Result` and avoid `panic!`.
+- **Avoid unwraps**: Do not use `unwrap()` or `expect()` in production code. Handle errors gracefully.
+- **Error Types**: Use `thiserror` for library/crate level errors and reserve `anyhow` strictly for binaries/applications.
+- **Error Bubbling**: Use the `?` operator to bubble errors up.
+
+### Comments and Documentation
+- **Context, Not Clutter**: Comments should explain the *why*, not the *what*. If code is complex, refactor instead of over-commenting. Don't write living comments when documentation is needed.
+- **Living Documentation**: Treat tests as living documentation. Add test examples to your doc comments.
+- **TODOs**: `TODO` comments should generally become tracked issues.
+
+### Modules & Architecture
+- **Modularity & Size**: Avoid large modules. Prefer adding new modules instead of growing existing ones. Target Rust modules under 500 LoC (excluding tests). If a file exceeds 800 LoC, extract functionality into a new module instead of extending the existing file unless there is a strong documented reason not to.
+- **Locality**: When extracting code, move the related tests and module/type docs toward the new implementation so the invariants stay close to the code that owns them.
+- **Helper Methods**: Do not create small helper methods that are referenced only once.
+- **Type State Pattern**: Consider using the Type State pattern for complex state machines to guarantee correctness at compile time.
+- **Dispatch**: Use static dispatch (`impl Trait` or `<T: Trait>`) by default. Use dynamic dispatch (`dyn Trait`) only when necessary for heterogeneous collections or compile-time performance trade-offs.
+
+### Async/Tokio Conventions
+- All async operations use Tokio. Always `.await` on registry/selector methods.
+- Maintain clear boundaries between async and sync code.
+
+## Testing instructions
+
+- **Deep Equals**: Prefer deep equals comparisons whenever possible. Perform `assert_eq!()` on entire objects rather than individual fields. Use `pretty_assertions::assert_eq` for clearer diffs.
+- **Environment**: Avoid mutating process environment in tests; prefer passing environment-derived flags or dependencies from above.
+- **Async Tests**: Always mark async tests as `#[tokio::test]`.
+- **Sleeping**: Avoid `std::thread::sleep` in async contexts; always use `tokio::time::sleep`.
+- **Snapshot Testing**: Use snapshot testing (e.g., `cargo insta`) for output validation where appropriate.
+- **Test Errors**: Ensure unit tests exercise error conditions and not just the happy path.
+- **Code Style Enforcement**: All code changes **must** pass formatting and linting rules. Before finalizing changes run `cargo fmt`, `cargo clippy --workspace --all-targets` to fix lint issues, and `just qa` to run all project quality gates.
+
+## Security considerations
+
+- Be mindful of avoiding `unwrap()` and `expect()` to prevent panic-induced Denial of Service (DoS) in the gateway.
+- See `SECURITY.md` in the repository root for vulnerability reporting procedures and further details on standard security practices.
+
+## Extra instructions
+
+### Project Structure
 
 ```
 gateway/
@@ -40,9 +93,9 @@ gateway/
     cli/              # CLI management utility
 ```
 
-## Architecture
+### Architecture
 
-### Smart Routing (`smart-routing`)
+#### Smart Routing (`smart-routing`)
 
 Policy-based credential selection with configurable weights and strategies.
 
@@ -66,7 +119,7 @@ Policy-based credential selection with configurable weights and strategies.
 
 Key types: `SmartRoutingConfig`, `WeightConfig`, `HealthManager`, `WeightCalculator`
 
-### Model Registry (`model-registry`)
+#### Model Registry (`model-registry`)
 
 Multi-dimension categorization for routing decisions:
 
@@ -89,7 +142,7 @@ Multi-dimension categorization for routing decisions:
 
 Key types: `ModelInfo`, `ModelCategorization` trait, `Registry`, `RoutingPolicy`, `PolicyRegistry`
 
-### LLM Tracing (`llm-tracing`)
+#### LLM Tracing (`llm-tracing`)
 
 Request/response observability for debugging and analytics:
 
@@ -99,7 +152,7 @@ Request/response observability for debugging and analytics:
 
 Key types: `TraceSpan`, `TraceCollector` trait, `TracingMiddleware`
 
-## Known Pitfalls
+### Known Pitfalls
 
 - All async operations use Tokio - always `.await` on registry/selector methods
 - `Registry::get()` requires model ID to be non-empty (returns error otherwise)
@@ -108,7 +161,7 @@ Key types: `TraceSpan`, `TraceCollector` trait, `TracingMiddleware`
 - SQLite store requires `bundled` feature for cross-platform builds
 - Model registry cache TTL is 1 hour by default
 
-## Reference Implementations
+### Reference Implementations
 
 | Pattern               | Location                                            |
 | --------------------- | --------------------------------------------------- |
@@ -120,7 +173,7 @@ Key types: `TraceSpan`, `TraceCollector` trait, `TracingMiddleware`
 | Trace span            | `packages/tracing/src/trace.rs:5-35`                |
 | HTTP endpoint setup   | `apps/gateway/src/main.rs:43-48`                    |
 
-## Documentation
+### Documentation
 
 - Model Classification: `docs/MODEL_CLASSIFICATION.md`
 - API Transformation: `docs/API_TRANSFORMATION.md`
@@ -128,18 +181,18 @@ Key types: `TraceSpan`, `TraceCollector` trait, `TracingMiddleware`
 
 <!-- BEGIN BEADS INTEGRATION -->
 
-## Issue Tracking with bd (beads)
+### Issue Tracking with bd (beads)
 
 **IMPORTANT**: This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TODOs, task lists, or other tracking methods.
 
-### Why bd?
+#### Why bd?
 
 - Dependency-aware: Track blockers and relationships between issues
 - Git-friendly: Dolt-powered version control with native sync
 - Agent-optimized: JSON output, ready work detection, discovered-from links
 - Prevents duplicate tracking systems and confusion
 
-### Quick Start
+#### Quick Start
 
 **Check for ready work:**
 
@@ -167,7 +220,7 @@ bd update bd-42 --priority 1 --json
 bd close bd-42 --reason "Completed" --json
 ```
 
-### Issue Types
+#### Issue Types
 
 - `bug` - Something broken
 - `feature` - New functionality
@@ -175,7 +228,7 @@ bd close bd-42 --reason "Completed" --json
 - `epic` - Large feature with subtasks
 - `chore` - Maintenance (dependencies, tooling)
 
-### Priorities
+#### Priorities
 
 - `0` - Critical (security, data loss, broken builds)
 - `1` - High (major features, important bugs)
@@ -183,7 +236,7 @@ bd close bd-42 --reason "Completed" --json
 - `3` - Low (polish, optimization)
 - `4` - Backlog (future ideas)
 
-### Workflow for AI Agents
+#### Workflow for AI Agents
 
 1. **Check ready work**: `bd ready` shows unblocked issues
 2. **Claim your task atomically**: `bd update <id> --claim`
@@ -192,7 +245,7 @@ bd close bd-42 --reason "Completed" --json
    - `bd create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
 5. **Complete**: `bd close <id> --reason "Done"`
 
-### Auto-Sync
+#### Auto-Sync
 
 bd automatically syncs via Dolt:
 
@@ -200,7 +253,7 @@ bd automatically syncs via Dolt:
 - Use `bd dolt push`/`bd dolt pull` for remote sync
 - No manual export/import needed!
 
-### Important Rules
+#### Important Rules
 
 - ✅ Use bd for ALL task tracking
 - ✅ Always use `--json` flag for programmatic use
@@ -212,71 +265,25 @@ bd automatically syncs via Dolt:
 
 For more details, see README.md and docs/QUICKSTART.md.
 
-## Landing the Plane (Session Completion)
+<!-- END BEADS INTEGRATION -->
 
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+### Landing the Plane (Session Completion)
+
+**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until pushing succeeds.
 
 **MANDATORY WORKFLOW:**
 
 1. **File issues for remaining work** - Create issues for anything that needs follow-up
 2. **Run quality gates** (if code changed) - Tests, linters, builds
 3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   bd sync
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
+4. **SYNC AND PUBLISH** - This is MANDATORY:
+   Use the standard Git and bd sync commands to publish your work and ensure the working directory is clean.
 5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
+6. **Verify** - All changes committed AND published
 7. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**
 
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
-
-<!-- END BEADS INTEGRATION -->
-
-## Coding Conventions
-
-### Rust Best Practices
-
-This project enforces production-level code style using `rustfmt` and `clippy`. Adhere to the following conventions:
-
-- **Format strings**: Always inline `format!` args when possible (`format!("Hello, {name}")` instead of `format!("Hello, {}", name)`).
-- **If statements**: Always collapse if statements (`if x { if y { ... } }` becomes `if x && y { ... }`).
-- **Closures**: Use method references over closures when possible (`.map(String::from)` instead of `.map(|s| String::from(s))`).
-- **Match statements**: Make match statements exhaustive and avoid wildcard arms (`_`) whenever possible. Use explicit arms for maintainability.
-- **Range checking**: Use `(start..=end).contains(&val)` instead of manual `>=` and `<=` checks.
-- **Testing**:
-  - Prefer deep equals comparisons whenever possible. Perform `assert_eq!()` on entire objects rather than individual fields. Use `pretty_assertions::assert_eq` for clearer diffs if available.
-  - Avoid mutating process environment in tests; prefer passing environment-derived flags or dependencies from above.
-  - Always mark async tests as `#[tokio::test]`.
-  - Avoid `std::thread::sleep` in async contexts; always use `tokio::time::sleep`.
-
-### Modules & Architecture
-
-- **Modularity**: Prefer adding new modules instead of growing existing ones. Target Rust modules under 500 LoC (excluding tests). If a file exceeds 800 LoC, extract functionality into a new module unless there is a strong documented reason not to.
-- **Locality**: When extracting code, move the related tests and module/type docs toward the new implementation so the invariants stay close to the code that owns them.
-- **Helper Methods**: Do not create small helper methods that are referenced only once.
-
-### Async/Tokio Conventions
-
-- All async operations use Tokio. Always `.await` on registry/selector methods.
-- Maintain clear boundaries between async and sync code.
-
-### Error Handling
-
-- Rely on `thiserror` and `anyhow` as configured in the workspace for error propagation.
-
-### Code Style Enforcement
-
-All code changes **must** pass formatting and linting rules. Before finalizing changes:
-
-1. Run `cargo fmt`
-2. Run `cargo lint`
-3. Run `just qa` to run all project quality gates.
+- Work is NOT complete until code is published
+- NEVER stop before publishing - that leaves work stranded locally
+- If publishing fails, resolve and retry until it succeeds
