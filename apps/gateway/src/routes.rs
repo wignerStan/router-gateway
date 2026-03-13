@@ -534,7 +534,8 @@ mod integration_tests {
         let body = axum::body::to_bytes(response.into_body(), 2048)
             .await
             .unwrap();
-        let list: Value = serde_json::from_slice(&body).unwrap();
+        let list: Value =
+            serde_json::from_slice(&body).expect("models response should be valid JSON");
         assert_eq!(list["count"], 1);
         assert_eq!(list["models"][0]["id"], "gpt-4");
     }
@@ -561,7 +562,8 @@ mod integration_tests {
         let body = axum::body::to_bytes(response.into_body(), 1024)
             .await
             .unwrap();
-        let health: HealthStatus = serde_json::from_slice(&body).unwrap();
+        let health: HealthStatus =
+            serde_json::from_slice(&body).expect("health response should be valid JSON");
 
         assert_eq!(health.status, "healthy");
         // uptime_secs can be 0 if the server started very recently
@@ -743,5 +745,378 @@ mod integration_tests {
 
         // Different IP is independent
         assert!(limiter.check("10.0.0.1"));
+    }
+
+    mod provider_integration_tests {
+        use super::*;
+        use crate::config::CredentialConfig;
+        use crate::test_helpers::build_full_app;
+        use crate::GatewayConfig;
+        use axum::body::Body;
+        use axum::http::{Request, StatusCode};
+        use model_registry::ModelInfo;
+        use std::sync::Arc;
+        use std::time::Instant;
+        use tower::ServiceExt;
+
+        const MAX_RESPONSE_BYTES: usize = 4096;
+
+        async fn read_json_body(response: axum::response::Response) -> serde_json::Value {
+            let body_bytes = axum::body::to_bytes(response.into_body(), MAX_RESPONSE_BYTES)
+                .await
+                .expect("response body should be readable");
+            serde_json::from_slice(&body_bytes).expect("response body should be valid JSON")
+        }
+
+        /// Build a minimal [`ModelInfo`] for test registration.
+        fn test_model_info(id: &str, provider: &str) -> ModelInfo {
+            ModelInfo {
+                id: id.to_string(),
+                name: format!("Test {id}"),
+                provider: provider.to_string(),
+                context_window: 128_000,
+                max_output_tokens: 4096,
+                input_price_per_million: 1.0,
+                output_price_per_million: 2.0,
+                capabilities: model_registry::ModelCapabilities {
+                    streaming: true,
+                    tools: true,
+                    vision: true,
+                    thinking: false,
+                },
+                rate_limits: model_registry::RateLimits {
+                    requests_per_minute: 60,
+                    tokens_per_minute: 90_000,
+                },
+                source: model_registry::DataSource::Static,
+            }
+        }
+
+        /// Creates an [`AppState`] whose SmartRouter has both credentials and
+        /// models registered so that `build_candidates` produces candidates.
+        fn create_state_with_routing(
+            creds: Vec<CredentialConfig>,
+            models: Vec<ModelInfo>,
+        ) -> AppState {
+            let mut config = GatewayConfig::default();
+            config.server.auth_tokens = vec!["test-token".to_string()];
+            config.credentials = creds;
+
+            let mut smart_router = smart_routing::router::Router::new();
+            for cred in &config.credentials {
+                smart_router.add_credential(cred.id.clone(), cred.allowed_models.clone());
+            }
+            for model in &models {
+                smart_router.set_model(model.id.clone(), model.clone());
+            }
+
+            let metrics = smart_routing::metrics::MetricsCollector::new();
+            let health = smart_routing::health::HealthManager::new(
+                smart_routing::config::HealthConfig::default(),
+            );
+            let executor = Arc::new(smart_routing::executor::RouteExecutor::new(
+                smart_routing::executor::ExecutorConfig::default(),
+                metrics,
+                health,
+            ));
+
+            let credentials: Vec<smart_routing::weight::AuthInfo> = config
+                .credentials
+                .iter()
+                .map(|c| smart_routing::weight::AuthInfo {
+                    id: c.id.clone(),
+                    priority: Some(c.priority),
+                    quota_exceeded: false,
+                    unavailable: false,
+                    model_states: vec![],
+                })
+                .collect();
+
+            AppState {
+                config,
+                registry: ModelRegistry::default(),
+                router: smart_router,
+                executor,
+                classifier: Arc::new(DefaultRequestClassifier),
+                tracing: llm_tracing::TracingMiddleware::new(Arc::new(
+                    llm_tracing::MemoryTraceCollector::with_default_size(),
+                )),
+                start_time: Instant::now(),
+                credentials,
+                rate_limiter: Arc::new(RateLimiter::new(60)),
+            }
+        }
+
+        fn make_chat_request(auth_token: &str, body: serde_json::Value) -> Request<Body> {
+            let body_bytes = serde_json::to_vec(&body).unwrap();
+            let mut req = Request::builder()
+                .method("POST")
+                .uri("/v1/chat/completions")
+                .header("Authorization", format!("Bearer {auth_token}"))
+                .header("Content-Type", "application/json")
+                .body(Body::from(body_bytes))
+                .unwrap();
+            let test_addr = SocketAddr::from(([127, 0, 0, 1], 12345));
+            req.extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+            req
+        }
+
+        fn make_credential(id: &str, provider: &str, models: &[&str]) -> CredentialConfig {
+            CredentialConfig {
+                id: id.to_string(),
+                provider: provider.to_string(),
+                api_key: "sk-test-key".to_string(),
+                allowed_models: models.iter().map(|m| m.to_string()).collect(),
+                ..Default::default()
+            }
+        }
+
+        // --- Provider Selection Tests ---
+
+        #[tokio::test]
+        async fn test_openai_adapter_selected() {
+            let creds = vec![make_credential("openai-1", "openai", &["gpt-4"])];
+            let models = vec![test_model_info("gpt-4", "openai")];
+            let state = create_state_with_routing(creds, models);
+            let app = build_full_app(state);
+
+            let req = make_chat_request(
+                "test-token",
+                json!({
+                    "model": "gpt-4",
+                    "messages": [{"role": "user", "content": "Hello"}]
+                }),
+            );
+
+            let response = app.oneshot(req).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let json_body = read_json_body(response).await;
+            assert_eq!(json_body["_gateway"]["route"]["provider"], "openai");
+        }
+
+        #[tokio::test]
+        async fn test_google_adapter_selected() {
+            let creds = vec![make_credential("google-1", "google", &["gemini-pro"])];
+            let models = vec![test_model_info("gemini-pro", "google")];
+            let state = create_state_with_routing(creds, models);
+            let app = build_full_app(state);
+
+            let req = make_chat_request(
+                "test-token",
+                json!({
+                    "model": "gemini-pro",
+                    "messages": [{"role": "user", "content": "Hello"}]
+                }),
+            );
+
+            let response = app.oneshot(req).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let json_body = read_json_body(response).await;
+            assert_eq!(json_body["_gateway"]["route"]["provider"], "google");
+        }
+
+        #[tokio::test]
+        async fn test_deepseek_uses_openai_adapter() {
+            let creds = vec![make_credential(
+                "deepseek-1",
+                "deepseek",
+                &["deepseek-chat"],
+            )];
+            let models = vec![test_model_info("deepseek-chat", "deepseek")];
+            let state = create_state_with_routing(creds, models);
+            let app = build_full_app(state);
+
+            let req = make_chat_request(
+                "test-token",
+                json!({
+                    "model": "deepseek-chat",
+                    "messages": [{"role": "user", "content": "Hello"}]
+                }),
+            );
+
+            let response = app.oneshot(req).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let json_body = read_json_body(response).await;
+            // DeepSeek uses OpenAI adapter internally but provider field stays "deepseek"
+            assert_eq!(json_body["_gateway"]["route"]["provider"], "deepseek");
+        }
+
+        #[tokio::test]
+        async fn test_unknown_provider_is_routed_successfully() {
+            let creds = vec![make_credential(
+                "unknown-1",
+                "unknown-provider",
+                &["some-model"],
+            )];
+            let models = vec![test_model_info("some-model", "unknown-provider")];
+            let state = create_state_with_routing(creds, models);
+            let app = build_full_app(state);
+
+            let req = make_chat_request(
+                "test-token",
+                json!({
+                    "model": "some-model",
+                    "messages": [{"role": "user", "content": "Hello"}]
+                }),
+            );
+
+            let response = app.oneshot(req).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let json_body = read_json_body(response).await;
+            assert_eq!(
+                json_body["_gateway"]["route"]["provider"],
+                "unknown-provider"
+            );
+        }
+
+        // --- Endpoint Construction Tests ---
+
+        #[tokio::test]
+        async fn test_openai_endpoint_default() {
+            let creds = vec![make_credential("openai-1", "openai", &["gpt-4"])];
+            let models = vec![test_model_info("gpt-4", "openai")];
+            let state = create_state_with_routing(creds, models);
+            let app = build_full_app(state);
+
+            let req = make_chat_request(
+                "test-token",
+                json!({
+                    "model": "gpt-4",
+                    "messages": [{"role": "user", "content": "Hello"}]
+                }),
+            );
+
+            let response = app.oneshot(req).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let json_body = read_json_body(response).await;
+            assert_eq!(json_body["model"], "gpt-4");
+            assert_eq!(json_body["_gateway"]["route"]["credential_id"], "openai-1");
+        }
+
+        #[tokio::test]
+        async fn test_openai_endpoint_custom_base_url() {
+            let mut cred = make_credential("openai-custom", "openai", &["gpt-4"]);
+            cred.base_url = Some("https://custom.openai.proxy.com/v1".to_string());
+
+            let creds = vec![cred];
+            let models = vec![test_model_info("gpt-4", "openai")];
+            let state = create_state_with_routing(creds, models);
+            let app = build_full_app(state);
+
+            let req = make_chat_request(
+                "test-token",
+                json!({
+                    "model": "gpt-4",
+                    "messages": [{"role": "user", "content": "Hello"}]
+                }),
+            );
+
+            let response = app.oneshot(req).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let json_body = read_json_body(response).await;
+            assert_eq!(json_body["model"], "gpt-4");
+            assert_eq!(
+                json_body["_gateway"]["route"]["credential_id"],
+                "openai-custom"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_google_endpoint_includes_model() {
+            let creds = vec![make_credential("google-1", "google", &["gemini-1.5-pro"])];
+            let models = vec![test_model_info("gemini-1.5-pro", "google")];
+            let state = create_state_with_routing(creds, models);
+            let app = build_full_app(state);
+
+            let req = make_chat_request(
+                "test-token",
+                json!({
+                    "model": "gemini-1.5-pro",
+                    "messages": [{"role": "user", "content": "Hello"}]
+                }),
+            );
+
+            let response = app.oneshot(req).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let json_body = read_json_body(response).await;
+            // The model returned in the response should match what we sent
+            assert_eq!(json_body["model"], "gemini-1.5-pro");
+        }
+
+        // --- Round-Trip Through Chat Completions Tests ---
+
+        #[tokio::test]
+        async fn test_chat_completions_with_temperature_and_max_tokens() {
+            let creds = vec![make_credential("openai-1", "openai", &["gpt-4"])];
+            let models = vec![test_model_info("gpt-4", "openai")];
+            let state = create_state_with_routing(creds, models);
+            let app = build_full_app(state);
+
+            let req = make_chat_request(
+                "test-token",
+                json!({
+                    "model": "gpt-4",
+                    "messages": [{"role": "user", "content": "Hello"}],
+                    "temperature": 0.5,
+                    "max_tokens": 100
+                }),
+            );
+
+            let response = app.oneshot(req).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let json_body = read_json_body(response).await;
+
+            assert_eq!(json_body["object"], "chat.completion");
+            assert_eq!(json_body["model"], "gpt-4");
+            assert_eq!(json_body["_gateway"]["route"]["provider"], "openai");
+            assert_eq!(json_body["_gateway"]["route"]["credential_id"], "openai-1");
+            assert!(json_body["choices"].is_array());
+            assert_eq!(json_body["choices"][0]["message"]["role"], "assistant");
+        }
+
+        #[tokio::test]
+        async fn test_chat_completions_vision_request() {
+            let creds = vec![make_credential("openai-1", "openai", &["gpt-4-vision"])];
+            let models = vec![test_model_info("gpt-4-vision", "openai")];
+            let state = create_state_with_routing(creds, models);
+            let app = build_full_app(state);
+
+            let req = make_chat_request(
+                "test-token",
+                json!({
+                    "model": "gpt-4-vision",
+                    "messages": [{
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "What is in this image?"},
+                            {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc123"}}
+                        ]
+                    }]
+                }),
+            );
+
+            let response = app.oneshot(req).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let json_body = read_json_body(response).await;
+
+            // Verify classification includes vision=true
+            assert!(
+                json_body["_gateway"]["classification"]["capabilities"]["vision"]
+                    .as_bool()
+                    .unwrap_or(false),
+                "Expected vision capability to be true"
+            );
+            assert_eq!(json_body["model"], "gpt-4-vision");
+        }
     }
 }
