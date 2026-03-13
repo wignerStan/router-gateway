@@ -40,11 +40,7 @@ impl PolicyMatcher {
     ///
     /// Returns a list of `PolicyMatch` for all policies that match the model
     /// and satisfy their conditions.
-    pub fn evaluate(
-        &self,
-        model: &ModelInfo,
-        context: &PolicyContext,
-    ) -> Vec<PolicyMatch> {
+    pub fn evaluate(&self, model: &ModelInfo, context: &PolicyContext) -> Vec<PolicyMatch> {
         self.registry
             .all()
             .iter()
