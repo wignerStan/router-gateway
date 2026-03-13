@@ -1,0 +1,242 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LLM Gateway Routing Policies",
+  "description": "Schema for routing policy configuration. Policies define rules for selecting credentials based on model classifications.",
+  "type": "object",
+  "required": ["policies"],
+  "additionalProperties": false,
+  "properties": {
+    "policies": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/RoutingPolicy"
+      }
+    }
+  },
+  "definitions": {
+    "RoutingPolicy": {
+      "type": "object",
+      "required": ["id", "name", "priority", "enabled", "filters", "action"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique policy identifier"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable policy name"
+        },
+        "priority": {
+          "type": "integer",
+          "description": "Policy priority (higher = more important)"
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether the policy is active"
+        },
+        "filters": {
+          "$ref": "#/definitions/PolicyFilters"
+        },
+        "action": {
+          "$ref": "#/definitions/PolicyAction"
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PolicyCondition"
+          },
+          "description": "Conditions for conditional application"
+        }
+      }
+    },
+    "PolicyFilters": {
+      "type": "object",
+      "description": "Dimension filters for policy matching. All specified filters must match.",
+      "additionalProperties": false,
+      "properties": {
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CapabilityFilter"
+          },
+          "description": "Capability filters (model must match ALL)"
+        },
+        "tiers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["flagship", "standard", "fast"]
+          },
+          "description": "Allowed tier categories"
+        },
+        "costs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["ultra_premium", "premium", "standard", "economy"]
+          },
+          "description": "Allowed cost categories"
+        },
+        "context_windows": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["small", "medium", "large", "ultra"]
+          },
+          "description": "Allowed context window categories"
+        },
+        "providers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "other",
+              "xai",
+              "zhipu",
+              "openai",
+              "moonshot",
+              "meta",
+              "meta-llama",
+              "mistral",
+              "google",
+              "databricks",
+              "deepseek",
+              "cohere",
+              "bytedance",
+              "baidu",
+              "amazon",
+              "azure",
+              "alibaba",
+              "perplexity",
+              "stability",
+              "vertexai",
+              "anthropic"
+            ]
+          },
+          "description": "Allowed providers (matches ProviderCategory serde names)"
+        },
+        "modalities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["text", "image", "audio", "video", "embedding", "code"]
+          },
+          "description": "Required modality categories"
+        }
+      }
+    },
+    "CapabilityFilter": {
+      "type": "object",
+      "required": ["capability"],
+      "additionalProperties": false,
+      "properties": {
+        "capability": {
+          "type": "string",
+          "enum": ["vision", "tools", "streaming", "thinking"],
+          "description": "Capability to check"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["require", "prefer", "exclude"],
+          "default": "require",
+          "description": "Match mode: require (must have), prefer (bonus), exclude (must not have)"
+        }
+      }
+    },
+    "PolicyAction": {
+      "type": "object",
+      "required": ["action_type"],
+      "additionalProperties": false,
+      "properties": {
+        "action_type": {
+          "type": "string",
+          "enum": ["prefer", "avoid", "block", "weight"],
+          "description": "Routing action type"
+        },
+        "weight_factor": {
+          "type": "number",
+          "description": "Weight adjustment for prefer/weight actions"
+        },
+        "preferred_providers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "other",
+              "xai",
+              "zhipu",
+              "openai",
+              "moonshot",
+              "meta",
+              "meta-llama",
+              "mistral",
+              "google",
+              "databricks",
+              "deepseek",
+              "cohere",
+              "bytedance",
+              "baidu",
+              "amazon",
+              "azure",
+              "alibaba",
+              "perplexity",
+              "stability",
+              "vertexai",
+              "anthropic"
+            ]
+          },
+          "description": "Preferred providers in order (matches ProviderCategory serde names)"
+        },
+        "preferred_models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Preferred model IDs"
+        },
+        "avoid": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Models/providers to avoid"
+        },
+        "max_cost_per_million": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Maximum cost per million tokens (soft limit)"
+        },
+        "min_context_window": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum context window required in tokens"
+        }
+      }
+    },
+    "PolicyCondition": {
+      "type": "object",
+      "required": ["condition_type", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "condition_type": {
+          "type": "string",
+          "enum": ["time_of_day", "day_of_week", "token_count", "tenant_id", "model_family", "custom"],
+          "description": "Type of condition"
+        },
+        "value": {
+          "type": "string",
+          "description": "Condition value (format depends on type)"
+        },
+        "operator": {
+          "type": "string",
+          "enum": ["eq", "neq", "gt", "gte", "lt", "lte", "in", "not_in", "contains"],
+          "default": "eq",
+          "description": "Comparison operator"
+        }
+      }
+    }
+  }
+}
