@@ -15,7 +15,18 @@ use tokio::sync::Mutex;
 use super::{RoutePlan, RoutePlanItem, Router, RouterConfig};
 
 impl Router {
-    /// Create a new Router
+    /// Create a new Router with default configuration.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use smart_routing::Router;
+    ///
+    /// let router = Router::new();
+    /// let config = router.config();
+    /// assert!(config.use_bandit);
+    /// assert_eq!(config.max_fallbacks, 5);
+    /// ```
     pub fn new() -> Self {
         Self::with_config(RouterConfig::default())
     }

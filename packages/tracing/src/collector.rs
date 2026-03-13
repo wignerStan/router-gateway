@@ -25,7 +25,29 @@ pub struct MemoryTraceCollector {
 }
 
 impl MemoryTraceCollector {
-    /// Create a new memory trace collector with a maximum buffer size
+    /// Create a new memory trace collector with a maximum buffer size.
+    ///
+    /// When the buffer is full, the oldest trace is evicted.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use llm_tracing::{MemoryTraceCollector, TraceCollector, TraceSpan};
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let collector = MemoryTraceCollector::new(10);
+    ///
+    /// let trace = TraceSpan::new(
+    ///     "req-1".to_string(),
+    ///     "openai".to_string(),
+    ///     "gpt-4".to_string(),
+    ///     None,
+    /// );
+    ///
+    /// collector.record_trace(trace).await;
+    /// assert_eq!(collector.trace_count().await, 1);
+    /// # }
+    /// ```
     pub fn new(max_size: usize) -> Self {
         Self {
             traces: Arc::new(RwLock::new(VecDeque::with_capacity(max_size))),
