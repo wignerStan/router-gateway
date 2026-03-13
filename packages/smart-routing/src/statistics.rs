@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Time bucket for statistics aggregation
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum TimeBucket {
     /// Peak hours (9 AM - 9 PM local time)
     Peak,
@@ -176,7 +176,7 @@ impl RouteStatistics {
         } else {
             stats.failure_count += 1;
             if let Some(ref error_class) = outcome.error_class {
-                *stats.error_counts.entry(error_class.clone()).or_insert(0) += 1;
+                *stats.error_counts.entry(*error_class).or_insert(0) += 1;
             }
         }
 
@@ -219,7 +219,7 @@ impl RouteStatistics {
         let buckets = TimeBucket::from_timestamp(outcome.timestamp);
 
         for bucket in buckets {
-            let stats = self.time_buckets.entry(bucket.clone()).or_default();
+            let stats = self.time_buckets.entry(bucket).or_default();
 
             stats.total_requests += 1;
             stats.last_updated = Utc::now();
@@ -229,7 +229,7 @@ impl RouteStatistics {
             } else {
                 stats.failure_count += 1;
                 if let Some(ref error_class) = outcome.error_class {
-                    *stats.error_counts.entry(error_class.clone()).or_insert(0) += 1;
+                    *stats.error_counts.entry(*error_class).or_insert(0) += 1;
                 }
             }
 
@@ -401,10 +401,14 @@ impl StatisticsAggregator {
     pub fn record(&mut self, outcome: &ExecutionOutcome) {
         let route_id = outcome.effective_route().to_string();
 
-        let stats = self
-            .route_stats
-            .entry(route_id.clone())
-            .or_insert_with(|| RouteStatistics::new(route_id));
+        use std::collections::hash_map::Entry;
+        let stats = match self.route_stats.entry(route_id) {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => {
+                let route_id = entry.key().clone();
+                entry.insert(RouteStatistics::new(route_id))
+            },
+        };
 
         stats.update(outcome);
     }
@@ -426,13 +430,13 @@ impl StatisticsAggregator {
         provider: Option<String>,
         tier: Option<String>,
     ) {
-        if !self.route_stats.contains_key(&route_id) {
-            let stats = self.priors.initialize_route(
-                route_id.clone(),
-                provider.as_deref(),
-                tier.as_deref(),
-            );
-            self.route_stats.insert(route_id, stats);
+        use std::collections::hash_map::Entry;
+        if let Entry::Vacant(entry) = self.route_stats.entry(route_id) {
+            let route_id = entry.key().clone();
+            let stats =
+                self.priors
+                    .initialize_route(route_id, provider.as_deref(), tier.as_deref());
+            entry.insert(stats);
         }
     }
 

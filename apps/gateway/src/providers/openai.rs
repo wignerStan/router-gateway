@@ -60,7 +60,7 @@ impl ProviderAdapter for OpenAIAdapter {
                                     "type": "image_url",
                                     "image_url": {
                                         "url": p.image_url.as_ref().map(|u| &u.url).unwrap_or(&String::new()),
-                                        "detail": p.image_url.as_ref().and_then(|u| u.detail.clone())
+                                        "detail": p.image_url.as_ref().and_then(|u| u.detail.as_deref())
                                     }
                                 })
                             } else {
@@ -111,7 +111,7 @@ impl ProviderAdapter for OpenAIAdapter {
                         "function": {
                             "name": t.function.name,
                             "description": t.function.description,
-                            "parameters": t.function.parameters.clone().unwrap_or(json!({}))
+                            "parameters": t.function.parameters.as_ref().unwrap_or(&json!({}))
                         }
                     })
                 })

@@ -358,14 +358,13 @@ pub(crate) async fn chat_completions(
     };
 
     // Step 5: Find credential config for this route
-    let credential = state
+    let credential = match state
         .config
         .credentials
         .iter()
-        .find(|c| c.id == primary.credential_id);
-
-    let (api_key, base_url) = match credential {
-        Some(cred) => (cred.api_key.clone(), cred.base_url.clone()),
+        .find(|c| c.id == primary.credential_id)
+    {
+        Some(cred) => cred,
         None => {
             return Err((
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -421,8 +420,8 @@ pub(crate) async fn chat_completions(
         tool_choice: None,
     });
 
-    let endpoint = adapter.get_endpoint(base_url.as_deref(), model_id);
-    let _headers = adapter.build_headers(&api_key);
+    let endpoint = adapter.get_endpoint(credential.base_url.as_deref(), model_id);
+    let _headers = adapter.build_headers(&credential.api_key);
 
     // For now, return a mock response (actual HTTP call would go here)
     // TODO: Implement actual upstream HTTP call with reqwest
