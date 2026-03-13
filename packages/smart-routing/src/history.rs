@@ -372,7 +372,7 @@ impl AttemptHistory {
         let selection_mode_dist = self
             .get_selection_mode_distribution()
             .into_iter()
-            .map(|(k, v)| (format!("{:?}", k), v as u64))
+            .map(|(k, v)| (format!("{k:?}"), v as u64))
             .collect();
 
         Some(AttemptMetrics {

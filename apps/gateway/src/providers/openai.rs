@@ -205,12 +205,12 @@ impl ProviderAdapter for OpenAIAdapter {
         };
         // Remove trailing slash to prevent double-slash issues
         let base = base.trim_end_matches('/');
-        format!("{}/chat/completions", base)
+        format!("{base}/chat/completions")
     }
 
     fn build_headers(&self, api_key: &str) -> Vec<(String, String)> {
         vec![
-            ("Authorization".to_string(), format!("Bearer {}", api_key)),
+            ("Authorization".to_string(), format!("Bearer {api_key}")),
             ("Content-Type".to_string(), "application/json".to_string()),
         ]
     }

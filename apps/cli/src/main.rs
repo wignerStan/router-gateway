@@ -145,7 +145,7 @@ async fn main() -> Result<()> {
 
     match args.command {
         Commands::Health { url } => {
-            let health_url = format!("{}/health", url);
+            let health_url = format!("{url}/health");
             let start = std::time::Instant::now();
 
             let response = reqwest::get(&health_url)
@@ -194,7 +194,7 @@ async fn main() -> Result<()> {
                 println!("{}", "=".repeat(50));
                 println!("Status:           {}", health.status.green());
                 println!("Uptime:           {}s", health.uptime_secs);
-                println!("Latency:          {}ms", latency_ms);
+                println!("Latency:          {latency_ms}ms");
                 println!();
                 println!("Credentials:");
                 println!("  Total:          {}", health.credential_count);
@@ -227,7 +227,7 @@ async fn main() -> Result<()> {
         },
 
         Commands::Models { url } => {
-            let models_url = format!("{}/api/models", url);
+            let models_url = format!("{url}/api/models");
 
             let response = reqwest::get(&models_url)
                 .await
@@ -274,7 +274,7 @@ async fn main() -> Result<()> {
                     .collect();
 
                 let table = Table::new(rows);
-                println!("{}", table);
+                println!("{table}");
                 println!();
                 println!("Total: {} models", models.count);
             }
@@ -350,7 +350,7 @@ async fn main() -> Result<()> {
                                 cred.allowed_models.len()
                             );
                             if let Some(ref base_url) = cred.base_url {
-                                println!("      base_url: {}", base_url);
+                                println!("      base_url: {base_url}");
                             }
                         }
                         if let Some(ref routing) = config_value.routing {
@@ -363,14 +363,14 @@ async fn main() -> Result<()> {
                             println!();
                             println!("{}", "Warnings:".yellow());
                             for warning in &warnings {
-                                println!("  ⚠ {}", warning);
+                                println!("  ⚠ {warning}");
                             }
                         }
                     } else {
                         println!("{} Configuration has errors", "✗".red());
                         println!();
                         for error in &errors {
-                            println!("  ✗ {}", error);
+                            println!("  ✗ {error}");
                         }
                     }
 
@@ -392,9 +392,9 @@ async fn main() -> Result<()> {
                         );
                     } else {
                         println!("{}: Invalid YAML syntax", "ERROR".red().bold());
-                        println!("  {}", e);
+                        println!("  {e}");
                     }
-                    anyhow::bail!("Invalid YAML syntax: {}", e);
+                    anyhow::bail!("Invalid YAML syntax: {e}");
                 },
             }
         },
@@ -415,13 +415,13 @@ fn validate_config_content(
     for (i, cred) in config_value.credentials.iter().enumerate() {
         // Check required fields
         if cred.id.is_empty() {
-            errors.push(format!("Credential {}: 'id' field is empty", i));
+            errors.push(format!("Credential {i}: 'id' field is empty"));
         }
         if cred.provider.is_empty() {
-            errors.push(format!("Credential {}: 'provider' field is empty", i));
+            errors.push(format!("Credential {i}: 'provider' field is empty"));
         }
         if cred.api_key.is_empty() {
-            errors.push(format!("Credential {}: 'api_key' field is empty", i));
+            errors.push(format!("Credential {i}: 'api_key' field is empty"));
         }
 
         // Check for env var in api_key

@@ -302,7 +302,7 @@ impl RoutingPolicy {
                 // Parse value as "key:value" format
                 let parts: Vec<&str> = condition.value.splitn(2, ':').collect();
                 if parts.len() == 2 {
-                    context.metadata.get(parts[0]).map(|v| v.to_string())
+                    context.metadata.get(parts[0]).map(std::string::ToString::to_string)
                 } else {
                     None
                 }
@@ -476,8 +476,8 @@ pub mod templates {
     /// Create provider preference policy
     pub fn prefer_provider(provider: ProviderCategory) -> RoutingPolicy {
         RoutingPolicy::new(
-            format!("prefer_{:?}", provider).to_lowercase(),
-            format!("Prefer {:?}", provider),
+            format!("prefer_{provider:?}").to_lowercase(),
+            format!("Prefer {provider:?}"),
         )
         .with_priority(15)
         .with_provider(provider)

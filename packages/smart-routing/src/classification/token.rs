@@ -100,7 +100,7 @@ impl TokenEstimator {
         if let Some(max_tokens) = request
             .get("max_tokens")
             .or(request.get("max_completion_tokens"))
-            .and_then(|m| m.as_u64())
+            .and_then(serde_json::Value::as_u64)
         {
             return max_tokens as u32;
         }

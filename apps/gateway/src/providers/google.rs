@@ -239,7 +239,7 @@ impl ProviderAdapter for GoogleAdapter {
         // Sanitize model_id to prevent path traversal/SSRF attacks
         // Remove any path traversal characters
         let sanitized_model_id = model_id.replace(['/', '\\'], "");
-        format!("{}/models/{}:generateContent", base, sanitized_model_id)
+        format!("{base}/models/{sanitized_model_id}:generateContent")
     }
 
     fn build_headers(&self, api_key: &str) -> Vec<(String, String)> {

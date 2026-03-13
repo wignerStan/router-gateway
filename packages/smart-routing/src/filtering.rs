@@ -21,7 +21,7 @@ impl fmt::Display for FilterResult {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             FilterResult::Accepted => write!(f, "accepted"),
-            FilterResult::Rejected { reason } => write!(f, "rejected: {}", reason),
+            FilterResult::Rejected { reason } => write!(f, "rejected: {reason}"),
         }
     }
 }
@@ -105,7 +105,7 @@ impl ConstraintFilter {
         if !capability_support.is_supported() {
             if let Some(desc) = capability_support.missing_description() {
                 return FilterResult::Rejected {
-                    reason: format!("capability mismatch: missing {}", desc),
+                    reason: format!("capability mismatch: missing {desc}"),
                 };
             }
         }

@@ -174,7 +174,7 @@ impl SQLiteMetricsCollector {
             let cache = self.cache.read().await;
             if let Some(metrics) = cache.get(&auth_id) {
                 if let Err(e) = self.store.write_metrics(&auth_id, metrics).await {
-                    eprintln!("Failed to flush metrics for {}: {}", auth_id, e);
+                    eprintln!("Failed to flush metrics for {auth_id}: {e}");
                 } else {
                     // Mark as clean
                     let mut dirty = self.dirty.write().await;
@@ -205,7 +205,7 @@ impl SQLiteMetricsCollector {
             loop {
                 timer.tick().await;
                 if let Err(e) = self.flush().await {
-                    eprintln!("Flush error: {}", e);
+                    eprintln!("Flush error: {e}");
                 }
             }
         })
@@ -435,7 +435,7 @@ impl SQLiteHealthManager {
             let cache = self.cache.read().await;
             if let Some(health) = cache.get(&auth_id) {
                 if let Err(e) = self.store.write_health(&auth_id, health).await {
-                    eprintln!("Failed to flush health for {}: {}", auth_id, e);
+                    eprintln!("Failed to flush health for {auth_id}: {e}");
                 } else {
                     // Mark as clean
                     let mut dirty = self.dirty.write().await;
@@ -466,7 +466,7 @@ impl SQLiteHealthManager {
             loop {
                 timer.tick().await;
                 if let Err(e) = self.flush().await {
-                    eprintln!("Flush error: {}", e);
+                    eprintln!("Flush error: {e}");
                 }
             }
         })

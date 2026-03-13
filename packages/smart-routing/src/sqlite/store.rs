@@ -74,7 +74,7 @@ impl SQLiteStore {
 
         // Open database connection
         let conn =
-            Connection::open(&dsn).map_err(|e| format!("Failed to open SQLite database: {}", e))?;
+            Connection::open(&dsn).map_err(|e| format!("Failed to open SQLite database: {e}"))?;
 
         // Configure pragmas
         let store = Self {
@@ -100,29 +100,29 @@ impl SQLiteStore {
             &format!("PRAGMA cache_size = -{}", config.cache_size_mb * 1024),
             [],
         )
-        .map_err(|e| format!("Failed to set cache_size: {}", e))?;
+        .map_err(|e| format!("Failed to set cache_size: {e}"))?;
 
         // Configure busy timeout using the rusqlite method
         db.busy_timeout(std::time::Duration::from_millis(
             config.busy_timeout_ms as u64,
         ))
-        .map_err(|e| format!("Failed to set busy_timeout: {}", e))?;
+        .map_err(|e| format!("Failed to set busy_timeout: {e}"))?;
 
         // Enable foreign keys
         db.execute("PRAGMA foreign_keys = ON", [])
-            .map_err(|e| format!("Failed to enable foreign_keys: {}", e))?;
+            .map_err(|e| format!("Failed to enable foreign_keys: {e}"))?;
 
         // Set synchronous mode to NORMAL for performance
         db.execute("PRAGMA synchronous = NORMAL", [])
-            .map_err(|e| format!("Failed to set synchronous: {}", e))?;
+            .map_err(|e| format!("Failed to set synchronous: {e}"))?;
 
         // Use memory for temp storage
         db.execute("PRAGMA temp_store = MEMORY", [])
-            .map_err(|e| format!("Failed to set temp_store: {}", e))?;
+            .map_err(|e| format!("Failed to set temp_store: {e}"))?;
 
         // Enable memory-mapped I/O
         db.execute("PRAGMA mmap_size = 268435456", []) // 256MB
-            .map_err(|e| format!("Failed to set mmap_size: {}", e))?;
+            .map_err(|e| format!("Failed to set mmap_size: {e}"))?;
 
         Ok(())
     }
@@ -153,7 +153,7 @@ impl SQLiteStore {
             )",
             [],
         )
-        .map_err(|e| format!("Failed to create auth_metrics table: {}", e))?;
+        .map_err(|e| format!("Failed to create auth_metrics table: {e}"))?;
 
         // Auth health table
         db.execute(
@@ -171,7 +171,7 @@ impl SQLiteStore {
             )",
             [],
         )
-        .map_err(|e| format!("Failed to create auth_health table: {}", e))?;
+        .map_err(|e| format!("Failed to create auth_health table: {e}"))?;
 
         // Status code history table
         db.execute(
@@ -185,7 +185,7 @@ impl SQLiteStore {
             )",
             [],
         )
-        .map_err(|e| format!("Failed to create status_code_history table: {}", e))?;
+        .map_err(|e| format!("Failed to create status_code_history table: {e}"))?;
 
         // Auth weights table
         db.execute(
@@ -197,7 +197,7 @@ impl SQLiteStore {
             )",
             [],
         )
-        .map_err(|e| format!("Failed to create auth_weights table: {}", e))?;
+        .map_err(|e| format!("Failed to create auth_weights table: {e}"))?;
 
         Ok(())
     }
@@ -220,7 +220,7 @@ impl SQLiteStore {
 
         for idx in indexes {
             db.execute(idx, [])
-                .map_err(|e| format!("Failed to create index: {}", e))?;
+                .map_err(|e| format!("Failed to create index: {e}"))?;
         }
 
         Ok(())
@@ -280,7 +280,7 @@ impl SQLiteStore {
                 last_failure_time,
             ],
         )
-        .map_err(|e| format!("Failed to write metrics: {}", e))?;
+        .map_err(|e| format!("Failed to write metrics: {e}"))?;
 
         // Update cache
         if self
@@ -339,7 +339,7 @@ impl SQLiteStore {
                 error_counts,
             ],
         )
-        .map_err(|e| format!("Failed to write health: {}", e))?;
+        .map_err(|e| format!("Failed to write health: {e}"))?;
 
         // Update cache
         if self
@@ -381,7 +381,7 @@ impl SQLiteStore {
                 if success { 1 } else { 0 },
             ],
         )
-        .map_err(|e| format!("Failed to write status history: {}", e))?;
+        .map_err(|e| format!("Failed to write status history: {e}"))?;
 
         Ok(())
     }
@@ -412,7 +412,7 @@ impl SQLiteStore {
                 last_request_time, last_success_time, last_failure_time
                 FROM auth_metrics WHERE auth_id = ?1",
             )
-            .map_err(|e| format!("Failed to prepare metrics query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare metrics query: {e}"))?;
 
         let result = stmt.query_row([auth_id], |row| {
             let last_request_time_str: String = row.get(10)?;
@@ -469,7 +469,7 @@ impl SQLiteStore {
                 Ok(Some(metrics))
             },
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(format!("Failed to load metrics: {}", e)),
+            Err(e) => Err(format!("Failed to load metrics: {e}")),
         }
     }
 
@@ -496,7 +496,7 @@ impl SQLiteStore {
                 last_status_change, last_check_time, unavailable_until, error_counts
                 FROM auth_health WHERE auth_id = ?1",
             )
-            .map_err(|e| format!("Failed to prepare health query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare health query: {e}"))?;
 
         let result = stmt.query_row([auth_id], |row| {
             let status_str: String = row.get(0)?;
@@ -564,7 +564,7 @@ impl SQLiteStore {
                 Ok(Some(health))
             },
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(format!("Failed to load health: {}", e)),
+            Err(e) => Err(format!("Failed to load health: {e}")),
         }
     }
 
@@ -583,7 +583,7 @@ impl SQLiteStore {
                 last_request_time, last_success_time, last_failure_time
                 FROM auth_metrics",
             )
-            .map_err(|e| format!("Failed to prepare all metrics query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare all metrics query: {e}"))?;
 
         let metrics_map = stmt
             .query_map([], |row| {
@@ -632,9 +632,9 @@ impl SQLiteStore {
                     },
                 ))
             })
-            .map_err(|e| format!("Failed to map metrics: {}", e))?
+            .map_err(|e| format!("Failed to map metrics: {e}"))?
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Failed to collect metrics: {}", e))?;
+            .map_err(|e| format!("Failed to collect metrics: {e}"))?;
 
         Ok(metrics_map.into_iter().collect())
     }
@@ -651,7 +651,7 @@ impl SQLiteStore {
                 last_status_change, last_check_time, unavailable_until, error_counts
                 FROM auth_health",
             )
-            .map_err(|e| format!("Failed to prepare all health query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare all health query: {e}"))?;
 
         let health_map = stmt
             .query_map([], |row| {
@@ -690,9 +690,9 @@ impl SQLiteStore {
                     },
                 ))
             })
-            .map_err(|e| format!("Failed to map health: {}", e))?
+            .map_err(|e| format!("Failed to map health: {e}"))?
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Failed to collect health: {}", e))?;
+            .map_err(|e| format!("Failed to collect health: {e}"))?;
 
         Ok(health_map.into_iter().collect())
     }
@@ -709,7 +709,7 @@ impl SQLiteStore {
                 "DELETE FROM status_code_history WHERE timestamp < ?1",
                 [&cutoff_str],
             )
-            .map_err(|e| format!("Failed to cleanup old history: {}", e))?;
+            .map_err(|e| format!("Failed to cleanup old history: {e}"))?;
 
         Ok(result as i64)
     }
@@ -720,7 +720,7 @@ impl SQLiteStore {
 
         let mut stmt = db
             .prepare("SELECT COUNT(*), MIN(timestamp) FROM status_code_history")
-            .map_err(|e| format!("Failed to prepare history stats query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare history stats query: {e}"))?;
 
         stmt.query_row([], |row| {
             let count: i64 = row.get(0)?;
@@ -732,6 +732,6 @@ impl SQLiteStore {
 
             Ok((count, min_timestamp))
         })
-        .map_err(|e| format!("Failed to get history stats: {}", e))
+        .map_err(|e| format!("Failed to get history stats: {e}"))
     }
 }

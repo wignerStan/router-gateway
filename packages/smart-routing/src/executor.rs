@@ -311,7 +311,7 @@ impl RouteExecutor {
                     AttemptResult::RetryableError {
                         status_code,
                         latency,
-                        error: format!("HTTP {}", status_code),
+                        error: format!("HTTP {status_code}"),
                     }
                 }
             },

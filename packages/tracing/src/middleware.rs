@@ -28,7 +28,7 @@ impl TracingMiddleware {
             .get("x-request-id")
             .or_else(|| headers.get("x-trace-id"))
             .and_then(|v| v.to_str().ok())
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .unwrap_or_else(|| {
                 // Generate UUID-based request ID
                 Uuid::new_v4().to_string()
@@ -39,7 +39,7 @@ impl TracingMiddleware {
     fn extract_provider(&self, headers: &HeaderMap) -> Option<String> {
         // Try to get from header first
         if let Some(provider) = headers.get("x-llm-provider") {
-            return provider.to_str().ok().map(|s| s.to_string());
+            return provider.to_str().ok().map(std::string::ToString::to_string);
         }
         // Could also extract from URI path in a real implementation
         None
@@ -48,7 +48,7 @@ impl TracingMiddleware {
     /// Extract model from request (e.g., from body or headers)
     fn extract_model(&self, headers: &HeaderMap) -> Option<String> {
         if let Some(model) = headers.get("x-llm-model") {
-            return model.to_str().ok().map(|s| s.to_string());
+            return model.to_str().ok().map(std::string::ToString::to_string);
         }
         None
     }

@@ -235,7 +235,7 @@ impl ProviderAdapter for AnthropicAdapter {
         };
         // Remove trailing slash to prevent double-slash issues
         let base = base.trim_end_matches('/');
-        format!("{}/messages", base)
+        format!("{base}/messages")
     }
 
     fn build_headers(&self, api_key: &str) -> Vec<(String, String)> {
