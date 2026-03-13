@@ -474,7 +474,7 @@ impl RateLimiter {
     /// Check whether a request from the given IP should be allowed.
     /// Returns `true` if under the limit, `false` if rate limited.
     fn check(&self, ip: &str) -> bool {
-        let mut buckets = self.buckets.lock().expect("Rate limiter mutex poisoned");
+        let mut buckets = self.buckets.lock().unwrap_or_else(|p| p.into_inner());
         let now = Instant::now();
 
         let (count, window_start) = buckets.entry(ip.to_string()).or_insert((0, now));
