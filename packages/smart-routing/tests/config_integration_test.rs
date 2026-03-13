@@ -368,7 +368,7 @@ fn hour_20_is_still_peak() {
 // ============================================================
 
 #[tokio::test]
-async fn health_manager_clone_starts_empty() {
+async fn health_manager_clone_shares_state() {
     let config = HealthConfig::default();
     let manager = HealthManager::new(config);
 
@@ -382,21 +382,21 @@ async fn health_manager_clone_starts_empty() {
         "original should see unhealthy auth-1"
     );
 
-    // Clone should start empty
+    // Clone shares the same health storage via Arc
     let clone = manager.clone();
     assert_eq!(
         clone.get_status("auth-1").await,
-        HealthStatus::Healthy,
-        "clone should start with empty health storage, defaulting to Healthy"
+        HealthStatus::Unhealthy,
+        "clone should share health state with original"
     );
     assert!(
-        clone.get_health("auth-1").await.is_none(),
-        "clone should have no health record for auth-1"
+        clone.get_health("auth-1").await.is_some(),
+        "clone should see health record for auth-1"
     );
 }
 
 #[tokio::test]
-async fn health_manager_clone_updates_are_independent() {
+async fn health_manager_clone_updates_are_shared() {
     let config = HealthConfig::default();
     let manager1 = HealthManager::new(config);
 
@@ -404,41 +404,41 @@ async fn health_manager_clone_updates_are_independent() {
 
     let manager2 = manager1.clone();
 
-    // Update clone
+    // Update through clone
     manager2.update_from_result("auth-2", false, 500).await;
     manager2.update_from_result("auth-2", false, 500).await;
     manager2.update_from_result("auth-2", false, 500).await;
 
-    // Original should not see auth-2
+    // Original sees auth-2 because clones share state
     assert!(
-        manager1.get_health("auth-2").await.is_none(),
-        "original should not see updates made to the clone"
+        manager1.get_health("auth-2").await.is_some(),
+        "original should see updates made through the clone"
     );
     assert_eq!(
         manager1.get_status("auth-2").await,
-        HealthStatus::Healthy,
-        "original should see auth-2 as Healthy (no record exists)"
+        HealthStatus::Unhealthy,
+        "original should see auth-2 as unhealthy"
     );
 
-    // Clone should see auth-2 as unhealthy
+    // Clone also sees auth-2 as unhealthy
     assert_eq!(
         manager2.get_status("auth-2").await,
         HealthStatus::Unhealthy,
         "clone should see auth-2 as unhealthy"
     );
 
-    // Update original — clone should not be affected
+    // Update original — clone sees it too
     manager1.update_from_result("auth-3", false, 500).await;
     manager1.update_from_result("auth-3", false, 500).await;
     manager1.update_from_result("auth-3", false, 500).await;
     assert!(
-        manager2.get_health("auth-3").await.is_none(),
-        "clone should not see updates made to the original"
+        manager2.get_health("auth-3").await.is_some(),
+        "clone should see updates made through the original"
     );
 }
 
 #[tokio::test]
-async fn health_manager_multiple_clones_are_independent() {
+async fn health_manager_multiple_clones_share_state() {
     let config = HealthConfig::default();
     let original = HealthManager::new(config);
     original.update_from_result("shared", true, 200).await;
@@ -452,15 +452,15 @@ async fn health_manager_multiple_clones_are_independent() {
 
     clone_b.update_from_result("b-only", true, 200).await;
 
-    // Each clone sees its own updates only
+    // All clones share the same backing store
     assert_eq!(clone_a.get_status("a-only").await, HealthStatus::Unhealthy);
-    assert_eq!(clone_b.get_status("a-only").await, HealthStatus::Healthy);
-    assert_eq!(clone_a.get_status("b-only").await, HealthStatus::Healthy);
+    assert_eq!(clone_b.get_status("a-only").await, HealthStatus::Unhealthy);
+    assert_eq!(original.get_status("b-only").await, HealthStatus::Healthy);
     assert!(clone_b.get_health("b-only").await.is_some());
 
-    // Neither clone sees the original's "shared" event
-    assert!(clone_a.get_health("shared").await.is_none());
-    assert!(clone_b.get_health("shared").await.is_none());
+    // All clones see the original's "shared" event
+    assert!(clone_a.get_health("shared").await.is_some());
+    assert!(clone_b.get_health("shared").await.is_some());
 }
 
 // ============================================================

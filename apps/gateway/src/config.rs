@@ -348,79 +348,35 @@ pub fn validate_url_not_private(url_str: &str) -> Result<()> {
 fn is_private_ip(ip: &IpAddr) -> bool {
     match ip {
         IpAddr::V4(v4) => {
-            let octets = v4.octets();
-            // Loopback: 127.0.0.0/8
-            if octets[0] == 127 {
-                return true;
-            }
-            // Private: 10.0.0.0/8
-            if octets[0] == 10 {
-                return true;
-            }
-            // Private: 172.16.0.0/12
-            if octets[0] == 172 && (16..=31).contains(&octets[1]) {
-                return true;
-            }
-            // Private: 192.168.0.0/16
-            if octets[0] == 192 && octets[1] == 168 {
-                return true;
-            }
-            // Link-local: 169.254.0.0/16 (includes cloud metadata 169.254.169.254)
-            if octets[0] == 169 && octets[1] == 254 {
-                return true;
-            }
-            // Link-local: 0.0.0.0/8
-            if octets[0] == 0 {
-                return true;
-            }
-            // IETF Protocol Assignments (192.0.0.0/24), TEST-NET (192.0.2.0/24)
-            if octets[0] == 192 && octets[1] == 0 && (octets[2] == 0 || octets[2] == 2) {
-                return true;
-            }
-            // Broadcast: 255.255.255.255/32
-            if octets[0] == 255 {
-                return true;
-            }
-            false
+            // Use stdlib methods for standard private/loopback/link-local ranges
+            v4.is_private()
+                || v4.is_loopback()
+                || v4.is_link_local()
+                // Zero network: 0.0.0.0/8
+                || v4.octets()[0] == 0
+                // IETF Protocol Assignments (192.0.0.0/24), TEST-NET (192.0.2.0/24)
+                || (v4.octets()[0] == 192
+                    && v4.octets()[1] == 0
+                    && (v4.octets()[2] == 0 || v4.octets()[2] == 2))
+                // Broadcast: 255.255.255.255/32
+                || v4.octets()[0] == 255
         },
         IpAddr::V6(v6) => {
-            // Loopback: ::1
-            if v6.is_loopback() {
-                return true;
-            }
-
-            // IPv4-mapped IPv6 (::ffff:0:0/96) — e.g. ::ffff:127.0.0.1 bypasses
-            // pure-IPv4 checks, so we unwrap the embedded IPv4 address and re-check.
-            if let Some(mapped) = is_ipv4_mapped(v6) {
-                return is_private_ip(&IpAddr::V4(mapped));
-            }
-
-            // IPv4-compatible IPv6 (::/96) — deprecated but still routable in some stacks.
-            // Guard: exclude the unspecified address (::) which is handled below.
-            if !v6.is_unspecified() && v6.segments()[0..6] == [0, 0, 0, 0, 0, 0] {
-                if let Some(v4) = ipv6_to_v4_compat(v6) {
-                    return is_private_ip(&IpAddr::V4(v4));
-                }
-            }
-
-            let segments = v6.segments();
-            // Private: fc00::/7 (unique local)
-            if (0xfc00..=0xfdff).contains(&segments[0]) {
-                return true;
-            }
-            // Link-local: fe80::/10
-            if (0xfe80..=0xfebf).contains(&segments[0]) {
-                return true;
-            }
-            // Unspecified: ::
-            if v6.is_unspecified() {
-                return true;
-            }
-            // Multicast: ff00::/8
-            if segments[0] >= 0xff00 {
-                return true;
-            }
-            false
+            v6.is_loopback()
+                || v6.is_unspecified()
+                // IPv4-mapped IPv6 (::ffff:0:0/96) — e.g. ::ffff:127.0.0.1 bypasses
+                // pure-IPv4 checks, so we unwrap the embedded IPv4 address and re-check.
+                || is_ipv4_mapped(v6)
+                    .is_some_and(|mapped| is_private_ip(&IpAddr::V4(mapped)))
+                // IPv4-compatible IPv6 (::/96) — deprecated but still routable in some stacks.
+                // Guard: exclude the unspecified address (::) which is handled above.
+                || (!v6.is_unspecified()
+                    && v6.segments()[0..6] == [0, 0, 0, 0, 0, 0]
+                    && ipv6_to_v4_compat(v6)
+                        .is_some_and(|v4| is_private_ip(&IpAddr::V4(v4))))
+                || (0xfc00..=0xfdff).contains(&v6.segments()[0]) // Private: fc00::/7 (unique local)
+                || (0xfe80..=0xfebf).contains(&v6.segments()[0]) // Link-local: fe80::/10
+                || v6.segments()[0] >= 0xff00 // Multicast: ff00::/8
         },
     }
 }

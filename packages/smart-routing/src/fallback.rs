@@ -253,12 +253,11 @@ impl FallbackPlanner {
         }
 
         // Fallback: first segment
-        let first = auth_id.split(&['-', '_', ':'][..]).next()?;
-        if first.is_empty() {
-            None
-        } else {
-            Some(first.to_string())
-        }
+        auth_id
+            .split(&['-', '_', ':'])
+            .next()
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
     }
 
     /// Get config

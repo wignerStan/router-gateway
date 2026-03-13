@@ -1,6 +1,17 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Default weight for success rate factor
+const DEFAULT_SUCCESS_RATE_WEIGHT: f64 = 0.35;
+/// Default weight for latency factor
+const DEFAULT_LATENCY_WEIGHT: f64 = 0.25;
+/// Default weight for health factor
+const DEFAULT_HEALTH_WEIGHT: f64 = 0.20;
+/// Default weight for load factor
+const DEFAULT_LOAD_WEIGHT: f64 = 0.15;
+/// Default weight for priority factor
+const DEFAULT_PRIORITY_WEIGHT: f64 = 0.05;
+
 /// Smart routing configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SmartRoutingConfig {
@@ -173,11 +184,11 @@ impl Default for SmartRoutingConfig {
 impl Default for WeightConfig {
     fn default() -> Self {
         Self {
-            success_rate_weight: 0.35,
-            latency_weight: 0.25,
-            health_weight: 0.20,
-            load_weight: 0.15,
-            priority_weight: 0.05,
+            success_rate_weight: DEFAULT_SUCCESS_RATE_WEIGHT,
+            latency_weight: DEFAULT_LATENCY_WEIGHT,
+            health_weight: DEFAULT_HEALTH_WEIGHT,
+            load_weight: DEFAULT_LOAD_WEIGHT,
+            priority_weight: DEFAULT_PRIORITY_WEIGHT,
             unhealthy_penalty: 0.01,
             degraded_penalty: 0.5,
             quota_exceeded_penalty: 0.1,
@@ -279,6 +290,23 @@ impl SmartRoutingConfig {
         }
     }
 
+    /// Validate a weight value, resetting to default if out of [0, 1] range.
+    fn validate_weight_range(
+        name: &str,
+        value: f64,
+        default: f64,
+        warnings: &mut Vec<String>,
+    ) -> f64 {
+        if !(0.0..=1.0).contains(&value) {
+            warnings.push(format!(
+                "{name} {value} out of range [0, 1], reset to {default}"
+            ));
+            default
+        } else {
+            value
+        }
+    }
+
     /// Validate configuration, returning warnings for any values that were corrected
     pub fn validate(&mut self) -> Result<Vec<String>, String> {
         let mut warnings = Vec::new();
@@ -300,41 +328,36 @@ impl SmartRoutingConfig {
         }
 
         // Validate weight ranges
-        if self.weight.success_rate_weight < 0.0 || self.weight.success_rate_weight > 1.0 {
-            warnings.push(format!(
-                "success_rate_weight {} out of range [0, 1], reset to 0.35",
-                self.weight.success_rate_weight
-            ));
-            self.weight.success_rate_weight = 0.35;
-        }
-        if self.weight.latency_weight < 0.0 || self.weight.latency_weight > 1.0 {
-            warnings.push(format!(
-                "latency_weight {} out of range [0, 1], reset to 0.25",
-                self.weight.latency_weight
-            ));
-            self.weight.latency_weight = 0.25;
-        }
-        if self.weight.health_weight < 0.0 || self.weight.health_weight > 1.0 {
-            warnings.push(format!(
-                "health_weight {} out of range [0, 1], reset to 0.20",
-                self.weight.health_weight
-            ));
-            self.weight.health_weight = 0.20;
-        }
-        if self.weight.load_weight < 0.0 || self.weight.load_weight > 1.0 {
-            warnings.push(format!(
-                "load_weight {} out of range [0, 1], reset to 0.15",
-                self.weight.load_weight
-            ));
-            self.weight.load_weight = 0.15;
-        }
-        if self.weight.priority_weight < 0.0 || self.weight.priority_weight > 1.0 {
-            warnings.push(format!(
-                "priority_weight {} out of range [0, 1], reset to 0.05",
-                self.weight.priority_weight
-            ));
-            self.weight.priority_weight = 0.05;
-        }
+        self.weight.success_rate_weight = Self::validate_weight_range(
+            "success_rate_weight",
+            self.weight.success_rate_weight,
+            DEFAULT_SUCCESS_RATE_WEIGHT,
+            &mut warnings,
+        );
+        self.weight.latency_weight = Self::validate_weight_range(
+            "latency_weight",
+            self.weight.latency_weight,
+            DEFAULT_LATENCY_WEIGHT,
+            &mut warnings,
+        );
+        self.weight.health_weight = Self::validate_weight_range(
+            "health_weight",
+            self.weight.health_weight,
+            DEFAULT_HEALTH_WEIGHT,
+            &mut warnings,
+        );
+        self.weight.load_weight = Self::validate_weight_range(
+            "load_weight",
+            self.weight.load_weight,
+            DEFAULT_LOAD_WEIGHT,
+            &mut warnings,
+        );
+        self.weight.priority_weight = Self::validate_weight_range(
+            "priority_weight",
+            self.weight.priority_weight,
+            DEFAULT_PRIORITY_WEIGHT,
+            &mut warnings,
+        );
 
         // Validate time-aware config
         if self.time_aware.off_peak_factor <= 0.0 {
