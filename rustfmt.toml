@@ -1,20 +1,12 @@
-# Rust Formatting Configuration
-# Comprehensive production-level settings
-
 edition = "2021"
 max_width = 100
 tab_spaces = 4
 use_small_heuristics = "Default"
 
-# Reorder imports and module declarations
 reorder_imports = true
 reorder_modules = true
 
-# Use field init shorthand
 use_field_init_shorthand = true
 use_try_shorthand = true
 
-# Match block trailing comma for better diffs
 match_block_trailing_comma = true
-
-# Unstable features are only available in nightly channel, we will use stable features
