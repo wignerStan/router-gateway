@@ -121,7 +121,7 @@ mod tests {
         assert!(span.end_time.is_some());
         assert_eq!(span.status_code, Some(200));
         assert!(span.latency_ms.is_some());
-        assert!(span.latency_ms.unwrap() > 0);
+        assert!(span.latency_ms.unwrap() >= 9);
         assert!(span.is_success());
     }
 
