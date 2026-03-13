@@ -351,8 +351,8 @@ impl Clone for SmartSelector {
             calculator: Box::new(crate::weight::DefaultWeightCalculator::new(
                 self.config.weight.clone(),
             )),
-            metrics: MetricsCollector::new(),
-            health: HealthManager::new(self.config.health.clone()),
+            metrics: self.metrics.clone(),
+            health: self.health.clone(),
             policy_matcher: self.policy_matcher.clone(),
         }
     }
@@ -786,7 +786,7 @@ mod tests {
     // ============================================================
 
     #[tokio::test]
-    async fn test_selector_clone_independence() {
+    async fn test_selector_clone_shares_metrics_and_health() {
         let config = SmartRoutingConfig::default();
         let selector1 = SmartSelector::new(config);
 
@@ -807,11 +807,11 @@ mod tests {
             .record_result("auth2", true, 50.0, 200)
             .await;
 
-        // Selector1 should not see auth2 metrics (clones have independent storage)
-        assert!(selector1.metrics().get_metrics("auth2").await.is_none());
+        // Selector1 should see auth2 metrics (shared storage via Arc)
+        assert!(selector1.metrics().get_metrics("auth2").await.is_some());
 
-        // Selector2 should have auth2 metrics
-        assert!(selector2.metrics().get_metrics("auth2").await.is_some());
+        // Selector2 should see auth1 metrics (shared storage via Arc)
+        assert!(selector2.metrics().get_metrics("auth1").await.is_some());
     }
 
     // Note: record_result spawns a detached tokio task which makes it difficult to test

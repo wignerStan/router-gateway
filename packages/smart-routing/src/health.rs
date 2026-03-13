@@ -1,5 +1,6 @@
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 /// Health status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -32,18 +33,46 @@ pub struct AuthHealth {
 }
 
 /// Health manager
+///
+/// Tracks health status for credentials/auths. Internally uses a `tokio::RwLock<HashMap>`
+/// for concurrent access.
+///
+/// # Clone Semantics
+///
+/// **Clones share the same underlying health state.** `Clone::clone()` creates a new
+/// handle that points to the same `Arc<RwLock<HashMap>>` — both the original and the clone
+/// see the same health events. This means:
+///
+/// - A clone sees all existing health state from the original
+/// - Updates to the clone are visible to the original, and vice versa
+/// - The `op_count` counter is also shared between clones (via `Arc<AtomicI64>`)
+///
+/// # Example
+///
+/// ```ignore
+/// let manager = HealthManager::new(config);
+/// manager.update_from_result("cred-1", false, 500).await;
+///
+/// let clone = manager.clone(); // clone shares the same health map
+/// assert_eq!(clone.get_status("cred-1").await, HealthStatus::Unhealthy);
+/// ```
 pub struct HealthManager {
-    health: tokio::sync::RwLock<std::collections::HashMap<String, AuthHealth>>,
+    health: Arc<tokio::sync::RwLock<std::collections::HashMap<String, AuthHealth>>>,
     config: crate::config::HealthConfig,
     max_entries: usize,
     cleanup_interval: i64,
     op_count: std::sync::Arc<std::sync::atomic::AtomicI64>,
 }
 
+/// Clone creates a new HealthManager that shares the same underlying health storage.
+///
+/// The clone inherits the same `config`, `max_entries`, and `cleanup_interval`,
+/// and points to the same health map via `Arc`. Updates through either the original
+/// or the clone are visible to both. See [`HealthManager`] struct docs for details.
 impl Clone for HealthManager {
     fn clone(&self) -> Self {
         Self {
-            health: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            health: Arc::clone(&self.health),
             config: self.config.clone(),
             max_entries: self.max_entries,
             cleanup_interval: self.cleanup_interval,
@@ -56,7 +85,7 @@ impl HealthManager {
     /// Create a new health manager
     pub fn new(config: crate::config::HealthConfig) -> Self {
         Self {
-            health: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            health: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
             config,
             max_entries: 10_000,
             cleanup_interval: 100,
@@ -67,7 +96,7 @@ impl HealthManager {
     /// Create a health manager with a limit
     pub fn with_limit(config: crate::config::HealthConfig, max_entries: usize) -> Self {
         Self {
-            health: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            health: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
             config,
             max_entries: if max_entries > 0 { max_entries } else { 10_000 },
             cleanup_interval: 100,
@@ -651,7 +680,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_clone_independence() {
+    async fn test_clone_shares_health_storage() {
         let config = HealthConfig::default();
         let manager1 = HealthManager::new(config);
 
@@ -659,14 +688,14 @@ mod tests {
 
         let manager2 = manager1.clone();
 
-        // Clone should have independent storage
+        // Clone shares the same storage via Arc
         manager2.update_from_result("auth-2", true, 200).await;
 
-        // Manager1 should not see auth-2
-        assert!(manager1.get_health("auth-2").await.is_none());
+        // Manager1 should see auth-2 (shared state)
+        assert!(manager1.get_health("auth-2").await.is_some());
 
-        // Manager2 should have auth-2
-        assert!(manager2.get_health("auth-2").await.is_some());
+        // Manager2 should see auth-1 (shared state)
+        assert!(manager2.get_health("auth-1").await.is_some());
     }
 
     #[tokio::test]
@@ -972,6 +1001,49 @@ mod tests {
             manager.get_status("test-auth").await,
             HealthStatus::Unhealthy,
             "Status code 401 should immediately cause unhealthy regardless of threshold"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_clone_shares_health_state() {
+        let config = HealthConfig::default();
+        let manager = HealthManager::new(config);
+
+        // Record a health event on the original
+        manager.update_from_result("auth-a", false, 500).await;
+        manager.update_from_result("auth-a", false, 500).await;
+        manager.update_from_result("auth-a", false, 500).await;
+        assert_eq!(
+            manager.get_status("auth-a").await,
+            HealthStatus::Unhealthy,
+            "original should see unhealthy after failures"
+        );
+
+        // Clone the manager
+        let cloned = manager.clone();
+
+        // The clone should see the same health state (shared via Arc)
+        assert_eq!(
+            cloned.get_status("auth-a").await,
+            HealthStatus::Unhealthy,
+            "clone should see the same health state as the original"
+        );
+
+        // Update the clone — original should see it (shared state)
+        cloned.update_from_result("auth-b", false, 500).await;
+        assert!(
+            manager.get_health("auth-b").await.is_some(),
+            "original should see entries created by the clone"
+        );
+
+        // Update the original — clone should see it (shared state)
+        manager.update_from_result("auth-c", false, 500).await;
+        manager.update_from_result("auth-c", false, 500).await;
+        manager.update_from_result("auth-c", false, 500).await;
+        assert_eq!(
+            cloned.get_status("auth-c").await,
+            HealthStatus::Unhealthy,
+            "clone should see updates made to the original"
         );
     }
 }
