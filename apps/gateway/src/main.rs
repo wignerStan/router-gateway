@@ -461,7 +461,7 @@ impl RateLimiter {
     /// Returns `true` if under the limit, `false` if rate limited.
     /// Also prunes stale entries (inactive for >2 minutes) to prevent unbounded growth.
     fn check(&self, ip: &str) -> bool {
-        let mut buckets = self.buckets.lock().unwrap();
+        let mut buckets = self.buckets.lock().expect("Rate limiter mutex poisoned");
         let now = Instant::now();
 
         // Prune stale entries to prevent unbounded memory growth
