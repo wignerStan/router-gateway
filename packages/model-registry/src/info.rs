@@ -64,6 +64,7 @@ pub struct RateLimits {
 
 /// DataSource indicates where model data originated.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[non_exhaustive]
 pub enum DataSource {
     /// Static indicates hardcoded fallback data
     Static,

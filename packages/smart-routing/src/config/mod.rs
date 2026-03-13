@@ -21,6 +21,7 @@ const DEFAULT_PRIORITY_WEIGHT: f64 = 0.05;
 
 /// Smart routing configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SmartRoutingConfig {
     /// Whether smart routing is enabled
     pub enabled: bool,
@@ -78,6 +79,7 @@ impl Default for PolicyConfig {
 
 /// Weight calculation configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct WeightConfig {
     /// Success rate weight (0-1)
     pub success_rate_weight: f64,

@@ -1,3 +1,9 @@
+//! Model metadata registry with multi-dimension categorization and routing policy.
+//!
+//! Provides model discovery, capability classification, and policy-based routing
+//! rules. Used by the gateway to select optimal credentials based on model
+//! characteristics, provider constraints, and cost preferences.
+
 pub mod categories;
 pub mod fetcher;
 pub mod info;
