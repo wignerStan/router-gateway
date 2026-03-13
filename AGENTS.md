@@ -240,3 +240,43 @@ For more details, see README.md and docs/QUICKSTART.md.
 - If push fails, resolve and retry until it succeeds
 
 <!-- END BEADS INTEGRATION -->
+
+## Coding Conventions
+
+### Rust Best Practices
+
+This project enforces production-level code style using `rustfmt` and `clippy`. Adhere to the following conventions:
+
+- **Format strings**: Always inline `format!` args when possible (`format!("Hello, {name}")` instead of `format!("Hello, {}", name)`).
+- **If statements**: Always collapse if statements (`if x { if y { ... } }` becomes `if x && y { ... }`).
+- **Closures**: Use method references over closures when possible (`.map(String::from)` instead of `.map(|s| String::from(s))`).
+- **Match statements**: Make match statements exhaustive and avoid wildcard arms (`_`) whenever possible. Use explicit arms for maintainability.
+- **Range checking**: Use `(start..=end).contains(&val)` instead of manual `>=` and `<=` checks.
+- **Testing**:
+  - Prefer deep equals comparisons whenever possible. Perform `assert_eq!()` on entire objects rather than individual fields. Use `pretty_assertions::assert_eq` for clearer diffs if available.
+  - Avoid mutating process environment in tests; prefer passing environment-derived flags or dependencies from above.
+  - Always mark async tests as `#[tokio::test]`.
+  - Avoid `std::thread::sleep` in async contexts; always use `tokio::time::sleep`.
+
+### Modules & Architecture
+
+- **Modularity**: Prefer adding new modules instead of growing existing ones. Target Rust modules under 500 LoC (excluding tests). If a file exceeds 800 LoC, extract functionality into a new module unless there is a strong documented reason not to.
+- **Locality**: When extracting code, move the related tests and module/type docs toward the new implementation so the invariants stay close to the code that owns them.
+- **Helper Methods**: Do not create small helper methods that are referenced only once.
+
+### Async/Tokio Conventions
+
+- All async operations use Tokio. Always `.await` on registry/selector methods.
+- Maintain clear boundaries between async and sync code.
+
+### Error Handling
+
+- Rely on `thiserror` and `anyhow` as configured in the workspace for error propagation.
+
+### Code Style Enforcement
+
+All code changes **must** pass formatting and linting rules. Before finalizing changes:
+
+1. Run `cargo fmt`
+2. Run `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+3. Run `just qa` to run all project quality gates.

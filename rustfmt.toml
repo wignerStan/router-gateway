@@ -1,13 +1,14 @@
 # Rust Formatting Configuration
-# Production-ready settings for stable Rust
+# Comprehensive production-level settings
 
 edition = "2021"
 max_width = 100
 tab_spaces = 4
 use_small_heuristics = "Default"
 
-# Reorder imports
+# Reorder imports and module declarations
 reorder_imports = true
+reorder_modules = true
 
 # Use field init shorthand
 use_field_init_shorthand = true

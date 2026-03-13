@@ -59,5 +59,25 @@ unsafe_code = "forbid"
 missing_docs = "warn"
 
 [workspace.lints.clippy]
-all = "warn"
-pedantic = "warn"
+# Base comprehensive rules set to deny for production
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+
+# Specific rules based on references/Codex rules
+collapsible_if = "deny"
+uninlined_format_args = "deny"
+redundant_closure_for_method_calls = "deny"
+manual_range_contains = "deny"
+
+# Exceptions (allow) for common pedantic rules that are often too noisy
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+cast_possible_truncation = "allow"
+cast_possible_wrap = "allow"
+cast_precision_loss = "allow"
+cast_sign_loss = "allow"
+similar_names = "allow"
+too_many_lines = "allow"
