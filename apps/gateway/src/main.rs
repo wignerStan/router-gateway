@@ -96,6 +96,9 @@ struct AppState {
 
     /// Credential information for routing
     credentials: Vec<AuthInfo>,
+
+    /// Rate limiter for per-IP request throttling
+    rate_limiter: Arc<RateLimiter>,
 }
 
 impl Clone for AppState {
@@ -109,6 +112,7 @@ impl Clone for AppState {
             tracing: self.tracing.clone(),
             start_time: self.start_time,
             credentials: self.credentials.clone(),
+            rate_limiter: Arc::clone(&self.rate_limiter),
         }
     }
 }
@@ -223,6 +227,7 @@ async fn main() -> anyhow::Result<()> {
         tracing: tracing_middleware.clone(),
         start_time: Instant::now(),
         credentials,
+        rate_limiter,
     };
 
     // Get host and port from config before moving state
@@ -253,7 +258,7 @@ async fn main() -> anyhow::Result<()> {
         .merge(public_routes)
         .merge(protected_routes)
         .layer(axum::middleware::from_fn_with_state(
-            rate_limiter,
+            state.clone(),
             rate_limit_middleware,
         ))
         .layer(axum::middleware::from_fn(security_headers_middleware))
@@ -458,9 +463,13 @@ impl RateLimiter {
 
     /// Check whether a request from the given IP should be allowed.
     /// Returns `true` if under the limit, `false` if rate limited.
+    /// Also prunes stale entries (inactive for >2 minutes) to prevent unbounded growth.
     fn check(&self, ip: &str) -> bool {
         let mut buckets = self.buckets.lock().unwrap();
         let now = Instant::now();
+
+        // Prune stale entries to prevent unbounded memory growth
+        buckets.retain(|_, (_, window_start)| now.duration_since(*window_start).as_secs() < 120);
 
         let (count, window_start) = buckets.entry(ip.to_string()).or_insert((0, now));
 
@@ -480,23 +489,28 @@ impl RateLimiter {
 }
 
 /// Rate limiting middleware. Extracts client IP from X-Forwarded-For or
-/// X-Real-IP headers (falling back to the remote addr) and enforces per-IP limits.
+/// X-Real-IP headers only when `trust_proxy_headers` is enabled (gateway behind
+/// a trusted reverse proxy). Otherwise, all requests share a single bucket to
+/// prevent header-spoofing bypasses.
 async fn rate_limit_middleware(
-    axum::extract::State(limiter): axum::extract::State<Arc<RateLimiter>>,
+    axum::extract::State(state): axum::extract::State<AppState>,
     req: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> std::result::Result<axum::response::Response, (axum::http::StatusCode, Json<Value>)> {
-    let client_ip = req
-        .headers()
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.split(',').next())
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .or_else(|| req.headers().get("x-real-ip").and_then(|v| v.to_str().ok()))
-        .unwrap_or("unknown");
+    let client_ip = if state.config.server.trust_proxy_headers {
+        req.headers()
+            .get("x-forwarded-for")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.split(',').next())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .or_else(|| req.headers().get("x-real-ip").and_then(|v| v.to_str().ok()))
+            .unwrap_or("unknown")
+    } else {
+        "shared"
+    };
 
-    if !limiter.check(client_ip) {
+    if !state.rate_limiter.check(client_ip) {
         return Err((
             axum::http::StatusCode::TOO_MANY_REQUESTS,
             Json(json!({
@@ -825,6 +839,7 @@ mod integration_tests {
             tracing: TracingMiddleware::new(Arc::new(MemoryTraceCollector::with_default_size())),
             start_time: Instant::now(),
             credentials: vec![],
+            rate_limiter: Arc::new(RateLimiter::new(60)),
         }
     }
 
@@ -1016,12 +1031,12 @@ mod integration_tests {
 
     #[tokio::test]
     async fn test_rate_limiter_rejects_excess_requests() {
-        let limiter = Arc::new(RateLimiter::new(3)); // Very low limit for testing
-        let state = create_test_state();
+        let mut state = create_test_state();
+        state.rate_limiter = Arc::new(RateLimiter::new(3)); // Very low limit for testing
         let app = Router::new()
             .route("/health", get(health_check))
             .layer(axum::middleware::from_fn_with_state(
-                limiter,
+                state.clone(),
                 rate_limit_middleware,
             ))
             .with_state(state);

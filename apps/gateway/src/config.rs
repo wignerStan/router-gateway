@@ -48,6 +48,13 @@ pub struct ServerConfig {
     /// If empty, authentication is disabled (not recommended for production)
     #[serde(default)]
     pub auth_tokens: Vec<String>,
+
+    /// Whether to trust X-Forwarded-For / X-Real-IP headers for rate limiting.
+    /// Only enable when the gateway is behind a trusted reverse proxy.
+    /// When false (default), all requests share a single rate-limit bucket,
+    /// preventing header-spoofing bypasses.
+    #[serde(default)]
+    pub trust_proxy_headers: bool,
 }
 
 impl Default for ServerConfig {
@@ -57,6 +64,7 @@ impl Default for ServerConfig {
             host: default_host(),
             timeout_secs: default_timeout(),
             auth_tokens: Vec::new(),
+            trust_proxy_headers: false,
         }
     }
 }
@@ -333,35 +341,16 @@ pub fn validate_url_not_private(url_str: &str) -> Result<()> {
 /// or cloud metadata range.
 fn is_private_ip(ip: &IpAddr) -> bool {
     match ip {
-        IpAddr::V4(v4) => {
-            let octets = v4.octets();
-            // Loopback: 127.0.0.0/8
-            if octets[0] == 127 {
-                return true;
-            }
-            // Private: 10.0.0.0/8
-            if octets[0] == 10 {
-                return true;
-            }
-            // Private: 172.16.0.0/12
-            if octets[0] == 172 && (16..=31).contains(&octets[1]) {
-                return true;
-            }
-            // Private: 192.168.0.0/16
-            if octets[0] == 192 && octets[1] == 168 {
-                return true;
-            }
-            // Link-local: 169.254.0.0/16 (includes cloud metadata 169.254.169.254)
-            if octets[0] == 169 && octets[1] == 254 {
-                return true;
-            }
-            // Link-local: 0.0.0.0/8
-            if octets[0] == 0 {
-                return true;
-            }
-            false
-        },
+        IpAddr::V4(v4) => is_private_ipv4(v4),
         IpAddr::V6(v6) => {
+            // Handle IPv4-mapped IPv6 addresses (e.g., ::ffff:127.0.0.1)
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                return is_private_ipv4(&v4);
+            }
+            // Handle IPv4-compatible IPv6 addresses (deprecated but still parsed)
+            if let Some(v4) = v6.to_ipv4() {
+                return is_private_ipv4(&v4);
+            }
             // Loopback: ::1
             if v6.is_loopback() {
                 return true;
@@ -378,6 +367,35 @@ fn is_private_ip(ip: &IpAddr) -> bool {
             false
         },
     }
+}
+
+fn is_private_ipv4(v4: &std::net::Ipv4Addr) -> bool {
+    let octets = v4.octets();
+    // Loopback: 127.0.0.0/8
+    if octets[0] == 127 {
+        return true;
+    }
+    // Private: 10.0.0.0/8
+    if octets[0] == 10 {
+        return true;
+    }
+    // Private: 172.16.0.0/12
+    if octets[0] == 172 && (16..=31).contains(&octets[1]) {
+        return true;
+    }
+    // Private: 192.168.0.0/16
+    if octets[0] == 192 && octets[1] == 168 {
+        return true;
+    }
+    // Link-local: 169.254.0.0/16 (includes cloud metadata 169.254.169.254)
+    if octets[0] == 169 && octets[1] == 254 {
+        return true;
+    }
+    // Zero network: 0.0.0.0/8
+    if octets[0] == 0 {
+        return true;
+    }
+    false
 }
 
 #[cfg(test)]
@@ -624,6 +642,36 @@ credentials:
     fn test_ssrf_reject_zero_network() {
         let result = validate_url_not_private("http://0.0.0.0/api");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_ipv4_mapped_ipv6_loopback() {
+        let result = validate_url_not_private("http://[::ffff:127.0.0.1]:8000/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_ipv4_mapped_ipv6_cloud_metadata() {
+        let result = validate_url_not_private("http://[::ffff:169.254.169.254]/latest/meta-data/");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_ipv4_mapped_ipv6_private_10() {
+        let result = validate_url_not_private("http://[::ffff:10.0.0.1]/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_reject_ipv4_mapped_ipv6_private_192() {
+        let result = validate_url_not_private("http://[::ffff:192.168.1.1]/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ssrf_allow_ipv4_mapped_public_ip() {
+        let result = validate_url_not_private("http://[::ffff:1.1.1.1]/api");
+        assert!(result.is_ok());
     }
 
     // --- Auth enabled tests ---
