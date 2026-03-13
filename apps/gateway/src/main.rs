@@ -466,11 +466,8 @@ impl RateLimiter {
 
         // Periodically prune stale entries every 1000 requests to avoid
         // iterating the entire map on every single request under load.
-        if self
-            .op_count
-            .fetch_add(1, Ordering::Relaxed)
-            .is_multiple_of(1000)
-        {
+        #[allow(clippy::manual_is_multiple_of)]
+        if self.op_count.fetch_add(1, Ordering::Relaxed) % 1000 == 0 {
             buckets
                 .retain(|_, (_, window_start)| now.duration_since(*window_start).as_secs() < 120);
         }
