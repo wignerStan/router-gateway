@@ -131,7 +131,7 @@
       "priority": 12,
       "enabled": true,
       "filters": {
-        "providers": ["open_a_i"]
+        "providers": ["openai"]
       },
       "action": {
         "action_type": "weight",
