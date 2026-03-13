@@ -75,4 +75,6 @@ gitleaks-report.json
 # Dolt database files (added by bd init)
 .dolt/
 *.db
-*.py
+
+patch_*.py
+patch_*
