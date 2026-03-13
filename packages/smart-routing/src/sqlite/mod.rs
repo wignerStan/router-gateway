@@ -1,4 +1,5 @@
 pub mod collectors;
+pub mod error;
 pub mod selector;
 pub mod store;
 

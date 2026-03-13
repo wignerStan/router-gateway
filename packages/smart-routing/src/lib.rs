@@ -55,3 +55,17 @@ pub use statistics::{
 };
 pub use utility::{UtilityConfig, UtilityEstimator};
 pub use weight::{AuthInfo, DefaultWeightCalculator, ModelState, WeightCalculator};
+
+pub use sqlite::error::SqliteError;
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error(transparent)]
+    Sqlite(#[from] SqliteError),
+    #[error("configuration error: {0}")]
+    Config(String),
+    #[error("no candidates available for routing")]
+    NoCandidates,
+}
+
+pub type Result<T> = std::result::Result<T, Error>;

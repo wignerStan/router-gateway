@@ -287,7 +287,10 @@ impl SQLiteStore {
             .cache_enabled
             .load(std::sync::atomic::Ordering::Relaxed)
         {
-            let mut cache = self.cache.write().unwrap();
+            let mut cache = self
+                .cache
+                .write()
+                .expect("cache write lock poisoned: metrics write");
             let entry = cache
                 .entry(auth_id.to_string())
                 .or_insert_with(|| CacheEntry {
@@ -346,7 +349,10 @@ impl SQLiteStore {
             .cache_enabled
             .load(std::sync::atomic::Ordering::Relaxed)
         {
-            let mut cache = self.cache.write().unwrap();
+            let mut cache = self
+                .cache
+                .write()
+                .expect("cache write lock poisoned: health write");
             let entry = cache
                 .entry(auth_id.to_string())
                 .or_insert_with(|| CacheEntry {
@@ -393,7 +399,10 @@ impl SQLiteStore {
             .cache_enabled
             .load(std::sync::atomic::Ordering::Relaxed)
         {
-            let cache = self.cache.read().unwrap();
+            let cache = self
+                .cache
+                .read()
+                .expect("cache read lock poisoned: metrics read");
             if let Some(entry) = cache.get(auth_id) {
                 if let Some(ref metrics) = entry.metrics {
                     return Ok(Some(metrics.clone()));
@@ -455,7 +464,10 @@ impl SQLiteStore {
                     .cache_enabled
                     .load(std::sync::atomic::Ordering::Relaxed)
                 {
-                    let mut cache = self.cache.write().unwrap();
+                    let mut cache = self
+                        .cache
+                        .write()
+                        .expect("cache write lock poisoned: metrics write after load");
                     let entry = cache
                         .entry(auth_id.to_string())
                         .or_insert_with(|| CacheEntry {
@@ -480,7 +492,10 @@ impl SQLiteStore {
             .cache_enabled
             .load(std::sync::atomic::Ordering::Relaxed)
         {
-            let cache = self.cache.read().unwrap();
+            let cache = self
+                .cache
+                .read()
+                .expect("cache read lock poisoned: health read");
             if let Some(entry) = cache.get(auth_id) {
                 if let Some(ref health) = entry.health {
                     return Ok(Some(health.clone()));
@@ -550,7 +565,10 @@ impl SQLiteStore {
                     .cache_enabled
                     .load(std::sync::atomic::Ordering::Relaxed)
                 {
-                    let mut cache = self.cache.write().unwrap();
+                    let mut cache = self
+                        .cache
+                        .write()
+                        .expect("cache write lock poisoned: health write after load");
                     let entry = cache
                         .entry(auth_id.to_string())
                         .or_insert_with(|| CacheEntry {
