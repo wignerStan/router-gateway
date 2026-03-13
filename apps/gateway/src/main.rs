@@ -59,13 +59,13 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Model registry initialized");
 
     // Initialize smart router and populate from config
-    let smart_router = {
-        let mut smart_router = SmartRouter::new();
-        for cred in &config.credentials {
-            smart_router.add_credential(cred.id.clone(), cred.allowed_models.clone());
-        }
-        smart_router
-    };
+    let smart_router = config
+        .credentials
+        .iter()
+        .fold(SmartRouter::new(), |mut router, cred| {
+            router.add_credential(cred.id.clone(), cred.allowed_models.clone());
+            router
+        });
 
     tracing::info!(
         "Smart router initialized with {} credentials",
