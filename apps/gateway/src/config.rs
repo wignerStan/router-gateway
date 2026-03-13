@@ -558,7 +558,7 @@ credentials:
         assert!(
             err_msg.contains("private/internal IP") || err_msg.contains("invalid base_url"),
             "Unexpected error: {err_msg}"
-    );
+        );
     }
 
     #[test]
