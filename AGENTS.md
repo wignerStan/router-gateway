@@ -4,7 +4,7 @@
 
 A **local LLM gateway** written in Rust for intelligent request routing. Routes LLM requests to optimal credentials based on health, latency, and success rate. Designed for local development and self-hosted deployments.
 
-**Stack**: Rust 1.83+, Tokio, Axum, SQLite
+**Stack**: Rust 1.85+, Tokio, Axum, SQLite
 **Focus**: Smart routing, model registry, LLM tracing
 
 ### Package Names
@@ -18,20 +18,21 @@ A **local LLM gateway** written in Rust for intelligent request routing. Routes 
 
 ## Build and test commands
 
-| Task        | Command                       |
-| ----------- | ----------------------------- |
-| Build       | `cargo build`                 |
-| Test        | `cargo test --workspace`      |
-| Run Gateway | `cargo run -p gateway`        |
-| Lint        | `cargo clippy --workspace`    |
-| Format      | `cargo fmt`                   |
-| All Checks  | `just qa`                     |
+| Task        | Command                    |
+| ----------- | -------------------------- |
+| Build       | `cargo build`              |
+| Test        | `cargo test --workspace`   |
+| Run Gateway | `cargo run -p gateway`     |
+| Lint        | `cargo clippy --workspace` |
+| Format      | `cargo fmt`                |
+| All Checks  | `just qa`                  |
 
 ## Code style guidelines
 
 This project enforces production-level code style using `rustfmt` and `clippy`. Adhere to the following conventions:
 
 ### General Idioms & Style
+
 - **Format strings**: Always inline `format!` args when possible (`format!("Hello, {name}")` instead of `format!("Hello, {}", name)`).
 - **If statements**: Always collapse if statements (`if x { if y { ... } }` becomes `if x && y { ... }`).
 - **Closures**: Use method references over closures when possible (`.map(String::from)` instead of `.map(|s| String::from(s))`).
@@ -42,17 +43,20 @@ This project enforces production-level code style using `rustfmt` and `clippy`. 
 - **Passing by Value vs Reference**: Follow official guidelines for when to pass by value (e.g. `Copy` traits) vs by reference.
 
 ### Error Handling
+
 - **Result over Panic**: Prefer returning `Result` and avoid `panic!`.
 - **Avoid unwraps**: Do not use `unwrap()` or `expect()` in production code. Handle errors gracefully.
 - **Error Types**: Use `thiserror` for library/crate level errors and reserve `anyhow` strictly for binaries/applications.
 - **Error Bubbling**: Use the `?` operator to bubble errors up.
 
 ### Comments and Documentation
-- **Context, Not Clutter**: Comments should explain the *why*, not the *what*. If code is complex, refactor instead of over-commenting. Don't write living comments when documentation is needed.
+
+- **Context, Not Clutter**: Comments should explain the _why_, not the _what_. If code is complex, refactor instead of over-commenting. Don't write living comments when documentation is needed.
 - **Living Documentation**: Treat tests as living documentation. Add test examples to your doc comments.
 - **TODOs**: `TODO` comments should generally become tracked issues.
 
 ### Modules & Architecture
+
 - **Modularity & Size**: Avoid large modules. Prefer adding new modules instead of growing existing ones. Target Rust modules under 500 LoC (excluding tests). If a file exceeds 800 LoC, extract functionality into a new module instead of extending the existing file unless there is a strong documented reason not to.
 - **Locality**: When extracting code, move the related tests and module/type docs toward the new implementation so the invariants stay close to the code that owns them.
 - **Helper Methods**: Do not create small helper methods that are referenced only once.
@@ -60,6 +64,7 @@ This project enforces production-level code style using `rustfmt` and `clippy`. 
 - **Dispatch**: Use static dispatch (`impl Trait` or `<T: Trait>`) by default. Use dynamic dispatch (`dyn Trait`) only when necessary for heterogeneous collections or compile-time performance trade-offs.
 
 ### Async/Tokio Conventions
+
 - All async operations use Tokio. Always `.await` on registry/selector methods.
 - Maintain clear boundaries between async and sync code.
 

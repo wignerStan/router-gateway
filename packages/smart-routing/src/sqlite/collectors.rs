@@ -1,3 +1,4 @@
+use super::error::Result;
 use super::store::SQLiteStore;
 use crate::health::{AuthHealth, HealthStatus};
 use crate::metrics::AuthMetrics;
@@ -154,7 +155,7 @@ impl SQLiteMetricsCollector {
     }
 
     /// Flush dirty data to database
-    pub async fn flush(&self) -> Result<(), String> {
+    pub async fn flush(&self) -> Result<()> {
         // Collect dirty auth IDs
         let to_flush = {
             let dirty = self.dirty.read().await;
@@ -187,7 +188,7 @@ impl SQLiteMetricsCollector {
     }
 
     /// Load metrics from database into cache
-    pub async fn load_from_db(&self) -> Result<(), String> {
+    pub async fn load_from_db(&self) -> Result<()> {
         let all_metrics = self.store.load_all_metrics().await?;
 
         let mut cache = self.cache.write().await;
@@ -415,7 +416,7 @@ impl SQLiteHealthManager {
     }
 
     /// Flush dirty data to database
-    pub async fn flush(&self) -> Result<(), String> {
+    pub async fn flush(&self) -> Result<()> {
         // Collect dirty auth IDs
         let to_flush = {
             let dirty = self.dirty.read().await;
@@ -448,7 +449,7 @@ impl SQLiteHealthManager {
     }
 
     /// Load health from database into cache
-    pub async fn load_from_db(&self) -> Result<(), String> {
+    pub async fn load_from_db(&self) -> Result<()> {
         let all_health = self.store.load_all_health().await?;
 
         let mut cache = self.cache.write().await;

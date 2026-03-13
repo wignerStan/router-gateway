@@ -1,5 +1,5 @@
 # Clippy Configuration
-msrv = "1.83"
+msrv = "1.85"
 
 # Warn on manual map and and_then
 cognitive-complexity-threshold = 15

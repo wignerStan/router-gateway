@@ -247,7 +247,8 @@ pub struct FunctionDef {
 }
 
 /// Tool choice strategy
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ToolChoice {
     /// Let the model decide
     Auto,
