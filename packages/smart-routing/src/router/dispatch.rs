@@ -286,7 +286,7 @@ impl Router {
             .iter()
             .find(|a| a.id == candidate.credential_id)
             .cloned()
-            .unwrap_or(AuthInfo {
+            .unwrap_or_else(|| AuthInfo {
                 id: candidate.credential_id.clone(),
                 priority: Some(0),
                 quota_exceeded: false,

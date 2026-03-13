@@ -362,8 +362,7 @@ impl AttemptHistory {
         let fallbacks = attempts.iter().filter(|a| a.used_fallback()).count() as u64;
 
         let mut latencies: Vec<f64> = attempts.iter().map(|a| a.outcome.latency_ms).collect();
-        // SAFETY: unwrap_or(Equal) prevents panic on NaN scores
-        latencies.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        latencies.sort_by(|a, b| a.total_cmp(b));
 
         let avg_latency: f64 = latencies.iter().sum::<f64>() / latencies.len() as f64;
         let p50 = latencies[(latencies.len() * 50 / 100).min(latencies.len() - 1)];
