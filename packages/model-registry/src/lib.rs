@@ -19,7 +19,7 @@ pub use info::{DataSource, ModelCapabilities, ModelInfo, RateLimits};
 pub use policy::templates;
 pub use policy::{
     ModalityCategory, PolicyAction, PolicyCondition, PolicyConditionType, PolicyContext,
-    PolicyFilters, PolicyMatch, PolicyMatcher, PolicyRegistry, RoutingPolicy,
+    PolicyFilters, PolicyLoadError, PolicyMatch, PolicyMatcher, PolicyRegistry, RoutingPolicy,
 };
 pub use registry::Registry;
 
