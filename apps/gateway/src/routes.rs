@@ -74,13 +74,8 @@ pub(crate) async fn auth_middleware(
             // Check Bearer token format
             if let Some(token) = header.strip_prefix("Bearer ") {
                 // Validate against configured tokens using constant-time comparison
-                if state
-                    .config
-                    .server
-                    .auth_tokens
-                    .iter()
-                    .any(|t| config::constant_time_token_eq(t, token))
-                {
+                // that iterates all tokens (no short-circuit) to prevent timing side-channels
+                if config::constant_time_token_matches(token, &state.config.server.auth_tokens) {
                     return Ok(next.run(req).await);
                 }
             }
