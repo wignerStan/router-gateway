@@ -98,20 +98,24 @@ impl SessionAffinityManager {
 
         let mut sessions = self.sessions.write().await;
 
-        // Check if session exists
-        let affinity = sessions
-            .entry(session_id.clone())
-            .or_insert_with(|| SessionAffinity {
-                session_id: session_id.clone(),
-                preferred_provider: provider.clone(),
-                last_access: Utc::now(),
-                request_count: 0,
-            });
-
-        // Update existing session
-        affinity.preferred_provider = provider;
-        affinity.last_access = Utc::now();
-        affinity.request_count += 1;
+        use std::collections::hash_map::Entry;
+        match sessions.entry(session_id) {
+            Entry::Occupied(mut entry) => {
+                let affinity = entry.get_mut();
+                affinity.preferred_provider = provider;
+                affinity.last_access = Utc::now();
+                affinity.request_count += 1;
+            },
+            Entry::Vacant(entry) => {
+                let session_id = entry.key().clone();
+                entry.insert(SessionAffinity {
+                    session_id,
+                    preferred_provider: provider,
+                    last_access: Utc::now(),
+                    request_count: 1,
+                });
+            },
+        }
 
         // Cleanup if over limit
         if sessions.len() > self.max_sessions {
@@ -168,17 +172,7 @@ impl SessionAffinityManager {
         let now = Utc::now();
         let ttl = chrono::Duration::seconds(self.session_ttl_seconds);
 
-        // Collect expired sessions
-        let expired: Vec<String> = sessions
-            .iter()
-            .filter(|(_, affinity)| now.signed_duration_since(affinity.last_access) > ttl)
-            .map(|(id, _)| id.clone())
-            .collect();
-
-        // Remove expired sessions
-        for id in expired {
-            sessions.remove(&id);
-        }
+        sessions.retain(|_, affinity| now.signed_duration_since(affinity.last_access) <= ttl);
 
         // If still over limit, remove oldest sessions
         if sessions.len() > self.max_sessions {
@@ -219,20 +213,23 @@ impl SessionAffinityManager {
             total_requests as f64 / sessions.len() as f64
         };
 
-        let providers_count: std::collections::HashMap<String, usize> =
-            sessions
-                .values()
-                .fold(std::collections::HashMap::new(), |mut acc, affinity| {
-                    *acc.entry(affinity.preferred_provider.clone()).or_insert(0) += 1;
-                    acc
-                });
+        let mut provider_counts: HashMap<&str, usize> = HashMap::new();
+        for affinity in sessions.values() {
+            *provider_counts
+                .entry(&affinity.preferred_provider)
+                .or_insert(0) += 1;
+        }
+        let providers_distribution: HashMap<String, usize> = provider_counts
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect();
 
         SessionStats {
             total_sessions: sessions.len(),
             total_requests,
             avg_requests_per_session: avg_requests,
-            unique_providers: providers_count.len(),
-            providers_distribution: providers_count,
+            unique_providers: providers_distribution.len(),
+            providers_distribution,
         }
     }
 }

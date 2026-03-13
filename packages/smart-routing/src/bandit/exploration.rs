@@ -7,64 +7,59 @@ impl BanditPolicy {
     /// Select a route using Thompson sampling
     ///
     /// Returns the selected route ID, or None if no routes available
-    pub fn select_route(&self, route_ids: &[String]) -> Option<String> {
+    pub fn select_route(&self, route_ids: &[&str]) -> Option<String> {
         if route_ids.is_empty() {
             return None;
         }
 
         if route_ids.len() == 1 {
-            return Some(route_ids[0].clone());
+            return Some(route_ids[0].to_string());
         }
 
         // Calculate Thompson sample for each route
-        let mut samples: Vec<(String, f64)> = route_ids
+        let samples: Vec<f64> = route_ids
             .iter()
-            .map(|id| {
-                let sample = self.thompson_sample(id);
-                (id.clone(), sample)
-            })
+            .map(|id| self.thompson_sample(id))
             .collect();
 
         // Select route with highest sample
-        samples.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-        Some(samples.remove(0).0)
+        let best = best_index(&samples);
+        Some(route_ids[best].to_string())
     }
 
     /// Select route with utility-weighted Thompson sampling
     pub fn select_route_with_utility(
         &self,
-        route_ids: &[String],
-        utilities: &HashMap<String, f64>,
+        route_ids: &[&str],
+        utilities: &HashMap<&str, f64>,
     ) -> Option<String> {
         if route_ids.is_empty() {
             return None;
         }
 
         if route_ids.len() == 1 {
-            return Some(route_ids[0].clone());
+            return Some(route_ids[0].to_string());
         }
 
         // Calculate weighted Thompson sample for each route
-        let mut samples: Vec<(String, f64)> = route_ids
+        let samples: Vec<f64> = route_ids
             .iter()
             .map(|id| {
                 let thompson_sample = self.thompson_sample(id);
                 let utility = utilities.get(id).copied().unwrap_or(0.5);
 
                 // Weight Thompson sample by utility
-                let weighted_sample = if self.config.use_utility_weighting {
+                if self.config.use_utility_weighting {
                     thompson_sample * utility
                 } else {
                     thompson_sample
-                };
-
-                (id.clone(), weighted_sample)
+                }
             })
             .collect();
 
         // Select route with highest weighted sample
-        samples.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-        Some(samples.remove(0).0)
+        let best = best_index(&samples);
+        Some(route_ids[best].to_string())
     }
 
     /// Thompson sampling: draw from Beta(alpha, beta)
@@ -235,4 +230,14 @@ impl BanditPolicy {
     pub fn config(&self) -> &BanditConfig {
         &self.config
     }
+}
+
+/// Find the index of the maximum value in a slice
+fn best_index(samples: &[f64]) -> usize {
+    samples
+        .iter()
+        .enumerate()
+        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .map(|(i, _)| i)
+        .unwrap_or(0)
 }

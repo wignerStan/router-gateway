@@ -252,16 +252,18 @@ impl MetricsCollector {
             return;
         }
 
-        // Collect entries with last request time
+        // Retain entries within the limit, evicting oldest first
+        if metrics.len() <= self.max_entries {
+            return;
+        }
+
         let mut entries: Vec<(String, DateTime<Utc>)> = metrics
             .iter()
             .map(|(id, m)| (id.clone(), m.last_request_time))
             .collect();
 
-        // Sort by last request time (oldest first)
         entries.sort_by(|a, b| a.1.cmp(&b.1));
 
-        // Remove oldest entries if over limit
         let remove_count = entries.len().saturating_sub(self.max_entries);
         for (id, _) in entries.into_iter().take(remove_count) {
             metrics.remove(&id);

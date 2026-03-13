@@ -109,7 +109,7 @@ impl SmartSelector {
 
     /// Set config
     pub fn set_config(&mut self, config: SmartRoutingConfig) {
-        self.config = config.clone();
+        self.config = config;
 
         self.calculator = match self.config.strategy.as_str() {
             "weighted" => Box::new(crate::weight::DefaultWeightCalculator::new(

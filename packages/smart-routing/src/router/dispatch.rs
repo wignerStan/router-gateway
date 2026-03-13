@@ -150,21 +150,18 @@ impl Router {
     }
 
     /// Calculate utility for all candidates in parallel
-    async fn calculate_utilities(
+    async fn calculate_utilities<'a>(
         &self,
-        candidates: &[RouteCandidate],
-    ) -> Vec<(RouteCandidate, f64)> {
+        candidates: &'a [RouteCandidate],
+    ) -> Vec<(&'a RouteCandidate, f64)> {
         use futures::future::join_all;
 
         let futures: Vec<_> = candidates
             .iter()
-            .map(|candidate| async {
-                // Get metrics for this credential
+            .map(|candidate| async move {
                 let metrics = self.metrics().get_metrics(&candidate.credential_id).await;
-
-                // Calculate utility
                 let utility = self.utility_estimator.estimate_utility(metrics.as_ref());
-                (candidate.clone(), utility)
+                (candidate, utility)
             })
             .collect();
 
@@ -174,7 +171,7 @@ impl Router {
     /// Select best route with session affinity
     async fn select_with_affinity(
         &self,
-        candidates: &[(RouteCandidate, f64)],
+        candidates: &[(&RouteCandidate, f64)],
         session_id: &str,
     ) -> Option<RoutePlanItem> {
         // Check if session has preferred provider
@@ -219,7 +216,7 @@ impl Router {
     }
 
     /// Select best route using bandit or weighted selection
-    async fn select_best(&self, candidates: &[(RouteCandidate, f64)]) -> Option<RoutePlanItem> {
+    async fn select_best(&self, candidates: &[(&RouteCandidate, f64)]) -> Option<RoutePlanItem> {
         if candidates.is_empty() {
             return None;
         }
@@ -232,14 +229,14 @@ impl Router {
     }
 
     /// Select using bandit policy
-    async fn select_bandit(&self, candidates: &[(RouteCandidate, f64)]) -> Option<RoutePlanItem> {
-        let credential_ids: Vec<String> = candidates
+    async fn select_bandit(&self, candidates: &[(&RouteCandidate, f64)]) -> Option<RoutePlanItem> {
+        let credential_ids: Vec<&str> = candidates
             .iter()
-            .map(|(c, _)| c.credential_id.clone())
+            .map(|(c, _)| c.credential_id.as_str())
             .collect();
-        let utilities: HashMap<String, f64> = candidates
+        let utilities: HashMap<&str, f64> = candidates
             .iter()
-            .map(|(c, u)| (c.credential_id.clone(), *u))
+            .map(|(c, u)| (c.credential_id.as_str(), *u))
             .collect();
 
         let bandit = self.bandit_policy.lock().await;
@@ -279,7 +276,10 @@ impl Router {
     }
 
     /// Select using weighted selection
-    async fn select_weighted(&self, candidates: &[(RouteCandidate, f64)]) -> Option<RoutePlanItem> {
+    async fn select_weighted(
+        &self,
+        candidates: &[(&RouteCandidate, f64)],
+    ) -> Option<RoutePlanItem> {
         // Select the candidate with highest utility
         let best = candidates
             .iter()

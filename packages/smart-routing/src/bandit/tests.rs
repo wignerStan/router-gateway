@@ -11,22 +11,18 @@ fn test_bandit_select_route_empty() {
 #[test]
 fn test_bandit_select_route_single() {
     let policy = BanditPolicy::new();
-    let result = policy.select_route(&["route1".to_string()]);
+    let result = policy.select_route(&["route1"]);
     assert_eq!(result, Some("route1".to_string()));
 }
 
 #[test]
 fn test_bandit_select_route_multiple() {
     let policy = BanditPolicy::new();
-    let routes = vec![
-        "route1".to_string(),
-        "route2".to_string(),
-        "route3".to_string(),
-    ];
+    let routes: Vec<&str> = vec!["route1", "route2", "route3"];
 
     let result = policy.select_route(&routes);
     assert!(result.is_some());
-    assert!(routes.contains(&result.unwrap()));
+    assert!(routes.contains(&result.unwrap().as_str()));
 }
 
 #[test]
@@ -60,11 +56,7 @@ fn test_bandit_exploration_vs_exploitation() {
 
     // route3 is unknown (exploration candidate)
 
-    let routes = vec![
-        "route1".to_string(),
-        "route2".to_string(),
-        "route3".to_string(),
-    ];
+    let routes: Vec<&str> = vec!["route1", "route2", "route3"];
 
     // Run many selections and count
     let mut counts = HashMap::new();
@@ -99,7 +91,7 @@ fn test_bandit_diversity_penalty() {
     policy.set_diversity_penalty("route2", 1.0);
 
     // route1 should be selected more often due to penalty on route2
-    let routes = vec!["route1".to_string(), "route2".to_string()];
+    let routes: Vec<&str> = vec!["route1", "route2"];
 
     let mut count1 = 0;
     // Use larger sample size for statistical significance
@@ -125,11 +117,9 @@ fn test_bandit_utility_weighting() {
     policy.record_result("route1", true, 0.9);
     policy.record_result("route2", true, 0.9);
 
-    let mut utilities = HashMap::new();
-    utilities.insert("route1".to_string(), 0.2); // Low utility
-    utilities.insert("route2".to_string(), 0.9); // High utility
+    let utilities: HashMap<&str, f64> = [("route1", 0.2), ("route2", 0.9)].into();
 
-    let routes = vec!["route1".to_string(), "route2".to_string()];
+    let routes: Vec<&str> = vec!["route1", "route2"];
 
     let mut count2 = 0;
     for _ in 0..50 {
@@ -208,7 +198,7 @@ fn test_prior_initialization() {
     let policy = BanditPolicy::new();
 
     // Unknown route should use optimistic prior
-    let routes = vec!["unknown".to_string()];
+    let routes: Vec<&str> = vec!["unknown"];
     let result = policy.select_route(&routes);
     assert_eq!(result, Some("unknown".to_string()));
 }
@@ -346,13 +336,7 @@ fn test_numerical_stability_extreme_utility_values() {
     policy.record_result("route5", false, f64::NAN);
 
     // Should not panic and should handle gracefully
-    let routes = vec![
-        "route1".to_string(),
-        "route2".to_string(),
-        "route3".to_string(),
-        "route4".to_string(),
-        "route5".to_string(),
-    ];
+    let routes: Vec<&str> = vec!["route1", "route2", "route3", "route4", "route5"];
 
     // Run selections - should not panic
     for _ in 0..50 {
@@ -393,16 +377,16 @@ fn test_beta_sampling_skewed_distributions() {
 #[test]
 fn test_select_route_with_empty_utilities_map() {
     let policy = BanditPolicy::new();
-    let routes = vec!["route1".to_string(), "route2".to_string()];
+    let routes: Vec<&str> = vec!["route1", "route2"];
 
     // Empty utilities map
-    let utilities = HashMap::new();
+    let utilities = HashMap::<&str, f64>::new();
 
     // Should still work, using default utility
     for _ in 0..20 {
         let result = policy.select_route_with_utility(&routes, &utilities);
         assert!(result.is_some());
-        assert!(routes.contains(&result.unwrap()));
+        assert!(routes.contains(&result.unwrap().as_str()));
     }
 }
 
