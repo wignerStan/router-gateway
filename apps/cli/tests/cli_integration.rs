@@ -79,7 +79,10 @@ credentials:
         .arg("json")
         .assert()
         .success()
-        .stdout(predicates::str::is_match(r#""valid"\s*:\s*true"#).expect("value must be present"));
+        .stdout(
+            predicates::str::is_match(r#""valid"\s*:\s*true"#)
+                .expect("Internal logic invariant should hold"),
+        );
 }
 
 #[test]

@@ -183,7 +183,7 @@ mod tests {
 
         // Wait for all tasks
         for handle in handles {
-            handle.await.expect("value must be present");
+            handle.await.expect("Internal logic invariant should hold");
         }
 
         assert_eq!(collector.trace_count().await, 10);
@@ -275,7 +275,7 @@ mod tests {
 
         // Wait for all tasks
         for handle in handles {
-            handle.await.expect("value must be present");
+            handle.await.expect("Internal logic invariant should hold");
         }
 
         // Should have 1000 traces (or capped at max_size)

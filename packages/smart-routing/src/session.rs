@@ -261,7 +261,7 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("value must be present");
+            .expect("Internal logic invariant should hold");
 
         // Get preferred provider
         let provider = manager.get_preferred_provider("session-1").await;
@@ -285,18 +285,20 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("value must be present");
+            .expect("Internal logic invariant should hold");
 
         // Update with same provider
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("value must be present");
+            .expect("Internal logic invariant should hold");
 
         let affinity = manager.get_affinity("session-1").await;
         assert!(affinity.is_some());
         assert_eq!(
-            affinity.expect("value must be present").preferred_provider,
+            affinity
+                .expect("Internal logic invariant should hold")
+                .preferred_provider,
             "provider-a"
         );
     }
@@ -309,13 +311,13 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("value must be present");
+            .expect("Internal logic invariant should hold");
 
         // Update to different provider
         manager
             .set_provider("session-1".to_string(), "provider-b".to_string())
             .await
-            .expect("value must be present");
+            .expect("Internal logic invariant should hold");
 
         let provider = manager.get_preferred_provider("session-1").await;
         assert_eq!(provider, Some("provider-b".to_string()));
@@ -333,12 +335,14 @@ mod tests {
             manager
                 .set_provider(session_id.to_string(), provider.to_string())
                 .await
-                .expect("value must be present");
+                .expect("Internal logic invariant should hold");
 
             let affinity = manager.get_affinity(session_id).await;
             assert!(affinity.is_some());
             assert_eq!(
-                affinity.expect("value must be present").request_count,
+                affinity
+                    .expect("Internal logic invariant should hold")
+                    .request_count,
                 (i + 1) as u64
             );
         }
@@ -346,7 +350,9 @@ mod tests {
         // Final check
         let final_affinity = manager.get_affinity(session_id).await;
         assert_eq!(
-            final_affinity.expect("value must be present").request_count,
+            final_affinity
+                .expect("Internal logic invariant should hold")
+                .request_count,
             5
         );
     }
@@ -359,7 +365,7 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("value must be present");
+            .expect("Internal logic invariant should hold");
 
         // Remove session
         assert!(manager.remove_session("session-1").await);
@@ -378,7 +384,7 @@ mod tests {
             manager
                 .set_provider(format!("session-{i}"), "provider-a".to_string())
                 .await
-                .expect("value must be present");
+                .expect("Internal logic invariant should hold");
         }
 
         assert_eq!(manager.session_count().await, 5);
@@ -429,11 +435,11 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("value must be present");
+            .expect("Internal logic invariant should hold");
         manager
             .set_provider("session-2".to_string(), "provider-b".to_string())
             .await
-            .expect("value must be present");
+            .expect("Internal logic invariant should hold");
 
         let sessions = manager.list_sessions().await;
         assert_eq!(sessions.len(), 2);
@@ -450,13 +456,13 @@ mod tests {
             manager
                 .set_provider(format!("session-{i}"), "provider-a".to_string())
                 .await
-                .expect("value must be present");
+                .expect("Internal logic invariant should hold");
         }
         for i in 3..5 {
             manager
                 .set_provider(format!("session-{i}"), "provider-b".to_string())
                 .await
-                .expect("value must be present");
+                .expect("Internal logic invariant should hold");
         }
 
         let stats = manager.get_stats().await;
@@ -474,7 +480,7 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("value must be present");
+            .expect("Internal logic invariant should hold");
 
         // Wait for TTL to expire
         tokio::time::sleep(tokio::time::Duration::from_millis(1100)).await;
@@ -495,7 +501,7 @@ mod tests {
             manager
                 .set_provider(format!("session-{i}"), "provider-a".to_string())
                 .await
-                .expect("value must be present");
+                .expect("Internal logic invariant should hold");
 
             // Small delay to ensure different timestamps
             tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
@@ -513,7 +519,7 @@ mod tests {
         manager1
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("value must be present");
+            .expect("Internal logic invariant should hold");
 
         let manager2 = manager1.clone();
 
@@ -530,19 +536,29 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("value must be present");
+            .expect("Internal logic invariant should hold");
 
         let affinity = manager.get_affinity("session-1").await;
-        assert_eq!(affinity.expect("value must be present").request_count, 1);
+        assert_eq!(
+            affinity
+                .expect("Internal logic invariant should hold")
+                .request_count,
+            1
+        );
 
         // Second request
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("value must be present");
+            .expect("Internal logic invariant should hold");
 
         let affinity = manager.get_affinity("session-1").await;
-        assert_eq!(affinity.expect("value must be present").request_count, 2);
+        assert_eq!(
+            affinity
+                .expect("Internal logic invariant should hold")
+                .request_count,
+            2
+        );
     }
 
     #[tokio::test]
@@ -552,11 +568,11 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("value must be present");
+            .expect("Internal logic invariant should hold");
 
         let affinity = manager.get_affinity("session-1").await;
         assert!(affinity.is_some());
-        let details = affinity.expect("value must be present");
+        let details = affinity.expect("Internal logic invariant should hold");
         assert_eq!(details.session_id, "session-1");
         assert_eq!(details.preferred_provider, "provider-a");
         assert_eq!(details.request_count, 1);
@@ -571,24 +587,24 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("value must be present");
+            .expect("Internal logic invariant should hold");
         manager
             .set_provider("session-2".to_string(), "provider-a".to_string())
             .await
-            .expect("value must be present");
+            .expect("Internal logic invariant should hold");
         manager
             .set_provider("session-3".to_string(), "provider-a".to_string())
             .await
-            .expect("value must be present");
+            .expect("Internal logic invariant should hold");
 
         manager
             .set_provider("session-4".to_string(), "provider-b".to_string())
             .await
-            .expect("value must be present");
+            .expect("Internal logic invariant should hold");
         manager
             .set_provider("session-5".to_string(), "provider-b".to_string())
             .await
-            .expect("value must be present");
+            .expect("Internal logic invariant should hold");
 
         let stats = manager.get_stats().await;
         assert_eq!(stats.providers_distribution.get("provider-a"), Some(&3));

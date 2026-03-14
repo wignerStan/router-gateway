@@ -261,10 +261,10 @@ mod tests {
         let model = fetcher
             .fetch("claude-sonnet-4-20250514")
             .await
-            .expect("value must be present");
+            .expect("Model registry invariant should hold");
         assert!(model.is_some());
         assert_eq!(
-            model.expect("value must be present").name,
+            model.expect("Model registry invariant should hold").name,
             "Claude Sonnet 4"
         );
     }
@@ -275,7 +275,7 @@ mod tests {
         let model = fetcher
             .fetch("unknown-model")
             .await
-            .expect("value must be present");
+            .expect("Model registry invariant should hold");
         assert!(model.is_none());
     }
 
@@ -289,7 +289,7 @@ mod tests {
                 "unknown".to_string(),
             ])
             .await
-            .expect("value must be present");
+            .expect("Model registry invariant should hold");
 
         assert_eq!(models.len(), 2);
         assert!(models.contains_key("claude-sonnet-4-20250514"));
@@ -299,7 +299,10 @@ mod tests {
     #[tokio::test]
     async fn test_static_fetcher_list_all() {
         let fetcher = StaticFetcher::new();
-        let models = fetcher.list_all().await.expect("value must be present");
+        let models = fetcher
+            .list_all()
+            .await
+            .expect("Model registry invariant should hold");
         assert!(models.len() >= 6); // At least the 6 models we initialized
     }
     use std::panic::{self, AssertUnwindSafe};
@@ -308,7 +311,10 @@ mod tests {
     #[allow(clippy::panic)]
     fn poison_lock(fetcher: &StaticFetcher) {
         let _ = panic::catch_unwind(AssertUnwindSafe(|| {
-            let _guard = fetcher.models.write().expect("value must be present");
+            let _guard = fetcher
+                .models
+                .write()
+                .expect("Model registry invariant should hold");
             panic!("intentional poison for testing");
         }));
     }
