@@ -86,7 +86,6 @@ impl SQLiteSelector {
     }
 
     /// Query available auths and their weights using SQL
-    #[allow(clippy::significant_drop_tightening)]
     async fn query_available_auths(&self, auths: Vec<AuthInfo>) -> Option<Vec<WeightedAuth>> {
         self.stats.db_queries.fetch_add(1, Ordering::Relaxed);
 
@@ -271,7 +270,6 @@ impl SQLiteSelector {
     }
 
     /// Precompute weights for batch operations
-    #[allow(clippy::significant_drop_tightening)]
     pub async fn precompute_weights(&self, auth_ids: Vec<String>) -> Result<()> {
         if auth_ids.is_empty() {
             return Ok(());
@@ -364,7 +362,6 @@ impl SQLiteSelector {
     }
 
     /// Update weights in database
-    #[allow(clippy::significant_drop_tightening)]
     async fn update_weights(&self, weights: HashMap<String, f64>) -> Result<()> {
         {
             let db = self.store.get_db();
@@ -403,7 +400,6 @@ impl SQLiteSelector {
     }
 
     /// Get top N auths by weight
-    #[allow(clippy::significant_drop_tightening)]
     pub async fn get_top_auths(&self, limit: usize) -> Result<Vec<String>> {
         let auth_ids = {
             let db = self.store.get_db();

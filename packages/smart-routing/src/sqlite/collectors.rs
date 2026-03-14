@@ -365,7 +365,6 @@ impl SQLiteHealthManager {
     }
 
     /// Check if auth is available
-    #[allow(clippy::significant_drop_tightening)]
     pub async fn is_available(&self, auth_id: &str) -> bool {
         if auth_id.is_empty() {
             return true;

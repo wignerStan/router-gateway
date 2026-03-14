@@ -8,7 +8,6 @@ use chrono::{DateTime, Utc};
 
 impl SQLiteStore {
     /// Write metrics to database
-    #[allow(clippy::significant_drop_tightening)]
     pub async fn write_metrics(&self, auth_id: &str, metrics: &AuthMetrics) -> Result<()> {
         {
             let db = self.db.lock().await;
@@ -85,7 +84,6 @@ impl SQLiteStore {
     }
 
     /// Write health to database
-    #[allow(clippy::significant_drop_tightening)]
     pub async fn write_health(&self, auth_id: &str, health: &AuthHealth) -> Result<()> {
         {
             let db = self.db.lock().await;
@@ -150,7 +148,6 @@ impl SQLiteStore {
     }
 
     /// Write status code history entry
-    #[allow(clippy::significant_drop_tightening)]
     pub async fn write_status_history(
         &self,
         auth_id: &str,
@@ -173,7 +170,6 @@ impl SQLiteStore {
     }
 
     /// Load metrics from database
-    #[allow(clippy::significant_drop_tightening)]
     pub async fn load_metrics(&self, auth_id: &str) -> Result<Option<AuthMetrics>> {
         // Check cache first
         if self
@@ -269,7 +265,6 @@ impl SQLiteStore {
     }
 
     /// Load health from database
-    #[allow(clippy::significant_drop_tightening)]
     pub async fn load_health(&self, auth_id: &str) -> Result<Option<AuthHealth>> {
         // Check cache first
         if self
@@ -373,7 +368,6 @@ impl SQLiteStore {
     }
 
     /// Load all metrics from database
-    #[allow(clippy::significant_drop_tightening)]
     pub async fn load_all_metrics(&self) -> Result<std::collections::HashMap<String, AuthMetrics>> {
         let db = self.db.lock().await;
 
@@ -432,7 +426,6 @@ impl SQLiteStore {
     }
 
     /// Load all health from database
-    #[allow(clippy::significant_drop_tightening)]
     pub async fn load_all_health(&self) -> Result<std::collections::HashMap<String, AuthHealth>> {
         let db = self.db.lock().await;
 
@@ -492,7 +485,6 @@ impl SQLiteStore {
     }
 
     /// Cleanup old history records
-    #[allow(clippy::significant_drop_tightening)]
     pub async fn cleanup_old_history(&self, max_age_seconds: i64) -> Result<i64> {
         let cutoff = Utc::now() - chrono::Duration::seconds(max_age_seconds);
         let cutoff_str = cutoff.to_rfc3339();
@@ -511,7 +503,6 @@ impl SQLiteStore {
     }
 
     /// Get history statistics
-    #[allow(clippy::significant_drop_tightening)]
     pub async fn get_history_stats(&self) -> Result<(i64, Option<DateTime<Utc>>)> {
         let db = self.db.lock().await;
 

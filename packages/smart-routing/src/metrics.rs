@@ -114,7 +114,6 @@ impl MetricsCollector {
     }
 
     /// Record execution result
-    #[allow(clippy::significant_drop_tightening)]
     pub async fn record_result(
         &self,
         auth_id: &str,

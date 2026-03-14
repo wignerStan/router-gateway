@@ -67,7 +67,6 @@ impl HealthManager {
     }
 
     /// Update health status from execution result
-    #[allow(clippy::significant_drop_tightening)]
     pub async fn update_from_result(&self, auth_id: &str, success: bool, status_code: i32) {
         if auth_id.is_empty() {
             return;
@@ -194,7 +193,6 @@ impl HealthManager {
     }
 
     /// Mark auth as unavailable
-    #[allow(clippy::significant_drop_tightening)]
     pub async fn mark_unavailable(&self, auth_id: &str, duration: Duration) {
         if auth_id.is_empty() || duration.num_seconds() <= 0 {
             return;
