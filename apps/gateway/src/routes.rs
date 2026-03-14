@@ -475,7 +475,10 @@ mod integration_tests {
         Router,
     };
     use llm_tracing::{MemoryTraceCollector, TracingMiddleware};
-    use model_registry::Registry as ModelRegistry;
+    use model_registry::{
+        DataSource, ModelCapabilities, ModelInfo as RegistryModelInfo, RateLimits,
+        Registry as ModelRegistry,
+    };
     use smart_routing::{
         config::HealthConfig,
         executor::{ExecutorConfig, RouteExecutor},
@@ -486,6 +489,27 @@ mod integration_tests {
     use std::sync::Arc;
     use std::time::Instant;
     use tower::ServiceExt;
+
+    const MAX_RESPONSE_BYTES: usize = 4096;
+
+    const ERR_INVALID_REQUEST: &str = "invalid_request_error";
+    const ERR_CONFIG_ERROR: &str = "config_error";
+    const ERR_RATE_LIMIT: &str = "rate_limit_error";
+    const ERR_NO_ROUTE: &str = "no_route_available";
+
+    async fn read_json_body<T: serde::de::DeserializeOwned>(
+        response: axum::response::Response,
+    ) -> T {
+        let body_bytes = axum::body::to_bytes(response.into_body(), MAX_RESPONSE_BYTES)
+            .await
+            .expect("response body should be readable");
+        serde_json::from_slice(&body_bytes).unwrap_or_else(|e| {
+            panic!(
+                "Failed to deserialize JSON: {e}. Body: {}",
+                String::from_utf8_lossy(&body_bytes)
+            )
+        })
+    }
 
     fn create_test_state() -> AppState {
         AppState {
@@ -531,11 +555,7 @@ mod integration_tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(response.into_body(), 2048)
-            .await
-            .unwrap();
-        let list: Value =
-            serde_json::from_slice(&body).expect("models response should be valid JSON");
+        let list: serde_json::Value = read_json_body(response).await;
         assert_eq!(list["count"], 1);
         assert_eq!(list["models"][0]["id"], "gpt-4");
     }
@@ -559,11 +579,7 @@ mod integration_tests {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), 1024)
-            .await
-            .unwrap();
-        let health: HealthStatus =
-            serde_json::from_slice(&body).expect("health response should be valid JSON");
+        let health: HealthStatus = read_json_body(response).await;
 
         assert_eq!(health.status, "healthy");
         // uptime_secs can be 0 if the server started very recently
@@ -682,13 +698,13 @@ mod integration_tests {
 
         assert_eq!(headers.get("X-Content-Type-Options").unwrap(), "nosniff");
         assert_eq!(headers.get("X-Frame-Options").unwrap(), "DENY");
-        assert!(
-            headers.get("Referrer-Policy").is_some(),
-            "Referrer-Policy header should be set"
+        assert_eq!(
+            headers.get("Referrer-Policy").unwrap(),
+            "strict-origin-when-cross-origin"
         );
-        assert!(
-            headers.get("Content-Security-Policy").is_some(),
-            "Content-Security-Policy header should be set"
+        assert_eq!(
+            headers.get("Content-Security-Policy").unwrap(),
+            "default-src 'none'; frame-ancestors 'none'"
         );
     }
 
@@ -747,103 +763,921 @@ mod integration_tests {
         assert!(limiter.check("10.0.0.1"));
     }
 
+    /// Register models in the router's candidate builder so that
+    /// `build_candidates()` can produce route candidates from credentials.
+    fn register_models_in_state(
+        state: &mut AppState,
+        caps: smart_routing::classification::RequiredCapabilities,
+    ) {
+        for cred in &state.config.credentials {
+            for model_id in &cred.allowed_models {
+                state.router.set_model(
+                    model_id.clone(),
+                    RegistryModelInfo {
+                        id: model_id.clone(),
+                        name: format!("Test Model {model_id}"),
+                        provider: cred.provider.clone(),
+                        context_window: 128_000,
+                        max_output_tokens: 4096,
+                        input_price_per_million: 1.0,
+                        output_price_per_million: 2.0,
+                        capabilities: ModelCapabilities {
+                            streaming: caps.streaming,
+                            tools: caps.tools,
+                            vision: caps.vision,
+                            thinking: caps.thinking,
+                        },
+                        rate_limits: RateLimits {
+                            requests_per_minute: 60,
+                            tokens_per_minute: 90_000,
+                        },
+                        source: DataSource::Static,
+                    },
+                );
+            }
+        }
+    }
+
+    fn register_models_in_state_all(state: &mut AppState) {
+        register_models_in_state(
+            state,
+            smart_routing::classification::RequiredCapabilities {
+                vision: true,
+                tools: true,
+                streaming: true,
+                thinking: false,
+            },
+        );
+    }
+
+    // ----------------------------------------------------------------
+    // Phase 1 integration tests using build_full_app()
+    // ----------------------------------------------------------------
+
+    use crate::test_helpers::{
+        build_full_app, create_test_state as create_test_state_overrides, TestOverrides,
+    };
+
+    mod public_endpoints {
+        use super::*;
+        use axum::body::Body;
+        use axum::http::{Request, StatusCode};
+        use tower::ServiceExt;
+
+        #[tokio::test]
+        async fn test_root_response_structure() {
+            let state = create_test_state_overrides(TestOverrides::default());
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let mut request = Request::builder().uri("/").body(Body::empty()).unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+
+            let response = app.oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let value = read_json_body::<serde_json::Value>(response).await;
+
+            assert_eq!(value["name"], "Gateway API");
+            assert_eq!(value["version"], "0.1.0");
+            assert!(value["features"].is_array());
+            assert!(value["endpoints"].is_object());
+            assert_eq!(value["endpoints"]["health"], "/health");
+            assert_eq!(value["endpoints"]["models"], "/api/models");
+            assert_eq!(value["endpoints"]["route"], "/api/route");
+        }
+
+        #[tokio::test]
+        async fn test_health_response_structure() {
+            let state = create_test_state_overrides(TestOverrides::default());
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let mut request = Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+
+            let response = app.oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let health: HealthStatus = read_json_body(response).await;
+
+            assert_eq!(health.status, "healthy");
+            // uptime_secs is u64, always >= 0
+            assert_eq!(health.credential_count, 0);
+            assert_eq!(health.healthy_count, 0);
+            assert_eq!(health.degraded_count, 0);
+            assert_eq!(health.unhealthy_count, 0);
+        }
+
+        #[tokio::test]
+        async fn test_health_with_credentials() {
+            let state = create_test_state_overrides(TestOverrides {
+                credentials: vec![
+                    config::CredentialConfig {
+                        id: "cred-1".to_string(),
+                        provider: "openai".to_string(),
+                        api_key: "key-1".to_string(),
+                        ..Default::default()
+                    },
+                    config::CredentialConfig {
+                        id: "cred-2".to_string(),
+                        provider: "anthropic".to_string(),
+                        api_key: "key-2".to_string(),
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            });
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let mut request = Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+
+            let response = app.oneshot(request).await.unwrap();
+            let health: HealthStatus = read_json_body(response).await;
+
+            assert_eq!(health.credential_count, 2);
+            assert_eq!(health.healthy_count, 2);
+        }
+
+        #[tokio::test]
+        async fn test_health_credential_counts() {
+            let state = create_test_state_overrides(TestOverrides {
+                credentials: vec![
+                    config::CredentialConfig {
+                        id: "a".to_string(),
+                        provider: "openai".to_string(),
+                        api_key: "k".to_string(),
+                        ..Default::default()
+                    },
+                    config::CredentialConfig {
+                        id: "b".to_string(),
+                        provider: "openai".to_string(),
+                        api_key: "k".to_string(),
+                        ..Default::default()
+                    },
+                    config::CredentialConfig {
+                        id: "c".to_string(),
+                        provider: "google".to_string(),
+                        api_key: "k".to_string(),
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            });
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let mut request = Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+
+            let response = app.oneshot(request).await.unwrap();
+            let health: HealthStatus = read_json_body(response).await;
+
+            assert_eq!(health.credential_count, 3);
+            assert_eq!(health.healthy_count, 3);
+            assert_eq!(health.degraded_count, 0);
+            assert_eq!(health.unhealthy_count, 0);
+        }
+
+        #[tokio::test]
+        async fn test_public_endpoints_no_auth() {
+            let state = create_test_state_overrides(TestOverrides::default());
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let mut request = Request::builder().uri("/").body(Body::empty()).unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+            let response = app.clone().oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let mut request = Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+            let response = app.oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+    }
+
+    mod auth_middleware {
+        use super::*;
+        use axum::body::Body;
+        use axum::http::{Request, StatusCode};
+        use tower::ServiceExt;
+
+        #[tokio::test]
+        async fn test_valid_bearer_token() {
+            let state = create_test_state_overrides(TestOverrides::default());
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let mut request = Request::builder()
+                .uri("/api/models")
+                .header("authorization", "Bearer test-token")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+
+            let response = app.oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn test_invalid_token() {
+            let state = create_test_state_overrides(TestOverrides::default());
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let mut request = Request::builder()
+                .uri("/api/models")
+                .header("authorization", "Bearer wrong-token")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+
+            let response = app.oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+            let value = read_json_body::<serde_json::Value>(response).await;
+            assert_eq!(value["error"]["type"], ERR_INVALID_REQUEST);
+            assert!(value["error"]["message"]
+                .as_str()
+                .expect("The 'message' field should be a string in the error response.")
+                .contains("Invalid or expired API token"));
+        }
+
+        #[tokio::test]
+        async fn test_missing_auth_header() {
+            let state = create_test_state_overrides(TestOverrides::default());
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let mut request = Request::builder()
+                .uri("/api/models")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+
+            let response = app.oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+            let value = read_json_body::<serde_json::Value>(response).await;
+            assert!(value["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("Missing Authorization header"));
+        }
+
+        #[tokio::test]
+        async fn test_wrong_auth_scheme() {
+            let state = create_test_state_overrides(TestOverrides::default());
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let mut request = Request::builder()
+                .uri("/api/models")
+                .header("authorization", "Basic dXNlcjpwYXNz")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+
+            let response = app.oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+            let value = read_json_body::<serde_json::Value>(response).await;
+            assert!(value["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("Invalid or expired API token"));
+        }
+
+        #[tokio::test]
+        async fn test_no_auth_tokens_configured() {
+            let state = create_test_state_overrides(TestOverrides {
+                auth_tokens: vec![],
+                ..Default::default()
+            });
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let mut request = Request::builder()
+                .uri("/api/models")
+                .header("authorization", "Bearer any-token")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+
+            let response = app.oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+            let value = read_json_body::<serde_json::Value>(response).await;
+            assert_eq!(value["error"]["type"], ERR_CONFIG_ERROR);
+        }
+
+        #[tokio::test]
+        async fn test_second_token_valid() {
+            let state = create_test_state_overrides(TestOverrides {
+                auth_tokens: vec!["first-token".to_string(), "second-token".to_string()],
+                ..Default::default()
+            });
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let mut request = Request::builder()
+                .uri("/api/models")
+                .header("authorization", "Bearer second-token")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+
+            let response = app.oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+    }
+
+    mod rate_limiting {
+        use super::*;
+        use axum::body::Body;
+        use axum::http::{Request, StatusCode};
+        use tower::ServiceExt;
+
+        async fn exhaust_rate_limit(app: &Router, test_addr: SocketAddr, limit: usize) {
+            for _ in 0..limit {
+                let mut request = Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap();
+                request
+                    .extensions_mut()
+                    .insert(axum::extract::ConnectInfo(test_addr));
+                let response = app.clone().oneshot(request).await.unwrap();
+                assert_eq!(response.status(), StatusCode::OK);
+            }
+        }
+
+        #[tokio::test]
+        async fn test_allows_requests_under_limit() {
+            let state = create_test_state_overrides(TestOverrides {
+                rate_limit: Some(5),
+                ..Default::default()
+            });
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            exhaust_rate_limit(&app, test_addr, 5).await;
+        }
+
+        #[tokio::test]
+        async fn test_blocks_requests_over_limit() {
+            let state = create_test_state_overrides(TestOverrides {
+                rate_limit: Some(5),
+                ..Default::default()
+            });
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            exhaust_rate_limit(&app, test_addr, 5).await;
+
+            let mut request = Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+            let response = app.oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+
+            let value = read_json_body::<serde_json::Value>(response).await;
+            assert_eq!(value["error"]["type"], ERR_RATE_LIMIT);
+        }
+
+        #[tokio::test]
+        async fn test_independent_ip_buckets() {
+            let state = create_test_state_overrides(TestOverrides {
+                rate_limit: Some(1),
+                ..Default::default()
+            });
+            let app = build_full_app(state);
+            let addr_a = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+            let addr_b = std::net::SocketAddr::from(([127, 0, 0, 2], 12345));
+
+            let mut request = Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(addr_a));
+            let response = app.clone().oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let mut request = Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(addr_a));
+            let response = app.clone().oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+
+            let mut request = Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(addr_b));
+            let response = app.oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn test_rate_limit_response_body() {
+            let state = create_test_state_overrides(TestOverrides {
+                rate_limit: Some(1),
+                ..Default::default()
+            });
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            exhaust_rate_limit(&app, test_addr, 1).await;
+
+            let mut request = Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+            let response = app.oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+
+            let value = read_json_body::<serde_json::Value>(response).await;
+
+            assert_eq!(value["error"]["type"], ERR_RATE_LIMIT);
+            assert!(value["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("Too many requests"));
+        }
+
+        #[tokio::test]
+        async fn test_rate_limit_applies_to_public_endpoints() {
+            let state = create_test_state_overrides(TestOverrides {
+                rate_limit: Some(1),
+                ..Default::default()
+            });
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            exhaust_rate_limit(&app, test_addr, 1).await;
+
+            let mut request = Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+            let response = app.clone().oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+
+            let mut request = Request::builder().uri("/").body(Body::empty()).unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+            let response = app.oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        }
+    }
+
+    mod protected_endpoints {
+        use super::*;
+        use axum::body::Body;
+        use axum::http::{Request, StatusCode};
+        use serde_json::json;
+        use tower::ServiceExt;
+
+        #[tokio::test]
+        async fn test_models_requires_auth() {
+            let state = create_test_state_overrides(TestOverrides::default());
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let mut request = Request::builder()
+                .uri("/api/models")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+
+            let response = app.oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        }
+
+        #[tokio::test]
+        async fn test_route_requires_auth() {
+            let state = create_test_state_overrides(TestOverrides::default());
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let mut request = Request::builder()
+                .uri("/api/route")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+
+            let response = app.oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        }
+
+        #[tokio::test]
+        async fn test_chat_completions_requires_auth() {
+            let state = create_test_state_overrides(TestOverrides::default());
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let body = Body::from(
+                serde_json::to_string(&json!({
+                    "model": "gpt-4",
+                    "messages": [{"role": "user", "content": "hello"}]
+                }))
+                .unwrap(),
+            );
+            let mut request = Request::builder()
+                .method("POST")
+                .uri("/v1/chat/completions")
+                .header("content-type", "application/json")
+                .body(body)
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+
+            let response = app.oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        }
+
+        #[tokio::test]
+        async fn test_models_with_auth_returns_list() {
+            let state = create_test_state_overrides(TestOverrides {
+                credentials: vec![config::CredentialConfig {
+                    id: "test-cred".to_string(),
+                    provider: "openai".to_string(),
+                    api_key: "test-key".to_string(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            });
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let mut request = Request::builder()
+                .uri("/api/models")
+                .header("authorization", "Bearer test-token")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+
+            let response = app.oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let value = read_json_body::<serde_json::Value>(response).await;
+
+            assert!(value["models"].is_array());
+            assert!(!value["models"].as_array().unwrap().is_empty());
+            assert_eq!(value["count"], 1);
+        }
+    }
+
+    mod chat_completions {
+        use super::*;
+        use axum::body::Body;
+        use axum::http::{Request, StatusCode};
+        use serde_json::json;
+        use tower::ServiceExt;
+
+        fn chat_request_body() -> Body {
+            Body::from(
+                serde_json::to_string(&json!({
+                    "model": "gpt-4",
+                    "messages": [{"role": "user", "content": "Hello"}]
+                }))
+                .unwrap(),
+            )
+        }
+
+        fn make_chat_request(addr: std::net::SocketAddr) -> Request<Body> {
+            let mut request = Request::builder()
+                .method("POST")
+                .uri("/v1/chat/completions")
+                .header("content-type", "application/json")
+                .header("authorization", "Bearer test-token")
+                .body(chat_request_body())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(addr));
+            request
+        }
+
+        #[tokio::test]
+        async fn test_response_structure() {
+            // build_full_app() populates the router via add_credential but does
+            // not call set_model on the model registry, so the router finds no
+            // candidates and chat_completions returns 503.  This test verifies
+            // the correct error structure for that path.  Response-body tests for
+            // the happy path live in the inline-router tests above.
+            let state = create_test_state_overrides(TestOverrides {
+                credentials: vec![config::CredentialConfig {
+                    id: "test-cred".to_string(),
+                    provider: "openai".to_string(),
+                    api_key: "test-key".to_string(),
+                    allowed_models: vec!["gpt-4".to_string()],
+                    ..Default::default()
+                }],
+                ..Default::default()
+            });
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let response = app.oneshot(make_chat_request(test_addr)).await.unwrap();
+            assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+            let value = read_json_body::<serde_json::Value>(response).await;
+            assert_eq!(value["error"]["type"], ERR_NO_ROUTE);
+            assert!(value["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("No suitable routes"));
+        }
+
+        #[tokio::test]
+        async fn test_no_credentials_returns_503() {
+            let state = create_test_state_overrides(TestOverrides {
+                credentials: vec![],
+                ..Default::default()
+            });
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let response = app.oneshot(make_chat_request(test_addr)).await.unwrap();
+            assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+            let value = read_json_body::<serde_json::Value>(response).await;
+
+            assert_eq!(value["error"]["type"], ERR_NO_ROUTE);
+        }
+
+        #[tokio::test]
+        async fn test_gateway_metadata() {
+            let mut state = create_test_state_overrides(TestOverrides {
+                credentials: vec![config::CredentialConfig {
+                    id: "my-credential".to_string(),
+                    provider: "openai".to_string(),
+                    api_key: "key".to_string(),
+                    allowed_models: vec!["gpt-4".to_string()],
+                    ..Default::default()
+                }],
+                ..Default::default()
+            });
+            register_models_in_state_all(&mut state);
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let response = app.oneshot(make_chat_request(test_addr)).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let value = read_json_body::<serde_json::Value>(response).await;
+
+            let gw = &value["_gateway"];
+            assert!(gw.is_object(), "Expected _gateway object in response");
+
+            assert_eq!(gw["route"]["credential_id"], "my-credential");
+            assert_eq!(gw["route"]["provider"], "openai");
+            assert!(gw["classification"]["format"].is_string());
+
+            let caps = &gw["classification"]["capabilities"];
+            assert_eq!(caps["vision"], false);
+            assert_eq!(caps["tools"], false);
+            assert_eq!(caps["streaming"], false);
+            // thinking is currently omitted by the chat_completions handler
+            assert!(caps["thinking"].is_null());
+        }
+
+        #[tokio::test]
+        async fn test_classification_in_response() {
+            let mut state = create_test_state_overrides(TestOverrides {
+                credentials: vec![config::CredentialConfig {
+                    id: "test-cred".to_string(),
+                    provider: "openai".to_string(),
+                    api_key: "test-key".to_string(),
+                    allowed_models: vec!["gpt-4".to_string()],
+                    ..Default::default()
+                }],
+                ..Default::default()
+            });
+            register_models_in_state_all(&mut state);
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let response = app.oneshot(make_chat_request(test_addr)).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+
+            let value = read_json_body::<serde_json::Value>(response).await;
+
+            let caps = &value["_gateway"]["classification"]["capabilities"];
+            assert_eq!(caps["vision"], false);
+            assert_eq!(caps["tools"], false);
+            assert_eq!(caps["streaming"], false);
+            // thinking is currently omitted by the chat_completions handler
+            assert!(caps["thinking"].is_null());
+        }
+    }
+
+    mod middleware_composition {
+        use super::*;
+        use axum::body::Body;
+        use axum::http::{Request, StatusCode};
+        use tower::ServiceExt;
+
+        fn check_security_headers(headers: &axum::http::HeaderMap) {
+            assert_eq!(headers.get("X-Content-Type-Options").unwrap(), "nosniff");
+            assert_eq!(headers.get("X-Frame-Options").unwrap(), "DENY");
+            assert_eq!(
+                headers.get("Referrer-Policy").unwrap(),
+                "strict-origin-when-cross-origin"
+            );
+            assert_eq!(
+                headers.get("Content-Security-Policy").unwrap(),
+                "default-src 'none'; frame-ancestors 'none'"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_security_headers_on_all_responses() {
+            let state = create_test_state_overrides(TestOverrides::default());
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let mut request = Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+            let response = app.clone().oneshot(request).await.unwrap();
+            check_security_headers(response.headers());
+
+            let mut request = Request::builder()
+                .uri("/api/models")
+                .header("authorization", "Bearer test-token")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+            let response = app.oneshot(request).await.unwrap();
+            check_security_headers(response.headers());
+        }
+
+        #[tokio::test]
+        async fn test_security_headers_on_error_responses() {
+            let state = create_test_state_overrides(TestOverrides::default());
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let mut request = Request::builder()
+                .uri("/api/models")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+            let response = app.oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+            check_security_headers(response.headers());
+        }
+
+        #[tokio::test]
+        async fn test_auth_before_handler() {
+            let state = create_test_state_overrides(TestOverrides::default());
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let mut request = Request::builder()
+                .uri("/api/models")
+                .header("authorization", "Bearer invalid-token")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+            let response = app.oneshot(request).await.unwrap();
+
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+            assert_ne!(response.status(), StatusCode::NOT_FOUND);
+            assert_ne!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        }
+
+        #[tokio::test]
+        async fn test_rate_limit_before_auth() {
+            let state = create_test_state_overrides(TestOverrides {
+                rate_limit: Some(1),
+                ..Default::default()
+            });
+            let app = build_full_app(state);
+            let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+            let mut request = Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+            let response = app.clone().oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+
+            // No auth header — if auth ran before rate-limit, this would
+            // return 401 UNAUTHORIZED, not 429 TOO_MANY_REQUESTS.
+            let mut request = Request::builder()
+                .uri("/api/models")
+                .body(Body::empty())
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(axum::extract::ConnectInfo(test_addr));
+            let response = app.oneshot(request).await.unwrap();
+            assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+
+            let value = read_json_body::<serde_json::Value>(response).await;
+            assert_eq!(value["error"]["type"], ERR_RATE_LIMIT);
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // Provider adapter integration tests
+    // ----------------------------------------------------------------
+
     mod provider_integration_tests {
         use super::*;
         use crate::config::CredentialConfig;
-        use crate::test_helpers::build_full_app;
-        use crate::GatewayConfig;
-        use axum::body::Body;
-        use axum::http::{Request, StatusCode};
-        use model_registry::ModelInfo;
-        use std::sync::Arc;
-        use std::time::Instant;
-        use tower::ServiceExt;
+        use crate::test_helpers::{
+            build_full_app, create_test_state as create_test_state_overrides, TestOverrides,
+        };
 
-        const MAX_RESPONSE_BYTES: usize = 4096;
-
-        async fn read_json_body(response: axum::response::Response) -> serde_json::Value {
-            let body_bytes = axum::body::to_bytes(response.into_body(), MAX_RESPONSE_BYTES)
-                .await
-                .expect("response body should be readable");
-            serde_json::from_slice(&body_bytes).expect("response body should be valid JSON")
-        }
-
-        /// Build a minimal [`ModelInfo`] for test registration.
-        fn test_model_info(id: &str, provider: &str) -> ModelInfo {
-            ModelInfo {
+        fn make_credential(id: &str, provider: &str, models: &[&str]) -> CredentialConfig {
+            CredentialConfig {
                 id: id.to_string(),
-                name: format!("Test {id}"),
                 provider: provider.to_string(),
-                context_window: 128_000,
-                max_output_tokens: 4096,
-                input_price_per_million: 1.0,
-                output_price_per_million: 2.0,
-                capabilities: model_registry::ModelCapabilities {
-                    streaming: true,
-                    tools: true,
-                    vision: true,
-                    thinking: false,
-                },
-                rate_limits: model_registry::RateLimits {
-                    requests_per_minute: 60,
-                    tokens_per_minute: 90_000,
-                },
-                source: model_registry::DataSource::Static,
-            }
-        }
-
-        /// Creates an [`AppState`] whose SmartRouter has both credentials and
-        /// models registered so that `build_candidates` produces candidates.
-        fn create_state_with_routing(
-            creds: Vec<CredentialConfig>,
-            models: Vec<ModelInfo>,
-        ) -> AppState {
-            let mut config = GatewayConfig::default();
-            config.server.auth_tokens = vec!["test-token".to_string()];
-            config.credentials = creds;
-
-            let mut smart_router = smart_routing::router::Router::new();
-            for cred in &config.credentials {
-                smart_router.add_credential(cred.id.clone(), cred.allowed_models.clone());
-            }
-            for model in &models {
-                smart_router.set_model(model.id.clone(), model.clone());
-            }
-
-            let metrics = smart_routing::metrics::MetricsCollector::new();
-            let health = smart_routing::health::HealthManager::new(
-                smart_routing::config::HealthConfig::default(),
-            );
-            let executor = Arc::new(smart_routing::executor::RouteExecutor::new(
-                smart_routing::executor::ExecutorConfig::default(),
-                metrics,
-                health,
-            ));
-
-            let credentials: Vec<smart_routing::weight::AuthInfo> = config
-                .credentials
-                .iter()
-                .map(|c| smart_routing::weight::AuthInfo {
-                    id: c.id.clone(),
-                    priority: Some(c.priority),
-                    quota_exceeded: false,
-                    unavailable: false,
-                    model_states: vec![],
-                })
-                .collect();
-
-            AppState {
-                config,
-                registry: ModelRegistry::default(),
-                router: smart_router,
-                executor,
-                classifier: Arc::new(DefaultRequestClassifier),
-                tracing: llm_tracing::TracingMiddleware::new(Arc::new(
-                    llm_tracing::MemoryTraceCollector::with_default_size(),
-                )),
-                start_time: Instant::now(),
-                credentials,
-                rate_limiter: Arc::new(RateLimiter::new(60)),
+                api_key: "test-key-123".to_string(),
+                allowed_models: models.iter().map(|m| m.to_string()).collect(),
+                ..Default::default()
             }
         }
 
@@ -862,14 +1696,14 @@ mod integration_tests {
             req
         }
 
-        fn make_credential(id: &str, provider: &str, models: &[&str]) -> CredentialConfig {
-            CredentialConfig {
-                id: id.to_string(),
-                provider: provider.to_string(),
-                api_key: "test-key-123".to_string(),
-                allowed_models: models.iter().map(|m| m.to_string()).collect(),
+        /// Build state with credentials and models registered for routing.
+        fn create_routing_state(creds: Vec<CredentialConfig>) -> AppState {
+            let mut state = create_test_state_overrides(TestOverrides {
+                credentials: creds,
                 ..Default::default()
-            }
+            });
+            register_models_in_state_all(&mut state);
+            state
         }
 
         // --- Provider Selection Tests ---
@@ -877,8 +1711,7 @@ mod integration_tests {
         #[tokio::test]
         async fn test_openai_adapter_selected() {
             let creds = vec![make_credential("openai-1", "openai", &["gpt-4"])];
-            let models = vec![test_model_info("gpt-4", "openai")];
-            let state = create_state_with_routing(creds, models);
+            let state = create_routing_state(creds);
             let app = build_full_app(state);
 
             let req = make_chat_request(
@@ -892,15 +1725,14 @@ mod integration_tests {
             let response = app.oneshot(req).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK);
 
-            let json_body = read_json_body(response).await;
+            let json_body = read_json_body::<serde_json::Value>(response).await;
             assert_eq!(json_body["_gateway"]["route"]["provider"], "openai");
         }
 
         #[tokio::test]
         async fn test_google_adapter_selected() {
             let creds = vec![make_credential("google-1", "google", &["gemini-pro"])];
-            let models = vec![test_model_info("gemini-pro", "google")];
-            let state = create_state_with_routing(creds, models);
+            let state = create_routing_state(creds);
             let app = build_full_app(state);
 
             let req = make_chat_request(
@@ -914,7 +1746,7 @@ mod integration_tests {
             let response = app.oneshot(req).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK);
 
-            let json_body = read_json_body(response).await;
+            let json_body = read_json_body::<serde_json::Value>(response).await;
             assert_eq!(json_body["_gateway"]["route"]["provider"], "google");
         }
 
@@ -925,8 +1757,7 @@ mod integration_tests {
                 "deepseek",
                 &["deepseek-chat"],
             )];
-            let models = vec![test_model_info("deepseek-chat", "deepseek")];
-            let state = create_state_with_routing(creds, models);
+            let state = create_routing_state(creds);
             let app = build_full_app(state);
 
             let req = make_chat_request(
@@ -940,20 +1771,19 @@ mod integration_tests {
             let response = app.oneshot(req).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK);
 
-            let json_body = read_json_body(response).await;
+            let json_body = read_json_body::<serde_json::Value>(response).await;
             // DeepSeek uses OpenAI adapter internally but provider field stays "deepseek"
             assert_eq!(json_body["_gateway"]["route"]["provider"], "deepseek");
         }
 
         #[tokio::test]
-        async fn test_unknown_provider_preserves_provider_name() {
+        async fn test_unknown_provider_is_routed_successfully() {
             let creds = vec![make_credential(
                 "unknown-1",
                 "unknown-provider",
                 &["some-model"],
             )];
-            let models = vec![test_model_info("some-model", "unknown-provider")];
-            let state = create_state_with_routing(creds, models);
+            let state = create_routing_state(creds);
             let app = build_full_app(state);
 
             let req = make_chat_request(
@@ -967,7 +1797,7 @@ mod integration_tests {
             let response = app.oneshot(req).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK);
 
-            let json_body = read_json_body(response).await;
+            let json_body = read_json_body::<serde_json::Value>(response).await;
             assert_eq!(
                 json_body["_gateway"]["route"]["provider"],
                 "unknown-provider"
@@ -979,8 +1809,7 @@ mod integration_tests {
         #[tokio::test]
         async fn test_openai_endpoint_default() {
             let creds = vec![make_credential("openai-1", "openai", &["gpt-4"])];
-            let models = vec![test_model_info("gpt-4", "openai")];
-            let state = create_state_with_routing(creds, models);
+            let state = create_routing_state(creds);
             let app = build_full_app(state);
 
             let req = make_chat_request(
@@ -994,7 +1823,7 @@ mod integration_tests {
             let response = app.oneshot(req).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK);
 
-            let json_body = read_json_body(response).await;
+            let json_body = read_json_body::<serde_json::Value>(response).await;
             assert_eq!(json_body["model"], "gpt-4");
             assert_eq!(json_body["_gateway"]["route"]["credential_id"], "openai-1");
         }
@@ -1005,8 +1834,7 @@ mod integration_tests {
             cred.base_url = Some("https://custom.openai.proxy.com/v1".to_string());
 
             let creds = vec![cred];
-            let models = vec![test_model_info("gpt-4", "openai")];
-            let state = create_state_with_routing(creds, models);
+            let state = create_routing_state(creds);
             let app = build_full_app(state);
 
             let req = make_chat_request(
@@ -1020,7 +1848,7 @@ mod integration_tests {
             let response = app.oneshot(req).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK);
 
-            let json_body = read_json_body(response).await;
+            let json_body = read_json_body::<serde_json::Value>(response).await;
             assert_eq!(json_body["model"], "gpt-4");
             assert_eq!(
                 json_body["_gateway"]["route"]["credential_id"],
@@ -1031,8 +1859,7 @@ mod integration_tests {
         #[tokio::test]
         async fn test_google_endpoint_includes_model() {
             let creds = vec![make_credential("google-1", "google", &["gemini-1.5-pro"])];
-            let models = vec![test_model_info("gemini-1.5-pro", "google")];
-            let state = create_state_with_routing(creds, models);
+            let state = create_routing_state(creds);
             let app = build_full_app(state);
 
             let req = make_chat_request(
@@ -1046,8 +1873,7 @@ mod integration_tests {
             let response = app.oneshot(req).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK);
 
-            let json_body = read_json_body(response).await;
-            // The model returned in the response should match what we sent
+            let json_body = read_json_body::<serde_json::Value>(response).await;
             assert_eq!(json_body["model"], "gemini-1.5-pro");
         }
 
@@ -1056,8 +1882,7 @@ mod integration_tests {
         #[tokio::test]
         async fn test_chat_completions_with_temperature_and_max_tokens() {
             let creds = vec![make_credential("openai-1", "openai", &["gpt-4"])];
-            let models = vec![test_model_info("gpt-4", "openai")];
-            let state = create_state_with_routing(creds, models);
+            let state = create_routing_state(creds);
             let app = build_full_app(state);
 
             let req = make_chat_request(
@@ -1073,7 +1898,7 @@ mod integration_tests {
             let response = app.oneshot(req).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK);
 
-            let json_body = read_json_body(response).await;
+            let json_body = read_json_body::<serde_json::Value>(response).await;
 
             assert_eq!(json_body["object"], "chat.completion");
             assert_eq!(json_body["model"], "gpt-4");
@@ -1086,8 +1911,7 @@ mod integration_tests {
         #[tokio::test]
         async fn test_chat_completions_vision_request() {
             let creds = vec![make_credential("openai-1", "openai", &["gpt-4-vision"])];
-            let models = vec![test_model_info("gpt-4-vision", "openai")];
-            let state = create_state_with_routing(creds, models);
+            let state = create_routing_state(creds);
             let app = build_full_app(state);
 
             let req = make_chat_request(
@@ -1107,9 +1931,8 @@ mod integration_tests {
             let response = app.oneshot(req).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK);
 
-            let json_body = read_json_body(response).await;
+            let json_body = read_json_body::<serde_json::Value>(response).await;
 
-            // Verify classification includes vision=true
             assert_eq!(
                 json_body["_gateway"]["classification"]["capabilities"]["vision"], true,
                 "Expected vision capability to be true"
