@@ -537,8 +537,10 @@ mod tests {
         };
         use tower::ServiceExt;
 
-        let collector = std::sync::Arc::new(crate::collector::MemoryTraceCollector::with_default_size());
-        let collector_dyn = collector.clone() as std::sync::Arc<dyn crate::collector::TraceCollector>;
+        let collector =
+            std::sync::Arc::new(crate::collector::MemoryTraceCollector::with_default_size());
+        let collector_dyn =
+            collector.clone() as std::sync::Arc<dyn crate::collector::TraceCollector>;
         let middleware = TracingMiddleware::new(collector_dyn);
 
         let app = Router::new()
@@ -590,12 +592,17 @@ mod tests {
         };
         use tower::ServiceExt;
 
-        let collector = std::sync::Arc::new(crate::collector::MemoryTraceCollector::with_default_size());
-        let collector_dyn = collector.clone() as std::sync::Arc<dyn crate::collector::TraceCollector>;
+        let collector =
+            std::sync::Arc::new(crate::collector::MemoryTraceCollector::with_default_size());
+        let collector_dyn =
+            collector.clone() as std::sync::Arc<dyn crate::collector::TraceCollector>;
         let middleware = TracingMiddleware::new(collector_dyn);
 
         let app = Router::new()
-            .route("/error", get(|| async { (StatusCode::INTERNAL_SERVER_ERROR, "Error") }))
+            .route(
+                "/error",
+                get(|| async { (StatusCode::INTERNAL_SERVER_ERROR, "Error") }),
+            )
             .layer(axum::middleware::from_fn_with_state(
                 middleware,
                 super::tracing_middleware,
