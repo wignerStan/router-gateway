@@ -59,8 +59,8 @@ impl Registry {
 
         // 1. Check cache first (read lock)
         {
-            let now = Utc::now();
             let cache = self.cache.read().await;
+            let now = Utc::now();
             if let Some(cached) = cache.get(model_id) {
                 if now < cached.expires_at {
                     return Ok(Some(cached.info.clone()));
@@ -153,11 +153,11 @@ impl Registry {
 
         let mut set = JoinSet::new();
         let mut result = HashMap::new();
-        let now = Utc::now();
 
         // Check cache and identify needed models
         {
             let cache = self.cache.read().await;
+            let now = Utc::now();
             for model_id in model_ids {
                 if model_id.is_empty() {
                     continue;
@@ -193,13 +193,12 @@ impl Registry {
         &self,
         model_ids: &[String],
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let now = Utc::now();
-
         if model_ids.is_empty() {
             // Refresh all models
             let models = self.fetcher.list_all().await?;
 
             let mut cache = self.cache.write().await;
+            let now = Utc::now();
             for (id, info) in models {
                 if info.validate().is_err() {
                     continue;
@@ -249,8 +248,8 @@ impl Registry {
 
     /// Removes expired entries from the cache.
     pub async fn cleanup_expired(&self) -> usize {
-        let now = Utc::now();
         let mut cache = self.cache.write().await;
+        let now = Utc::now();
         let initial_len = cache.len();
 
         cache.retain(|_, cached| now < cached.expires_at);
@@ -260,8 +259,8 @@ impl Registry {
 
     /// Finds all cached models that support a specific capability.
     pub async fn find_by_capability(&self, capability: &str) -> Vec<ModelInfo> {
-        let now = Utc::now();
         let cache = self.cache.read().await;
+        let now = Utc::now();
         let mut result = Vec::new();
 
         for cached in cache.values() {
@@ -275,8 +274,8 @@ impl Registry {
 
     /// Finds all cached models from a specific provider.
     pub async fn find_by_provider(&self, provider: &str) -> Vec<ModelInfo> {
-        let now = Utc::now();
         let cache = self.cache.read().await;
+        let now = Utc::now();
         let mut result = Vec::new();
 
         for cached in cache.values() {
@@ -290,8 +289,8 @@ impl Registry {
 
     /// Filters cached models by capability category.
     pub async fn filter_by_capability(&self, cap: CapabilityCategory) -> Vec<ModelInfo> {
-        let now = Utc::now();
         let cache = self.cache.read().await;
+        let now = Utc::now();
         let mut result = Vec::new();
 
         for cached in cache.values() {
@@ -305,8 +304,8 @@ impl Registry {
 
     /// Filters models by quality tier.
     pub async fn filter_by_tier(&self, tier: TierCategory) -> Vec<ModelInfo> {
-        let now = Utc::now();
         let cache = self.cache.read().await;
+        let now = Utc::now();
         let mut result = Vec::new();
 
         for cached in cache.values() {
@@ -320,8 +319,8 @@ impl Registry {
 
     /// Filters models by cost category.
     pub async fn filter_by_cost(&self, cost: CostCategory) -> Vec<ModelInfo> {
-        let now = Utc::now();
         let cache = self.cache.read().await;
+        let now = Utc::now();
         let mut result = Vec::new();
 
         for cached in cache.values() {
@@ -335,8 +334,8 @@ impl Registry {
 
     /// Filters models by context window category.
     pub async fn filter_by_context_window(&self, context: ContextWindowCategory) -> Vec<ModelInfo> {
-        let now = Utc::now();
         let cache = self.cache.read().await;
+        let now = Utc::now();
         let mut result = Vec::new();
 
         for cached in cache.values() {
@@ -350,8 +349,8 @@ impl Registry {
 
     /// Filters models by provider vendor.
     pub async fn filter_by_provider(&self, provider: ProviderCategory) -> Vec<ModelInfo> {
-        let now = Utc::now();
         let cache = self.cache.read().await;
+        let now = Utc::now();
         let mut result = Vec::new();
 
         for cached in cache.values() {
@@ -386,8 +385,8 @@ impl Registry {
     /// Finds the cheapest model that can fit the context window.
     /// Returns None if no model can fit the requested token count.
     pub async fn find_best_fit(&self, tokens: usize) -> Option<ModelInfo> {
-        let now = Utc::now();
         let cache = self.cache.read().await;
+        let now = Utc::now();
         let mut best_model: Option<ModelInfo> = None;
         let mut best_cost = f64::MAX;
 
@@ -431,11 +430,13 @@ impl Registry {
             loop {
                 tokio::select! {
                     _ = interval_timer.tick() => {
+                        let fetch_result = fetcher.list_all().await;
+
                         let mut cache_write = cache.write().await;
                         let now = Utc::now();
 
                         // Refresh all models
-                        if let Ok(models) = fetcher.list_all().await {
+                        if let Ok(models) = fetch_result {
                             for (id, info) in models {
                                 if info.validate().is_ok() {
                                     cache_write.insert(
