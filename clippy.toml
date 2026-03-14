@@ -8,6 +8,3 @@ enum-variant-name-threshold = 3
 type-complexity-threshold = 250
 too-many-lines-threshold = 500
 too-many-arguments-threshold = 7
-
-allow-unwrap-in-tests = true
-allow-expect-in-tests = true

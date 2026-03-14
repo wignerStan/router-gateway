@@ -53,8 +53,7 @@ impl HealthManager {
         let health = self.health.read().await;
         health
             .get(auth_id)
-            .map(|h| h.status)
-            .unwrap_or(HealthStatus::Healthy)
+            .map_or(HealthStatus::Healthy, |h| h.status)
     }
 
     /// Get auth health details

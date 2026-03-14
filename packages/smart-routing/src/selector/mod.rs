@@ -57,7 +57,7 @@ impl SmartSelector {
         let calculator: Box<dyn WeightCalculator> = if config.policy.enabled {
             Box::new(PolicyAwareWeightCalculator::new(
                 config.weight.clone(),
-                matcher.clone(),
+                Arc::clone(&matcher),
             ))
         } else {
             Box::new(crate::weight::DefaultWeightCalculator::new(
@@ -77,7 +77,7 @@ impl SmartSelector {
     /// Set the policy registry for policy-aware routing
     pub fn set_policy_registry(&mut self, registry: PolicyRegistry) {
         let matcher = Arc::new(PolicyMatcher::new(registry));
-        self.policy_matcher = Some(matcher.clone());
+        self.policy_matcher = Some(Arc::clone(&matcher));
 
         if self.config.policy.enabled {
             self.calculator = Box::new(PolicyAwareWeightCalculator::new(
@@ -93,17 +93,17 @@ impl SmartSelector {
     }
 
     /// Get metrics collector
-    pub fn metrics(&self) -> &MetricsCollector {
+    pub const fn metrics(&self) -> &MetricsCollector {
         &self.metrics
     }
 
     /// Get health manager
-    pub fn health(&self) -> &HealthManager {
+    pub const fn health(&self) -> &HealthManager {
         &self.health
     }
 
     /// Get config
-    pub fn config(&self) -> &SmartRoutingConfig {
+    pub const fn config(&self) -> &SmartRoutingConfig {
         &self.config
     }
 

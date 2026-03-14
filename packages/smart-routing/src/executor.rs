@@ -73,7 +73,11 @@ pub struct RouteExecutor {
 
 impl RouteExecutor {
     /// Create a new route executor
-    pub fn new(config: ExecutorConfig, metrics: MetricsCollector, health: HealthManager) -> Self {
+    pub const fn new(
+        config: ExecutorConfig,
+        metrics: MetricsCollector,
+        health: HealthManager,
+    ) -> Self {
         Self {
             config,
             metrics,
@@ -311,7 +315,7 @@ impl RouteExecutor {
                     AttemptResult::RetryableError {
                         status_code,
                         latency,
-                        error: format!("HTTP {}", status_code),
+                        error: format!("HTTP {status_code}"),
                     }
                 }
             },
@@ -345,17 +349,17 @@ impl RouteExecutor {
     }
 
     /// Get config
-    pub fn config(&self) -> &ExecutorConfig {
+    pub const fn config(&self) -> &ExecutorConfig {
         &self.config
     }
 
     /// Get metrics collector
-    pub fn metrics(&self) -> &MetricsCollector {
+    pub const fn metrics(&self) -> &MetricsCollector {
         &self.metrics
     }
 
     /// Get health manager
-    pub fn health(&self) -> &HealthManager {
+    pub const fn health(&self) -> &HealthManager {
         &self.health
     }
 }
@@ -547,9 +551,9 @@ mod tests {
 
         let result = executor
             .execute(primary, fallbacks, {
-                let cc = call_count.clone();
+                let cc = std::sync::Arc::clone(&call_count);
                 move |_route| {
-                    let cc2 = cc.clone();
+                    let cc2 = std::sync::Arc::clone(&cc);
                     async move {
                         let count = cc2.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         if count == 0 {
@@ -569,6 +573,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::panic)]
     async fn test_loop_guard_provider_diversity() {
         // Scenario: Same provider triggers diversity enforcement
         let config = ExecutorConfig {
@@ -607,6 +612,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::panic)]
     async fn test_success_within_budget_stops_retrying() {
         // Scenario: Success within budget stops retrying
         let config = ExecutorConfig {

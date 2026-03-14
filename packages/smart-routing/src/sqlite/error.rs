@@ -22,7 +22,7 @@ pub enum SqliteError {
 
 impl SqliteError {
     /// Convenience constructor for query errors.
-    pub fn query(operation: &'static str, source: rusqlite::Error) -> Self {
+    pub const fn query(operation: &'static str, source: rusqlite::Error) -> Self {
         Self::Query { operation, source }
     }
 }

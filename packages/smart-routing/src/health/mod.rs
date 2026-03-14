@@ -76,7 +76,7 @@ pub struct HealthManager {
     op_count: Arc<std::sync::atomic::AtomicI64>,
 }
 
-/// Clone creates a new HealthManager that shares the same underlying health storage.
+/// Clone creates a new `HealthManager` that shares the same underlying health storage.
 ///
 /// The clone inherits the same `config`, `max_entries`, and `cleanup_interval`,
 /// and points to the same health map via `Arc`. Updates through either the original

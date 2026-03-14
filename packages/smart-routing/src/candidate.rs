@@ -122,7 +122,7 @@ impl Default for CandidateBuilder {
 }
 
 /// Check if required capabilities are supported by a model
-pub fn check_capability_support(
+pub const fn check_capability_support(
     required: &RequiredCapabilities,
     model_info: &ModelInfo,
 ) -> CapabilitySupport {
@@ -161,15 +161,15 @@ pub enum CapabilitySupport {
 
 impl CapabilitySupport {
     /// Check if capabilities are fully supported
-    pub fn is_supported(&self) -> bool {
-        matches!(self, CapabilitySupport::Supported)
+    pub const fn is_supported(&self) -> bool {
+        matches!(self, Self::Supported)
     }
 
     /// Get description of missing capabilities
     pub fn missing_description(&self) -> Option<String> {
         match self {
-            CapabilitySupport::Supported => None,
-            CapabilitySupport::Unsupported {
+            Self::Supported => None,
+            Self::Unsupported {
                 missing_vision,
                 missing_tools,
                 missing_streaming,
@@ -206,7 +206,7 @@ mod tests {
     fn create_test_model(id: &str, provider: &str, context_window: usize) -> ModelInfo {
         ModelInfo {
             id: id.to_string(),
-            name: format!("Test Model {}", id),
+            name: format!("Test Model {id}"),
             provider: provider.to_string(),
             context_window,
             max_output_tokens: 4096,
@@ -454,7 +454,7 @@ mod tests {
         assert!(!support.is_supported());
         let missing = support.missing_description();
         assert!(missing.is_some());
-        let desc = missing.unwrap();
+        let desc = missing.expect("value must be present");
         assert!(desc.contains("vision"));
         assert!(desc.contains("thinking"));
     }

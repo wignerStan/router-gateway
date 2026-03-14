@@ -45,7 +45,7 @@ struct WeightCache {
 }
 
 impl SQLiteSelector {
-    /// Create a new SQLite selector
+    /// Create a new `SQLite` selector
     pub fn new(store: SQLiteStore, config: SmartRoutingConfig) -> Self {
         Self {
             store,
@@ -110,7 +110,7 @@ impl SQLiteSelector {
         let db = db.lock().await;
 
         // Execute SQL query with weight calculation
-        let query = r#"
+        let query = r"
             SELECT
                 ids.auth_id,
                 COALESCE(m.success_rate, 1.0) as success_rate,
@@ -127,7 +127,7 @@ impl SQLiteSelector {
             FROM (SELECT value as auth_id FROM json_each(?1)) as ids
             LEFT JOIN auth_metrics m ON m.auth_id = ids.auth_id
             LEFT JOIN auth_health h ON h.auth_id = ids.auth_id
-        "#;
+        ";
 
         let mut stmt = db.prepare(query).ok()?;
 
@@ -182,16 +182,22 @@ impl SQLiteSelector {
 
         // Calculate priority score
         let priority_score = auth.priority.map_or(0.5, |p| {
-            let score = (p as f64 + 100.0) / 200.0;
+            let score = (f64::from(p) + 100.0) / 200.0;
             score.clamp(0.0, 1.0)
         });
 
         // Weighted sum
-        let mut weight = cfg.success_rate_weight * success_rate
-            + cfg.latency_weight * latency_score
-            + cfg.health_weight * health_factor
-            + cfg.load_weight * load_score
-            + cfg.priority_weight * priority_score;
+        let mut weight = cfg.priority_weight.mul_add(
+            priority_score,
+            cfg.load_weight.mul_add(
+                load_score,
+                cfg.health_weight.mul_add(
+                    health_factor,
+                    cfg.success_rate_weight
+                        .mul_add(success_rate, cfg.latency_weight * latency_score),
+                ),
+            ),
+        );
 
         // Apply health penalties
         if health_factor < 0.1 {
@@ -216,7 +222,11 @@ impl SQLiteSelector {
     /// Select auth by weighted random choice
     fn select_by_weight(&self, available: Vec<WeightedAuth>) -> String {
         if available.len() == 1 {
-            return available.into_iter().next().unwrap().id;
+            return available
+                .into_iter()
+                .next()
+                .expect("value must be present")
+                .id;
         }
 
         // Calculate total weight
@@ -225,11 +235,18 @@ impl SQLiteSelector {
         if total_weight <= 0.0 {
             // All weights are zero, select randomly
             let idx = rand::thread_rng().gen_range(0..available.len());
-            return available.into_iter().nth(idx).unwrap().id;
+            return available
+                .into_iter()
+                .nth(idx)
+                .expect("value must be present")
+                .id;
         }
 
         // Save last element as fallback for floating-point edge cases
-        let fallback = available.last().map(|a| a.id.clone()).unwrap();
+        let fallback = available
+            .last()
+            .map(|a| a.id.clone())
+            .expect("value must be present");
 
         // Weighted random selection
         let r = rand::thread_rng().gen::<f64>() * total_weight;
@@ -260,7 +277,7 @@ impl SQLiteSelector {
         let db = db.lock().await;
 
         // Execute SQL query
-        let query = r#"
+        let query = r"
             SELECT
                 ids.auth_id,
                 COALESCE(m.success_rate, 1.0),
@@ -277,7 +294,7 @@ impl SQLiteSelector {
             FROM (SELECT value as auth_id FROM json_each(?1)) as ids
             LEFT JOIN auth_metrics m ON m.auth_id = ids.auth_id
             LEFT JOIN auth_health h ON h.auth_id = ids.auth_id
-        "#;
+        ";
 
         let mut stmt = db
             .prepare(query)
@@ -346,14 +363,14 @@ impl SQLiteSelector {
         // Prepare insert statement
         let mut stmt = tx
             .prepare(
-                r#"
+                r"
             INSERT INTO auth_weights (auth_id, weight, calculated_at, strategy)
             VALUES (?1, ?2, datetime('now'), ?3)
             ON CONFLICT(auth_id) DO UPDATE SET
                 weight = excluded.weight,
                 calculated_at = excluded.calculated_at,
                 strategy = excluded.strategy
-        "#,
+        ",
             )
             .map_err(|e| SqliteError::query("prepare_weight_insert", e))?;
 
@@ -375,13 +392,12 @@ impl SQLiteSelector {
         let db = db.lock().await;
 
         let query = format!(
-            r#"
+            r"
             SELECT auth_id FROM auth_weights
             WHERE strategy = ?1
             ORDER BY weight DESC
-            LIMIT {}
-        "#,
-            limit
+            LIMIT {limit}
+        "
         );
 
         let mut stmt = db
@@ -425,7 +441,9 @@ mod tests {
     #[tokio::test]
     async fn test_sqlite_selector_pick() {
         let config = SQLiteConfig::default();
-        let store = SQLiteStore::new(config).await.unwrap();
+        let store = SQLiteStore::new(config)
+            .await
+            .expect("value must be present");
 
         let config = SmartRoutingConfig::default();
         let selector = SQLiteSelector::new(store, config);
@@ -453,9 +471,12 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::panic)]
     async fn test_precompute_weights() {
         let config = SQLiteConfig::default();
-        let store = SQLiteStore::new(config).await.unwrap();
+        let store = SQLiteStore::new(config)
+            .await
+            .expect("value must be present");
 
         let config = SmartRoutingConfig::default();
         let selector = SQLiteSelector::new(store, config);
@@ -472,8 +493,8 @@ mod tests {
         // Either Ok or timeout is acceptable for this test
         // The important thing is it doesn't panic
         match result {
-            Ok(Ok(_)) => {}, // Success
-            Ok(Err(e)) => panic!("Failed to precompute weights: {}", e),
+            Ok(Ok(())) => {}, // Success
+            Ok(Err(e)) => panic!("Failed to precompute weights: {e}"),
             Err(_) => {}, // Timeout - acceptable for empty database
         }
     }
@@ -481,7 +502,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_stats() {
         let config = SQLiteConfig::default();
-        let store = SQLiteStore::new(config).await.unwrap();
+        let store = SQLiteStore::new(config)
+            .await
+            .expect("value must be present");
 
         let config = SmartRoutingConfig::default();
         let selector = SQLiteSelector::new(store, config);

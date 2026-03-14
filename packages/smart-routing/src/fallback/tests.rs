@@ -9,7 +9,7 @@ use std::collections::HashSet;
 fn create_test_auth(id: &str, provider: Option<&str>) -> AuthInfo {
     // If provider is specified, format the ID as "provider-key"
     let id = if let Some(p) = provider {
-        format!("{}-{}", p, id)
+        format!("{p}-{id}")
     } else {
         id.to_string()
     };
