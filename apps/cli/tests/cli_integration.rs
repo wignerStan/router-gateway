@@ -81,7 +81,7 @@ credentials:
         .success()
         .stdout(
             predicates::str::is_match(r#""valid"\s*:\s*true"#)
-                .expect("Internal logic invariant should hold"),
+                .expect("Operation should succeed during test execution"),
         );
 }
 

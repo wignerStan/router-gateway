@@ -9,7 +9,7 @@ mod basic_get_and_cache {
         let model = registry
             .get("gpt-4o")
             .await
-            .expect("Model registry invariant should hold");
+            .expect("Model registry operation should succeed during test");
         assert!(model.is_some());
     }
 
@@ -19,7 +19,7 @@ mod basic_get_and_cache {
         let model = registry
             .get("unknown-model")
             .await
-            .expect("Model registry invariant should hold");
+            .expect("Model registry operation should succeed during test");
         assert!(model.is_none());
     }
 
@@ -33,7 +33,7 @@ mod basic_get_and_cache {
                 "unknown".to_string(),
             ])
             .await
-            .expect("Model registry invariant should hold");
+            .expect("Model registry operation should succeed during test");
 
         assert_eq!(models.len(), 2);
         assert!(models.contains_key("gpt-4o"));
@@ -47,7 +47,9 @@ mod basic_get_and_cache {
         let result = registry.get_multiple(&[]).await;
         assert!(result.is_ok());
         assert_eq!(
-            result.expect("Model registry invariant should hold").len(),
+            result
+                .expect("Model registry operation should succeed during test")
+                .len(),
             0
         );
     }
@@ -66,7 +68,7 @@ mod basic_get_and_cache {
             .await;
 
         assert!(result.is_ok());
-        let models = result.expect("Model registry invariant should hold");
+        let models = result.expect("Model registry operation should succeed during test");
         // Should only have the valid models
         assert!(models.contains_key("gpt-4o"));
         assert!(models.contains_key("gemini-2.5-flash"));
@@ -133,7 +135,7 @@ mod cache_management {
         let model1 = registry
             .get("gpt-4o")
             .await
-            .expect("Model registry invariant should hold");
+            .expect("Model registry operation should succeed during test");
         assert!(model1.is_some());
 
         // Should still be cached
@@ -201,7 +203,9 @@ mod cache_management {
 
         // All should succeed
         for handle in handles {
-            let result = handle.await.expect("Model registry invariant should hold");
+            let result = handle
+                .await
+                .expect("Model registry operation should succeed during test");
             assert!(result.is_ok());
         }
 
@@ -509,7 +513,7 @@ mod find_best_fit {
         let best = registry.find_best_fit(100_000).await;
         assert!(best.is_some());
         assert!(best
-            .expect("Model registry invariant should hold")
+            .expect("Model registry operation should succeed during test")
             .can_fit_context(100_000));
     }
 
@@ -565,7 +569,7 @@ mod find_best_fit {
         assert!(best.is_some(), "Should find a model that fits");
 
         // The returned model should fit the context
-        let model = best.expect("Model registry invariant should hold");
+        let model = best.expect("Model registry operation should succeed during test");
         assert!(model.can_fit_context(50000));
     }
 
@@ -671,7 +675,7 @@ mod cost_estimation {
         assert!(costs.contains_key("gpt-4o"));
         let cost = costs
             .get("gpt-4o")
-            .expect("Model registry invariant should hold");
+            .expect("Model registry operation should succeed during test");
         assert!((cost - 0.0).abs() < 0.001, "Zero tokens should cost zero");
     }
 }

@@ -145,7 +145,7 @@ fn test_matcher_best_match() {
     assert!(best.is_some());
 
     // Quality first has higher priority, should be selected
-    let best = best.expect("Model registry invariant should hold");
+    let best = best.expect("Model registry operation should succeed during test");
     assert_eq!(best.policy.id, "quality_first");
 }
 
@@ -636,7 +636,7 @@ fn test_matcher_evaluate_best_priority_conflicts() {
     let best = matcher.evaluate_best(&model, &context);
     assert!(best.is_some());
     assert_eq!(
-        best.expect("Model registry invariant should hold")
+        best.expect("Model registry operation should succeed during test")
             .policy
             .id,
         "high",

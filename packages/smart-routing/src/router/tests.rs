@@ -144,7 +144,7 @@ mod credential_management {
         let bandit = router2.bandit_policy().lock().await;
         let stats = bandit.get_stats("cred-1");
         assert!(stats.is_some(), "Clone should preserve bandit policy state");
-        let s = stats.expect("Internal logic invariant should hold");
+        let s = stats.expect("Route statistics should be available");
         assert_eq!(s.pulls, 1);
         assert_eq!(s.last_utility, 0.8);
     }
@@ -297,7 +297,9 @@ mod plan_operations {
         let plan = router.plan(&request, auths, None).await;
 
         assert!(plan.primary.is_some());
-        let primary = plan.primary.expect("Internal logic invariant should hold");
+        let primary = plan
+            .primary
+            .expect("Execution plan should have a primary route");
         assert_eq!(primary.credential_id, "cred-1");
         assert_eq!(primary.model_id, "laude-3-opus");
         assert_eq!(primary.provider, "anthropic");
@@ -494,7 +496,7 @@ mod edge_cases {
         // Verify metrics were updated
         let metrics = router.metrics().get_metrics("cred-1").await;
         assert!(metrics.is_some(), "Metrics should be recorded");
-        let m = metrics.expect("Internal logic invariant should hold");
+        let m = metrics.expect("Metrics should be available");
         assert_eq!(m.total_requests, 1);
         assert_eq!(m.success_count, 1);
         assert_eq!(m.avg_latency_ms, 150.0);
@@ -511,7 +513,7 @@ mod edge_cases {
         let bandit = router.bandit_policy().lock().await;
         let stats = bandit.get_stats("cred-1");
         assert!(stats.is_some(), "Bandit stats should be recorded");
-        let s = stats.expect("Internal logic invariant should hold");
+        let s = stats.expect("Route statistics should be available");
         assert_eq!(s.pulls, 1);
         assert_eq!(s.last_utility, 0.9);
     }
@@ -567,7 +569,9 @@ mod edge_cases {
             plan.primary.is_some(),
             "Should select route with bandit disabled"
         );
-        let primary = plan.primary.expect("Internal logic invariant should hold");
+        let primary = plan
+            .primary
+            .expect("Execution plan should have a primary route");
         // With weighted selection (no bandit), utility determines selection
         assert!(primary.utility >= 0.0);
     }
@@ -731,12 +735,14 @@ mod session_affinity {
             .session_manager()
             .set_provider(session_id.to_string(), "provider-a".to_string())
             .await
-            .expect("Internal logic invariant should hold");
+            .expect("Operation should succeed during test");
 
         // Plan with session: should prefer provider-a despite provider-b having higher utility
         let plan = router.plan(&request, auths, Some(session_id)).await;
         assert!(plan.primary.is_some());
-        let primary = plan.primary.expect("Internal logic invariant should hold");
+        let primary = plan
+            .primary
+            .expect("Execution plan should have a primary route");
 
         assert_eq!(
             primary.provider, "provider-a",

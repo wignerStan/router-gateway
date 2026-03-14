@@ -271,7 +271,7 @@ mod tests {
                 axum::http::Method::POST,
                 "/v1/messages"
                     .parse()
-                    .expect("Internal logic invariant should hold"),
+                    .expect("Tracing operation should succeed during test"),
                 headers,
                 vec![],
             )
@@ -310,7 +310,8 @@ mod tests {
         // but test that we fall back to UUID generation when header value is not valid string
         headers.insert(
             "x-request-id",
-            HeaderValue::from_bytes(b"valid-id").expect("Internal logic invariant should hold"),
+            HeaderValue::from_bytes(b"valid-id")
+                .expect("Tracing operation should succeed during test"),
         );
         assert_eq!(middleware.extract_request_id(&headers), "valid-id");
 
@@ -387,7 +388,7 @@ mod tests {
                 axum::http::Method::POST,
                 "/v1/messages"
                     .parse()
-                    .expect("Internal logic invariant should hold"),
+                    .expect("Tracing operation should succeed during test"),
                 headers,
                 vec![],
             )
@@ -419,7 +420,7 @@ mod tests {
                 axum::http::Method::POST,
                 "/v1/chat/completions"
                     .parse()
-                    .expect("Internal logic invariant should hold"),
+                    .expect("Tracing operation should succeed during test"),
                 headers,
                 large_body,
             )
@@ -468,7 +469,7 @@ mod tests {
                 axum::http::Method::POST,
                 "/v1/messages"
                     .parse()
-                    .expect("Internal logic invariant should hold"),
+                    .expect("Tracing operation should succeed during test"),
                 headers,
                 vec![],
             )
@@ -491,7 +492,7 @@ mod tests {
                 axum::http::Method::POST,
                 "/v1/messages"
                     .parse()
-                    .expect("Internal logic invariant should hold"),
+                    .expect("Tracing operation should succeed during test"),
                 headers1,
                 vec![],
             )
@@ -506,7 +507,7 @@ mod tests {
                 axum::http::Method::POST,
                 "/v1/messages"
                     .parse()
-                    .expect("Internal logic invariant should hold"),
+                    .expect("Tracing operation should succeed during test"),
                 headers2,
                 vec![],
             )
@@ -521,7 +522,7 @@ mod tests {
                 axum::http::Method::POST,
                 "/v1/messages"
                     .parse()
-                    .expect("Internal logic invariant should hold"),
+                    .expect("Tracing operation should succeed during test"),
                 headers3,
                 vec![],
             )
@@ -535,7 +536,7 @@ mod tests {
                 axum::http::Method::POST,
                 "/v1/messages"
                     .parse()
-                    .expect("Internal logic invariant should hold"),
+                    .expect("Tracing operation should succeed during test"),
                 headers4,
                 vec![],
             )

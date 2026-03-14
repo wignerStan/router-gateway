@@ -502,7 +502,7 @@ mod tests {
         let transformed = adapter.transform_request(&request);
         let contents = transformed["contents"]
             .as_array()
-            .expect("Internal logic invariant should hold");
+            .expect("Provider transformation should succeed during test");
         assert_eq!(contents[1]["role"], "model");
     }
 
@@ -576,10 +576,10 @@ mod tests {
         let transformed = adapter.transform_request(&request);
         let contents = transformed["contents"]
             .as_array()
-            .expect("Internal logic invariant should hold");
+            .expect("Provider transformation should succeed during test");
         let parts = contents[0]["parts"]
             .as_array()
-            .expect("Internal logic invariant should hold");
+            .expect("Provider transformation should succeed during test");
         assert_eq!(parts.len(), 2);
     }
 
@@ -610,7 +610,7 @@ mod tests {
         // Use approximate comparison for top_p due to floating point precision
         let top_p = gen_config["topP"]
             .as_f64()
-            .expect("Internal logic invariant should hold");
+            .expect("Provider transformation should succeed during test");
         assert!(
             (top_p - 0.9).abs() < 0.01,
             "Expected topP ~0.9, got {top_p}"
@@ -643,7 +643,7 @@ mod tests {
 
         let result = adapter
             .transform_response(response)
-            .expect("Internal logic invariant should hold");
+            .expect("Provider transformation should succeed during test");
         assert_eq!(result.content, "Hello there!");
         assert_eq!(result.finish_reason, "STOP");
         assert_eq!(result.usage.prompt_tokens, 10);
@@ -682,7 +682,7 @@ mod tests {
 
         let result = adapter
             .transform_response(response)
-            .expect("Internal logic invariant should hold");
+            .expect("Provider transformation should succeed during test");
         assert_eq!(result.usage.prompt_tokens, 0);
         assert_eq!(result.usage.completion_tokens, 0);
         assert_eq!(result.usage.total_tokens, 0);
@@ -710,11 +710,11 @@ mod tests {
 
         let result = adapter
             .transform_response(response)
-            .expect("Internal logic invariant should hold");
+            .expect("Provider transformation should succeed during test");
         assert!(result.tool_calls.is_some());
         let tool_calls = result
             .tool_calls
-            .expect("Internal logic invariant should hold");
+            .expect("Provider transformation should succeed during test");
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].function.name, "get_weather");
     }
@@ -737,7 +737,7 @@ mod tests {
 
         let result = adapter
             .transform_response(response)
-            .expect("Internal logic invariant should hold");
+            .expect("Provider transformation should succeed during test");
         assert_eq!(result.content, "Hello there!");
     }
 
@@ -756,7 +756,7 @@ mod tests {
 
         let result = adapter
             .transform_response(response)
-            .expect("Internal logic invariant should hold");
+            .expect("Provider transformation should succeed during test");
         assert_eq!(result.content, "");
     }
 
@@ -774,7 +774,7 @@ mod tests {
 
         let result = adapter
             .transform_response(response)
-            .expect("Internal logic invariant should hold");
+            .expect("Provider transformation should succeed during test");
         assert_eq!(result.finish_reason, "UNKNOWN");
     }
 }

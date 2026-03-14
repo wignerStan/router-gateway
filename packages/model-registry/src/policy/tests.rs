@@ -91,11 +91,12 @@ fn test_policy_serialization() {
         .with_priority(10)
         .with_capability(CapabilityCategory::Vision, "require");
 
-    let json = serde_json::to_string(&policy).expect("Model registry invariant should hold");
+    let json = serde_json::to_string(&policy)
+        .expect("Model registry operation should succeed during test");
     assert!(json.contains("\"id\":\"test\""));
 
     let deserialized: RoutingPolicy =
-        serde_json::from_str(&json).expect("Model registry invariant should hold");
+        serde_json::from_str(&json).expect("Model registry operation should succeed during test");
     assert_eq!(deserialized.id, policy.id);
 }
 
@@ -200,9 +201,9 @@ fn test_from_file_loads_and_validates_policies_json() {
     let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let policies_path = manifest_dir
         .parent()
-        .expect("Model registry invariant should hold")
+        .expect("Model registry operation should succeed during test")
         .parent()
-        .expect("Model registry invariant should hold")
+        .expect("Model registry operation should succeed during test")
         .join("config")
         .join("policies.json");
 
@@ -211,7 +212,7 @@ fn test_from_file_loads_and_validates_policies_json() {
         registry.is_ok(),
         "config/policies.json should load successfully: {registry:?}"
     );
-    let registry = registry.expect("Model registry invariant should hold");
+    let registry = registry.expect("Model registry operation should succeed during test");
     assert_eq!(
         registry.all().len(),
         10,
@@ -221,9 +222,10 @@ fn test_from_file_loads_and_validates_policies_json() {
 
 #[test]
 fn test_from_file_rejects_invalid_json() {
-    let tmp = tempfile::NamedTempFile::new().expect("Model registry invariant should hold");
+    let tmp = tempfile::NamedTempFile::new()
+        .expect("Model registry operation should succeed during test");
     std::fs::write(tmp.path(), r#"{"policies": [{"id": 1, "name": "Bad"}]}"#)
-        .expect("Model registry invariant should hold");
+        .expect("Model registry operation should succeed during test");
 
     let result = PolicyRegistry::from_file(tmp.path());
     assert!(
@@ -234,12 +236,13 @@ fn test_from_file_rejects_invalid_json() {
 
 #[test]
 fn test_from_file_rejects_missing_schema_elements() {
-    let tmp = tempfile::NamedTempFile::new().expect("Model registry invariant should hold");
+    let tmp = tempfile::NamedTempFile::new()
+        .expect("Model registry operation should succeed during test");
     std::fs::write(
         tmp.path(),
         r#"{"policies": [{"priority": 5, "enabled": true, "filters": {}, "action": {"action_type": "prefer"}}]}"#,
     )
-    .expect("Model registry invariant should hold");
+    .expect("Model registry operation should succeed during test");
 
     let result = PolicyRegistry::from_file(tmp.path());
     assert!(

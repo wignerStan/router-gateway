@@ -142,7 +142,7 @@ mod tests {
         assert!(span.latency_ms.is_some());
         assert!(
             span.latency_ms
-                .expect("Internal logic invariant should hold")
+                .expect("Tracing operation should succeed during test")
                 >= 9
         );
         assert!(span.is_success());
@@ -213,8 +213,8 @@ mod tests {
         assert_eq!(span.status_code, Some(500));
         assert!(
             span.latency_ms
-                .expect("Internal logic invariant should hold")
-                >= first_latency.expect("Internal logic invariant should hold")
+                .expect("Tracing operation should succeed during test")
+                >= first_latency.expect("Tracing operation should succeed during test")
         );
     }
 

@@ -261,7 +261,7 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Internal logic invariant should hold");
+            .expect("Operation should succeed during test");
 
         // Get preferred provider
         let provider = manager.get_preferred_provider("session-1").await;
@@ -285,19 +285,19 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Internal logic invariant should hold");
+            .expect("Operation should succeed during test");
 
         // Update with same provider
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Internal logic invariant should hold");
+            .expect("Operation should succeed during test");
 
         let affinity = manager.get_affinity("session-1").await;
         assert!(affinity.is_some());
         assert_eq!(
             affinity
-                .expect("Internal logic invariant should hold")
+                .expect("Operation should succeed during test")
                 .preferred_provider,
             "provider-a"
         );
@@ -311,13 +311,13 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Internal logic invariant should hold");
+            .expect("Operation should succeed during test");
 
         // Update to different provider
         manager
             .set_provider("session-1".to_string(), "provider-b".to_string())
             .await
-            .expect("Internal logic invariant should hold");
+            .expect("Operation should succeed during test");
 
         let provider = manager.get_preferred_provider("session-1").await;
         assert_eq!(provider, Some("provider-b".to_string()));
@@ -335,13 +335,13 @@ mod tests {
             manager
                 .set_provider(session_id.to_string(), provider.to_string())
                 .await
-                .expect("Internal logic invariant should hold");
+                .expect("Operation should succeed during test");
 
             let affinity = manager.get_affinity(session_id).await;
             assert!(affinity.is_some());
             assert_eq!(
                 affinity
-                    .expect("Internal logic invariant should hold")
+                    .expect("Operation should succeed during test")
                     .request_count,
                 (i + 1) as u64
             );
@@ -351,7 +351,7 @@ mod tests {
         let final_affinity = manager.get_affinity(session_id).await;
         assert_eq!(
             final_affinity
-                .expect("Internal logic invariant should hold")
+                .expect("Operation should succeed during test")
                 .request_count,
             5
         );
@@ -365,7 +365,7 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Internal logic invariant should hold");
+            .expect("Operation should succeed during test");
 
         // Remove session
         assert!(manager.remove_session("session-1").await);
@@ -384,7 +384,7 @@ mod tests {
             manager
                 .set_provider(format!("session-{i}"), "provider-a".to_string())
                 .await
-                .expect("Internal logic invariant should hold");
+                .expect("Operation should succeed during test");
         }
 
         assert_eq!(manager.session_count().await, 5);
@@ -435,11 +435,11 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Internal logic invariant should hold");
+            .expect("Operation should succeed during test");
         manager
             .set_provider("session-2".to_string(), "provider-b".to_string())
             .await
-            .expect("Internal logic invariant should hold");
+            .expect("Operation should succeed during test");
 
         let sessions = manager.list_sessions().await;
         assert_eq!(sessions.len(), 2);
@@ -456,13 +456,13 @@ mod tests {
             manager
                 .set_provider(format!("session-{i}"), "provider-a".to_string())
                 .await
-                .expect("Internal logic invariant should hold");
+                .expect("Operation should succeed during test");
         }
         for i in 3..5 {
             manager
                 .set_provider(format!("session-{i}"), "provider-b".to_string())
                 .await
-                .expect("Internal logic invariant should hold");
+                .expect("Operation should succeed during test");
         }
 
         let stats = manager.get_stats().await;
@@ -480,7 +480,7 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Internal logic invariant should hold");
+            .expect("Operation should succeed during test");
 
         // Wait for TTL to expire
         tokio::time::sleep(tokio::time::Duration::from_millis(1100)).await;
@@ -501,7 +501,7 @@ mod tests {
             manager
                 .set_provider(format!("session-{i}"), "provider-a".to_string())
                 .await
-                .expect("Internal logic invariant should hold");
+                .expect("Operation should succeed during test");
 
             // Small delay to ensure different timestamps
             tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
@@ -519,7 +519,7 @@ mod tests {
         manager1
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Internal logic invariant should hold");
+            .expect("Operation should succeed during test");
 
         let manager2 = manager1.clone();
 
@@ -536,12 +536,12 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Internal logic invariant should hold");
+            .expect("Operation should succeed during test");
 
         let affinity = manager.get_affinity("session-1").await;
         assert_eq!(
             affinity
-                .expect("Internal logic invariant should hold")
+                .expect("Operation should succeed during test")
                 .request_count,
             1
         );
@@ -550,12 +550,12 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Internal logic invariant should hold");
+            .expect("Operation should succeed during test");
 
         let affinity = manager.get_affinity("session-1").await;
         assert_eq!(
             affinity
-                .expect("Internal logic invariant should hold")
+                .expect("Operation should succeed during test")
                 .request_count,
             2
         );
@@ -568,11 +568,11 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Internal logic invariant should hold");
+            .expect("Operation should succeed during test");
 
         let affinity = manager.get_affinity("session-1").await;
         assert!(affinity.is_some());
-        let details = affinity.expect("Internal logic invariant should hold");
+        let details = affinity.expect("Operation should succeed during test");
         assert_eq!(details.session_id, "session-1");
         assert_eq!(details.preferred_provider, "provider-a");
         assert_eq!(details.request_count, 1);
@@ -587,24 +587,24 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Internal logic invariant should hold");
+            .expect("Operation should succeed during test");
         manager
             .set_provider("session-2".to_string(), "provider-a".to_string())
             .await
-            .expect("Internal logic invariant should hold");
+            .expect("Operation should succeed during test");
         manager
             .set_provider("session-3".to_string(), "provider-a".to_string())
             .await
-            .expect("Internal logic invariant should hold");
+            .expect("Operation should succeed during test");
 
         manager
             .set_provider("session-4".to_string(), "provider-b".to_string())
             .await
-            .expect("Internal logic invariant should hold");
+            .expect("Operation should succeed during test");
         manager
             .set_provider("session-5".to_string(), "provider-b".to_string())
             .await
-            .expect("Internal logic invariant should hold");
+            .expect("Operation should succeed during test");
 
         let stats = manager.get_stats().await;
         assert_eq!(stats.providers_distribution.get("provider-a"), Some(&3));

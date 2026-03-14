@@ -66,7 +66,7 @@ mod tests {
 
             let selected = selector.pick(auths).await;
             assert!(selected.is_some());
-            let selected_id = selected.expect("Internal logic invariant should hold");
+            let selected_id = selected.expect("Operation should succeed during test");
             assert!(["auth1", "auth2", "auth3"].contains(&selected_id.as_str()));
         }
 
@@ -106,7 +106,7 @@ mod tests {
             for _ in 0..10 {
                 let selected = selector.pick(auths.clone()).await;
                 assert!(selected.is_some());
-                let selected_id = selected.expect("Internal logic invariant should hold");
+                let selected_id = selected.expect("Operation should succeed during test");
                 assert_ne!(selected_id, "auth2");
             }
         }
@@ -146,7 +146,7 @@ mod tests {
 
             let selected = selector.pick_with_policy(auths, &model, &context).await;
             assert!(selected.is_some());
-            let selected_id = selected.expect("Internal logic invariant should hold");
+            let selected_id = selected.expect("Operation should succeed during test");
             assert!(["auth1", "auth2"].contains(&selected_id.as_str()));
         }
 
@@ -267,7 +267,7 @@ mod tests {
             assert!(metrics.is_some());
             assert_eq!(
                 metrics
-                    .expect("Internal logic invariant should hold")
+                    .expect("Operation should succeed during test")
                     .total_requests,
                 1
             );
@@ -553,7 +553,7 @@ mod tests {
                 let selected = selector
                     .pick(auths.clone())
                     .await
-                    .expect("Internal logic invariant should hold");
+                    .expect("Operation should succeed during test");
                 if selected == "normal-auth" {
                     normal_count += 1;
                 } else {
@@ -611,7 +611,7 @@ mod tests {
                 let selected = selector
                     .pick(auths.clone())
                     .await
-                    .expect("Internal logic invariant should hold");
+                    .expect("Operation should succeed during test");
                 if selected == "auth1" {
                     auth1_count += 1;
                 } else {
@@ -667,7 +667,7 @@ mod tests {
                 match selector
                     .pick(auths.clone())
                     .await
-                    .expect("Internal logic invariant should hold")
+                    .expect("Operation should succeed during test")
                     .as_str()
                 {
                     "high-perf" => high_count += 1,
@@ -744,9 +744,9 @@ mod tests {
             let all_results: Vec<_> = futures::future::join_all(handles).await;
 
             for results in all_results {
-                for selected in results.expect("Internal logic invariant should hold") {
+                for selected in results.expect("Operation should succeed during test") {
                     assert!(selected.is_some());
-                    let id = selected.expect("Internal logic invariant should hold");
+                    let id = selected.expect("Operation should succeed during test");
                     assert!(
                         ["auth1", "auth2", "auth3"].contains(&id.as_str()),
                         "Selected invalid auth: {id}"

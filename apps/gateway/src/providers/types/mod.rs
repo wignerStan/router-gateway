@@ -236,7 +236,7 @@ mod tests {
             .temperature(0.7)
             .max_tokens(1024)
             .build()
-            .expect("Internal logic invariant should hold");
+            .expect("Provider transformation should succeed during test");
 
         assert_eq!(request.model, "gpt-4");
         assert_eq!(request.temperature, Some(0.7));

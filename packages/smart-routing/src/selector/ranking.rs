@@ -154,7 +154,7 @@ impl SmartSelector {
             return available
                 .into_iter()
                 .next()
-                .expect("Internal logic invariant should hold")
+                .expect("Operation should succeed during test")
                 .id;
         }
 
@@ -165,14 +165,14 @@ impl SmartSelector {
             return available
                 .into_iter()
                 .nth(idx)
-                .expect("Internal logic invariant should hold")
+                .expect("Operation should succeed during test")
                 .id;
         }
 
         let fallback = available
             .last()
             .map(|a| a.id.clone())
-            .expect("Internal logic invariant should hold");
+            .expect("Operation should succeed during test");
 
         let r = rand::thread_rng().gen::<f64>() * total_weight;
         let mut cumulative = 0.0;
