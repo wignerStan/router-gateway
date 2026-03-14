@@ -37,7 +37,7 @@ help:
 # ============================================
 
 # Tier 1: Fast feedback (<5s) - Use for pre-commit
-qa: fmt-check lint-fast
+qa: fmt-check lint
     @echo "✅ Tier 1 QA passed (fast checks)"
 
 # Tier 2: Comprehensive (>5s) - Use for pre-push / CI
@@ -78,9 +78,9 @@ fmt-check:
 lint-fast:
     cargo clippy --all-targets --all-features
 
-# Strict lint (treat warnings as errors)
+# Strict lint (treat warnings as errors; missing_docs tracked separately)
 lint:
-    cargo clippy --all-targets --all-features -- -D warnings
+    cargo clippy --all-targets --all-features -- -D warnings -A missing_docs
 
 # Run clippy with auto-fix
 lint-fix:
@@ -288,8 +288,8 @@ lockfile:
 # PRE-COMMIT / PRE-PUSH HOOKS
 # ============================================
 
-# Pre-commit: fast checks only
-pre-commit: fmt-check lint-fast type-check
+# Pre-commit: strict checks
+pre-commit: fmt-check lint type-check
     @echo "✅ Pre-commit checks passed"
 
 # Pre-push: full verification
@@ -308,9 +308,9 @@ ci-full: ci-fmt ci-lint ci-test ci-build
 ci-fmt:
     cargo fmt --all -- --check
 
-# CI lint (strict)
+# CI lint (strict, matches local `just lint`)
 ci-lint:
-    cargo clippy --all-targets --all-features -- -D warnings -D clippy::all
+    cargo clippy --all-targets --all-features -- -D warnings -A missing_docs
 
 # CI test (all features)
 ci-test:

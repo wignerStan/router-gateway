@@ -16,7 +16,7 @@ pub trait RequestClassifier: Send + Sync {
 }
 
 /// Result of classifying a request, containing all routing-relevant information
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ClassifiedRequest {
     /// Required capabilities for this request
     pub required_capabilities: RequiredCapabilities,

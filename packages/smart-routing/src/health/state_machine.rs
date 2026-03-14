@@ -53,8 +53,7 @@ impl HealthManager {
         let health = self.health.read().await;
         health
             .get(auth_id)
-            .map(|h| h.status)
-            .unwrap_or(HealthStatus::Healthy)
+            .map_or(HealthStatus::Healthy, |h| h.status)
     }
 
     /// Get auth health details
@@ -80,7 +79,7 @@ impl HealthManager {
         if op_count % self.cleanup_interval == 0 {
             let mut health = self.health.write().await;
             if health.len() > self.max_entries {
-                self.cleanup_old_entries(&mut health).await;
+                self.cleanup_old_entries(&mut health);
             }
         }
 
@@ -259,7 +258,7 @@ impl HealthManager {
     }
 
     /// Cleanup old entries to control memory growth
-    async fn cleanup_old_entries(&self, health: &mut HashMap<String, AuthHealth>) {
+    fn cleanup_old_entries(&self, health: &mut HashMap<String, AuthHealth>) {
         if self.max_entries == 0 {
             return;
         }

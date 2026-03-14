@@ -133,7 +133,7 @@ impl ReasoningInference {
         ReasoningCapability::None
     }
 
-    /// Enhance capability inference from max_tokens hint
+    /// Enhance capability inference from `max_tokens` hint
     fn enhance_from_tokens(
         &self,
         base_capability: ReasoningCapability,
@@ -160,7 +160,7 @@ impl ReasoningInference {
     }
 
     /// Get the capability level (0-3, higher is better)
-    pub fn capability_level(capability: ReasoningCapability) -> u8 {
+    pub const fn capability_level(capability: ReasoningCapability) -> u8 {
         match capability {
             ReasoningCapability::None => 0,
             ReasoningCapability::Basic => 1,

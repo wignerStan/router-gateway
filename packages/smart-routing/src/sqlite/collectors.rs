@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
 
-/// SQLite metrics collector with periodic flushing
+/// `SQLite` metrics collector with periodic flushing
 pub struct SQLiteMetricsCollector {
     store: SQLiteStore,
     cache: Arc<RwLock<HashMap<String, AuthMetrics>>>,
@@ -16,7 +16,7 @@ pub struct SQLiteMetricsCollector {
 }
 
 impl SQLiteMetricsCollector {
-    /// Create a new SQLite metrics collector
+    /// Create a new `SQLite` metrics collector
     pub fn new(store: SQLiteStore) -> Self {
         Self {
             store,
@@ -175,7 +175,7 @@ impl SQLiteMetricsCollector {
             let cache = self.cache.read().await;
             if let Some(metrics) = cache.get(&auth_id) {
                 if let Err(e) = self.store.write_metrics(&auth_id, metrics).await {
-                    eprintln!("Failed to flush metrics for {}: {}", auth_id, e);
+                    eprintln!("Failed to flush metrics for {auth_id}: {e}");
                 } else {
                     // Mark as clean
                     let mut dirty = self.dirty.write().await;
@@ -206,14 +206,14 @@ impl SQLiteMetricsCollector {
             loop {
                 timer.tick().await;
                 if let Err(e) = self.flush().await {
-                    eprintln!("Flush error: {}", e);
+                    eprintln!("Flush error: {e}");
                 }
             }
         })
     }
 }
 
-/// SQLite health manager with periodic flushing
+/// `SQLite` health manager with periodic flushing
 pub struct SQLiteHealthManager {
     store: SQLiteStore,
     cache: Arc<RwLock<HashMap<String, AuthHealth>>>,
@@ -222,7 +222,7 @@ pub struct SQLiteHealthManager {
 }
 
 impl SQLiteHealthManager {
-    /// Create a new SQLite health manager
+    /// Create a new `SQLite` health manager
     pub fn new(store: SQLiteStore) -> Self {
         Self {
             store,
@@ -349,8 +349,7 @@ impl SQLiteHealthManager {
         let cache = self.cache.read().await;
         cache
             .get(auth_id)
-            .map(|h| h.status)
-            .unwrap_or(HealthStatus::Healthy)
+            .map_or(HealthStatus::Healthy, |h| h.status)
     }
 
     /// Get health details
@@ -436,7 +435,7 @@ impl SQLiteHealthManager {
             let cache = self.cache.read().await;
             if let Some(health) = cache.get(&auth_id) {
                 if let Err(e) = self.store.write_health(&auth_id, health).await {
-                    eprintln!("Failed to flush health for {}: {}", auth_id, e);
+                    eprintln!("Failed to flush health for {auth_id}: {e}");
                 } else {
                     // Mark as clean
                     let mut dirty = self.dirty.write().await;
@@ -467,7 +466,7 @@ impl SQLiteHealthManager {
             loop {
                 timer.tick().await;
                 if let Err(e) = self.flush().await {
-                    eprintln!("Flush error: {}", e);
+                    eprintln!("Flush error: {e}");
                 }
             }
         })

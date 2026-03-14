@@ -34,7 +34,7 @@ fn test_matcher_basic_matching() {
     registry.add(templates::vision_required());
 
     let matcher = PolicyMatcher::new(registry);
-    let model = create_test_model("test", "test", 3.0, 200000);
+    let model = create_test_model("test", "test", 3.0, 200_000);
     let context = PolicyContext::default();
 
     let matches = matcher.evaluate(&model, &context);
@@ -52,7 +52,7 @@ fn test_matcher_tier_filtering() {
     let matcher = PolicyMatcher::new(registry);
 
     // Fast model (price <= 1.0)
-    let fast_model = create_test_model("fast-model", "test", 0.5, 100000);
+    let fast_model = create_test_model("fast-model", "test", 0.5, 100_000);
     let context = PolicyContext::default();
 
     let matches = matcher.evaluate(&fast_model, &context);
@@ -62,7 +62,7 @@ fn test_matcher_tier_filtering() {
     );
 
     // Flagship model (high price)
-    let flagship_model = create_test_model("flagship-model", "test", 20.0, 200000);
+    let flagship_model = create_test_model("flagship-model", "test", 20.0, 200_000);
     let matches = matcher.evaluate(&flagship_model, &context);
     assert!(
         matches.is_empty(),
@@ -77,7 +77,7 @@ fn test_matcher_provider_filtering() {
 
     let matcher = PolicyMatcher::new(registry);
 
-    let openai_model = create_test_model("test", "openai", 30.0, 128000);
+    let openai_model = create_test_model("test", "openai", 30.0, 128_000);
     let context = PolicyContext::default();
 
     let matches = matcher.evaluate(&openai_model, &context);
@@ -95,7 +95,7 @@ fn test_matcher_weight_factor() {
     );
 
     let matcher = PolicyMatcher::new(registry);
-    let model = create_test_model("test", "test", 1.0, 100000);
+    let model = create_test_model("test", "test", 1.0, 100_000);
     let context = PolicyContext::default();
 
     let factor = matcher.calculate_weight_factor(&model, &context);
@@ -116,7 +116,7 @@ fn test_matcher_blocking() {
     let matcher = PolicyMatcher::new(registry);
 
     // Ultra premium model should be blocked
-    let expensive_model = create_test_model("expensive", "test", 60.0, 100000);
+    let expensive_model = create_test_model("expensive", "test", 60.0, 100_000);
     let context = PolicyContext::default();
     assert!(
         matcher.is_blocked(&expensive_model, &context),
@@ -124,7 +124,7 @@ fn test_matcher_blocking() {
     );
 
     // Standard cost model should not be blocked
-    let cheap_model = create_test_model("cheap", "test", 3.0, 100000);
+    let cheap_model = create_test_model("cheap", "test", 3.0, 100_000);
     assert!(
         !matcher.is_blocked(&cheap_model, &context),
         "Standard cost model should not be blocked"
@@ -138,14 +138,14 @@ fn test_matcher_best_match() {
     registry.add(templates::quality_first().with_priority(30));
 
     let matcher = PolicyMatcher::new(registry);
-    let model = create_test_model("test", "test", 15.0, 200000);
+    let model = create_test_model("test", "test", 15.0, 200_000);
     let context = PolicyContext::default();
 
     let best = matcher.evaluate_best(&model, &context);
     assert!(best.is_some());
 
     // Quality first has higher priority, should be selected
-    let best = best.unwrap();
+    let best = best.expect("value must be present");
     assert_eq!(best.policy.id, "quality_first");
 }
 
@@ -165,13 +165,13 @@ fn test_matcher_multi_dimension() {
     let matcher = PolicyMatcher::new(registry);
 
     // Model matching all dimensions
-    let matching_model = create_test_model("test", "openai", 3.0, 200000);
+    let matching_model = create_test_model("test", "openai", 3.0, 200_000);
     let context = PolicyContext::default();
     let matches = matcher.evaluate(&matching_model, &context);
     assert!(!matches.is_empty(), "Should match all dimensions");
 
     // Model missing vision
-    let mut non_vision_model = create_test_model("text-only", "openai", 3.0, 200000);
+    let mut non_vision_model = create_test_model("text-only", "openai", 3.0, 200_000);
     non_vision_model.capabilities.vision = false;
     let matches = matcher.evaluate(&non_vision_model, &context);
     assert!(matches.is_empty(), "Should not match - no vision");
@@ -519,7 +519,7 @@ fn test_condition_unknown_operator() {
 #[test]
 fn test_matcher_evaluate_empty_registry() {
     let matcher = PolicyMatcher::empty();
-    let model = create_test_model("test", "test", 3.0, 200000);
+    let model = create_test_model("test", "test", 3.0, 200_000);
     let context = PolicyContext::default();
 
     let matches = matcher.evaluate(&model, &context);
@@ -537,7 +537,7 @@ fn test_matcher_evaluate_disabled_policy() {
     registry.add(policy);
 
     let matcher = PolicyMatcher::new(registry);
-    let model = create_test_model("test", "test", 3.0, 200000);
+    let model = create_test_model("test", "test", 3.0, 200_000);
     let context = PolicyContext::default();
 
     let matches = matcher.evaluate(&model, &context);
@@ -564,7 +564,7 @@ fn test_matcher_evaluate_complex_conditions() {
     registry.add(policy);
 
     let matcher = PolicyMatcher::new(registry);
-    let model = create_test_model("test", "test", 3.0, 200000);
+    let model = create_test_model("test", "test", 3.0, 200_000);
 
     // Both conditions met
     let context_both = PolicyContext {
@@ -603,7 +603,7 @@ fn test_matcher_evaluate_complex_conditions() {
 #[test]
 fn test_matcher_evaluate_best_no_matches() {
     let matcher = PolicyMatcher::empty();
-    let model = create_test_model("test", "test", 3.0, 200000);
+    let model = create_test_model("test", "test", 3.0, 200_000);
     let context = PolicyContext::default();
 
     let best = matcher.evaluate_best(&model, &context);
@@ -630,13 +630,13 @@ fn test_matcher_evaluate_best_priority_conflicts() {
     registry.add(high_policy);
 
     let matcher = PolicyMatcher::new(registry);
-    let model = create_test_model("test", "test", 3.0, 200000);
+    let model = create_test_model("test", "test", 3.0, 200_000);
     let context = PolicyContext::default();
 
     let best = matcher.evaluate_best(&model, &context);
     assert!(best.is_some());
     assert_eq!(
-        best.unwrap().policy.id,
+        best.expect("value must be present").policy.id,
         "high",
         "Should return highest priority policy"
     );
@@ -645,7 +645,7 @@ fn test_matcher_evaluate_best_priority_conflicts() {
 #[test]
 fn test_matcher_calculate_weight_factor_no_policies() {
     let matcher = PolicyMatcher::empty();
-    let model = create_test_model("test", "test", 3.0, 200000);
+    let model = create_test_model("test", "test", 3.0, 200_000);
     let context = PolicyContext::default();
 
     let factor = matcher.calculate_weight_factor(&model, &context);
@@ -667,7 +667,7 @@ fn test_matcher_calculate_weight_factor_normalization() {
     registry.add(high_weight_policy);
 
     let matcher = PolicyMatcher::new(registry);
-    let model = create_test_model("test", "test", 3.0, 200000);
+    let model = create_test_model("test", "test", 3.0, 200_000);
     let context = PolicyContext::default();
 
     let factor = matcher.calculate_weight_factor(&model, &context);
@@ -684,7 +684,7 @@ fn test_matcher_is_blocked_no_block_policies() {
     registry.add(templates::vision_required()); // Not a block policy
 
     let matcher = PolicyMatcher::new(registry);
-    let model = create_test_model("test", "test", 3.0, 200000);
+    let model = create_test_model("test", "test", 3.0, 200_000);
     let context = PolicyContext::default();
 
     assert!(
@@ -705,7 +705,7 @@ fn test_matcher_is_blocked_single_block_policy() {
     let matcher = PolicyMatcher::new(registry);
 
     // Vision model should be blocked
-    let vision_model = create_test_model("vision-model", "test", 3.0, 200000);
+    let vision_model = create_test_model("vision-model", "test", 3.0, 200_000);
     let context = PolicyContext::default();
     assert!(
         matcher.is_blocked(&vision_model, &context),
@@ -713,7 +713,7 @@ fn test_matcher_is_blocked_single_block_policy() {
     );
 
     // Non-vision model should not be blocked
-    let mut text_model = create_test_model("text-model", "test", 3.0, 200000);
+    let mut text_model = create_test_model("text-model", "test", 3.0, 200_000);
     text_model.capabilities.vision = false;
     assert!(
         !matcher.is_blocked(&text_model, &context),
@@ -749,21 +749,21 @@ fn test_matcher_is_blocked_multiple_block_policies() {
     let context = PolicyContext::default();
 
     // Ultra premium model should be blocked
-    let expensive_model = create_test_model("expensive", "test", 60.0, 200000);
+    let expensive_model = create_test_model("expensive", "test", 60.0, 200_000);
     assert!(
         matcher.is_blocked(&expensive_model, &context),
         "Ultra premium model should be blocked"
     );
 
     // OpenAI model should be blocked
-    let openai_model = create_test_model("gpt-4", "openai", 30.0, 128000);
+    let openai_model = create_test_model("gpt-4", "openai", 30.0, 128_000);
     assert!(
         matcher.is_blocked(&openai_model, &context),
         "OpenAI model should be blocked"
     );
 
     // Standard model should not be blocked
-    let standard_model = create_test_model("test", "test", 3.0, 200000);
+    let standard_model = create_test_model("test", "test", 3.0, 200_000);
     assert!(
         !matcher.is_blocked(&standard_model, &context),
         "Standard model should not be blocked"

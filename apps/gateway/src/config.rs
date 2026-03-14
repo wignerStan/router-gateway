@@ -69,7 +69,7 @@ impl Default for ServerConfig {
     }
 }
 
-fn default_port() -> u16 {
+const fn default_port() -> u16 {
     3000
 }
 
@@ -77,7 +77,7 @@ fn default_host() -> String {
     "0.0.0.0".to_string()
 }
 
-fn default_timeout() -> u64 {
+const fn default_timeout() -> u64 {
     120
 }
 
@@ -90,7 +90,7 @@ pub struct CredentialConfig {
     /// Provider name (e.g., "anthropic", "openai")
     pub provider: String,
 
-    /// API key (can be loaded from env with ${VAR_NAME})
+    /// API key (can be loaded from env with ${`VAR_NAME`})
     pub api_key: String,
 
     /// Optional base URL override
@@ -121,7 +121,7 @@ pub struct CredentialConfig {
 /// Routing policy configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoutingPolicyConfig {
-    /// Selection strategy: "weighted", "time_aware", "quota_aware", "adaptive", "policy_aware"
+    /// Selection strategy: "weighted", "`time_aware`", "`quota_aware`", "adaptive", "`policy_aware`"
     #[serde(default = "default_strategy")]
     pub strategy: String,
 
@@ -153,15 +153,15 @@ fn default_strategy() -> String {
     "weighted".to_string()
 }
 
-fn default_true() -> bool {
+const fn default_true() -> bool {
     true
 }
 
-fn default_min_healthy() -> usize {
+const fn default_min_healthy() -> usize {
     1
 }
 
-fn default_fallback_depth() -> usize {
+const fn default_fallback_depth() -> usize {
     2
 }
 
@@ -196,11 +196,11 @@ impl GatewayConfig {
 
     /// Parse configuration from YAML string
     pub fn from_yaml(yaml: &str) -> Result<Self> {
-        let mut config: GatewayConfig =
+        let mut config: Self =
             serde_yaml::from_str(yaml).with_context(|| "Failed to parse YAML configuration")?;
 
         // Expand environment variables in secrets
-        config.expand_env_vars()?;
+        config.expand_env_vars();
 
         // Validate configuration
         config.validate()?;
@@ -209,7 +209,7 @@ impl GatewayConfig {
     }
 
     /// Expand environment variable references in secrets
-    fn expand_env_vars(&mut self) -> Result<()> {
+    fn expand_env_vars(&mut self) {
         for cred in &mut self.credentials {
             cred.api_key = expand_env_var(&cred.api_key);
             if let Some(ref mut base_url) = cred.base_url {
@@ -224,7 +224,6 @@ impl GatewayConfig {
                 *value = expand_env_var(value);
             }
         }
-        Ok(())
     }
 
     /// Validate the configuration
@@ -282,10 +281,7 @@ impl GatewayConfig {
 
     /// Check if a provider is enabled
     pub fn is_provider_enabled(&self, provider: &str) -> bool {
-        self.providers
-            .get(provider)
-            .map(|p| p.enabled)
-            .unwrap_or(true) // Enabled by default if not configured
+        self.providers.get(provider).is_none_or(|p| p.enabled) // Enabled by default if not configured
     }
 
     /// Check if authentication is enabled (at least one auth token configured)
@@ -295,8 +291,8 @@ impl GatewayConfig {
 }
 
 /// Expand environment variable references in a string
-/// Supports ${VAR_NAME}, ${VAR_NAME:-default}, and embedded references
-/// e.g., "Bearer ${AUTH_KEY}" or "${HOST:-localhost}:${PORT}"
+/// Supports ${`VAR_NAME`}, ${VAR_NAME:-default}, and embedded references
+/// e.g., "Bearer ${`AUTH_KEY`}" or "${HOST:-localhost}:${PORT}"
 fn expand_env_var(value: &str) -> String {
     let mut result = String::with_capacity(value.len());
     let mut rest = value;
@@ -336,6 +332,7 @@ pub fn constant_time_token_eq(a: &str, b: &str) -> bool {
 }
 
 /// Constant-time check whether `token` matches any entry in `configured_tokens`.
+///
 /// Iterates over all configured tokens regardless of where a match occurs,
 /// preventing timing side-channels from leaking token ordering or count.
 pub fn constant_time_token_matches(token: &str, configured_tokens: &[String]) -> bool {
@@ -425,7 +422,7 @@ fn is_private_ip(ip: &IpAddr) -> bool {
     }
 }
 
-/// Extract the embedded IPv4 address from an IPv4-mapped IPv6 address (::ffff:x.x.x.x).
+/// Extract the embedded IPv4 address from an IPv4-mapped IPv6 address (`::ffff:x.x.x.x`).
 fn is_ipv4_mapped(v6: &std::net::Ipv6Addr) -> Option<std::net::Ipv4Addr> {
     let segments = v6.segments();
     if segments[0..6] == [0, 0, 0, 0, 0, 0xffff] {
@@ -440,7 +437,7 @@ fn is_ipv4_mapped(v6: &std::net::Ipv6Addr) -> Option<std::net::Ipv4Addr> {
     }
 }
 
-/// Extract the embedded IPv4 address from an IPv4-compatible IPv6 address (::x.x.x.x).
+/// Extract the embedded IPv4 address from an IPv4-compatible IPv6 address (`::x.x.x.x`).
 /// Only extracts when the low 32 bits are non-zero (i.e., not the unspecified address ::).
 fn ipv6_to_v4_compat(v6: &std::net::Ipv6Addr) -> Option<std::net::Ipv4Addr> {
     let segments = v6.segments();
@@ -532,24 +529,24 @@ mod tests {
 
     #[test]
     fn test_parse_minimal_yaml() {
-        let yaml = r#"
+        let yaml = r"
 server:
   port: 8080
-"#;
-        let config = GatewayConfig::from_yaml(yaml).unwrap();
+";
+        let config = GatewayConfig::from_yaml(yaml).expect("value must be present");
         assert_eq!(config.server.port, 8080);
     }
 
     #[test]
     fn test_parse_credentials() {
-        let yaml = r#"
+        let yaml = r"
 credentials:
   - id: anthropic-primary
     provider: anthropic
     api_key: sk-test-key
     priority: 10
-"#;
-        let config = GatewayConfig::from_yaml(yaml).unwrap();
+";
+        let config = GatewayConfig::from_yaml(yaml).expect("value must be present");
         assert_eq!(config.credentials.len(), 1);
         assert_eq!(config.credentials[0].id, "anthropic-primary");
         assert_eq!(config.credentials[0].provider, "anthropic");
@@ -558,7 +555,7 @@ credentials:
 
     #[test]
     fn test_duplicate_credential_id_fails() {
-        let yaml = r#"
+        let yaml = r"
 credentials:
   - id: test-cred
     provider: anthropic
@@ -566,25 +563,25 @@ credentials:
   - id: test-cred
     provider: openai
     api_key: key2
-"#;
+";
         let result = GatewayConfig::from_yaml(yaml);
         assert!(result.is_err());
         assert!(result
-            .unwrap_err()
+            .expect_err("expected error should be present")
             .to_string()
             .contains("Duplicate credential ID"));
     }
 
     #[test]
     fn test_invalid_strategy_fails() {
-        let yaml = r#"
+        let yaml = r"
 routing:
   strategy: invalid
-"#;
+";
         let result = GatewayConfig::from_yaml(yaml);
         assert!(result.is_err());
         assert!(result
-            .unwrap_err()
+            .expect_err("expected error should be present")
             .to_string()
             .contains("Invalid routing strategy"));
     }
@@ -607,7 +604,7 @@ routing:
     #[test]
     fn test_provider_filtering() {
         let config = GatewayConfig::from_yaml(
-            r#"
+            r"
 credentials:
   - id: cred1
     provider: anthropic
@@ -618,9 +615,9 @@ credentials:
   - id: cred3
     provider: anthropic
     api_key: key3
-"#,
+",
         )
-        .unwrap();
+        .expect("value must be present");
 
         let anthropic_creds = config.credentials_for_provider("anthropic");
         assert_eq!(anthropic_creds.len(), 2);
@@ -633,16 +630,18 @@ credentials:
 
     #[test]
     fn test_ssrf_reject_loopback() {
-        let yaml = r#"
+        let yaml = r"
 credentials:
   - id: test
     provider: openai
     api_key: key1
     base_url: http://127.0.0.1:8000
-"#;
+";
         let result = GatewayConfig::from_yaml(yaml);
         assert!(result.is_err());
-        let err_msg = result.unwrap_err().to_string();
+        let err_msg = result
+            .expect_err("expected error should be present")
+            .to_string();
         assert!(
             err_msg.contains("private/internal IP") || err_msg.contains("invalid base_url"),
             "Unexpected error: {err_msg}"
@@ -652,7 +651,7 @@ credentials:
     #[test]
     fn test_provider_env_vars_with_defaults() {
         let config = GatewayConfig::from_yaml(
-            r#"
+            r"
 credentials:
   - id: cred1
     provider: openai
@@ -663,14 +662,20 @@ providers:
     base_url: ${PROVIDER_BASE_URL:-https://api.openai.com}
     headers:
       Authorization: Bearer ${PROVIDER_AUTH}
-"#,
+",
         )
-        .unwrap();
+        .expect("value must be present");
 
-        let openai = config.providers.get("openai").unwrap();
+        let openai = config
+            .providers
+            .get("openai")
+            .expect("value must be present");
         assert_eq!(openai.base_url.as_deref(), Some("https://api.openai.com"));
         assert_eq!(
-            openai.headers.get("Authorization").unwrap(),
+            openai
+                .headers
+                .get("Authorization")
+                .expect("value must be present"),
             "Bearer ",
             "Unset env var should expand to empty string"
         );
@@ -744,12 +749,12 @@ providers:
 
     #[test]
     fn test_ssrf_allow_credential_without_base_url() {
-        let yaml = r#"
+        let yaml = r"
 credentials:
   - id: test
     provider: openai
     api_key: key1
-"#;
+";
         let result = GatewayConfig::from_yaml(yaml);
         assert!(result.is_ok());
     }
@@ -865,7 +870,7 @@ server:
   auth_tokens:
     - "my-secret-token"
 "#;
-        let config = GatewayConfig::from_yaml(yaml).unwrap();
+        let config = GatewayConfig::from_yaml(yaml).expect("value must be present");
         assert!(config.is_auth_enabled());
     }
 
@@ -875,7 +880,7 @@ server:
         std::env::set_var("TEST_PROVIDER_KEY", "secret-key");
 
         let config = GatewayConfig::from_yaml(
-            r#"
+            r"
 credentials:
   - id: cred1
     provider: openai
@@ -886,16 +891,25 @@ providers:
     base_url: ${TEST_PROVIDER_URL}
     headers:
       X-Api-Key: ${TEST_PROVIDER_KEY}
-"#,
+",
         )
-        .unwrap();
+        .expect("value must be present");
 
-        let openai = config.providers.get("openai").unwrap();
+        let openai = config
+            .providers
+            .get("openai")
+            .expect("value must be present");
         assert_eq!(
             openai.base_url.as_deref(),
             Some("https://custom.provider.com")
         );
-        assert_eq!(openai.headers.get("X-Api-Key").unwrap(), "secret-key");
+        assert_eq!(
+            openai
+                .headers
+                .get("X-Api-Key")
+                .expect("value must be present"),
+            "secret-key"
+        );
 
         std::env::remove_var("TEST_PROVIDER_URL");
         std::env::remove_var("TEST_PROVIDER_KEY");
@@ -904,7 +918,7 @@ providers:
     #[test]
     fn test_provider_config_without_env_vars_unchanged() {
         let config = GatewayConfig::from_yaml(
-            r#"
+            r"
 credentials:
   - id: cred1
     provider: openai
@@ -915,13 +929,22 @@ providers:
     base_url: https://api.openai.com
     headers:
       X-Custom: literal-value
-"#,
+",
         )
-        .unwrap();
+        .expect("value must be present");
 
-        let openai = config.providers.get("openai").unwrap();
+        let openai = config
+            .providers
+            .get("openai")
+            .expect("value must be present");
         assert_eq!(openai.base_url.as_deref(), Some("https://api.openai.com"));
-        assert_eq!(openai.headers.get("X-Custom").unwrap(), "literal-value");
+        assert_eq!(
+            openai
+                .headers
+                .get("X-Custom")
+                .expect("value must be present"),
+            "literal-value"
+        );
     }
 
     // --- Config File Integration Tests ---
@@ -929,13 +952,13 @@ providers:
     /// Writes YAML content to a temporary file and parses it as a [`GatewayConfig`].
     fn config_from_yaml_content(yaml_content: &str) -> GatewayConfig {
         let mut tmp_file = NamedTempFile::new().expect("failed to create temp file");
-        write!(tmp_file, "{}", yaml_content).expect("failed to write temp file");
+        write!(tmp_file, "{yaml_content}").expect("failed to write temp file");
         GatewayConfig::from_file(tmp_file.path()).expect("failed to load config from file")
     }
 
     #[test]
     fn test_from_file_valid_yaml() {
-        let yaml_content = r#"
+        let yaml_content = r"
 server:
   port: 9090
   host: 127.0.0.1
@@ -945,7 +968,7 @@ credentials:
     provider: openai
     api_key: sk-test-key-123 # gitleaks:allow
     priority: 5
-"#;
+";
         let config = config_from_yaml_content(yaml_content);
 
         assert_eq!(config.server.port, 9090);
@@ -963,14 +986,14 @@ credentials:
         let result = GatewayConfig::from_file("nonexistent.yaml");
         assert!(result.is_err());
         assert!(result
-            .unwrap_err()
+            .expect_err("expected error should be present")
             .to_string()
             .contains("Failed to read configuration file"));
     }
 
     #[test]
     fn test_full_config_with_all_sections() {
-        let yaml_content = r#"
+        let yaml_content = r"
 server:
   port: 8080
   host: 0.0.0.0
@@ -1009,7 +1032,7 @@ providers:
   google:
     enabled: true
     base_url: https://generativelanguage.googleapis.com/v1beta
-"#;
+";
         let config = config_from_yaml_content(yaml_content);
 
         // Server section
@@ -1036,15 +1059,24 @@ providers:
         assert_eq!(config.routing.fallback_depth, 3);
 
         // Providers section
-        let openai_provider = config.providers.get("openai").unwrap();
+        let openai_provider = config
+            .providers
+            .get("openai")
+            .expect("value must be present");
         assert!(openai_provider.enabled);
         assert_eq!(openai_provider.timeout_secs, Some(120));
         assert_eq!(
-            openai_provider.headers.get("X-Custom-Header").unwrap(),
+            openai_provider
+                .headers
+                .get("X-Custom-Header")
+                .expect("value must be present"),
             "custom-value"
         );
 
-        let google_provider = config.providers.get("google").unwrap();
+        let google_provider = config
+            .providers
+            .get("google")
+            .expect("value must be present");
         assert!(google_provider.enabled);
         assert_eq!(
             google_provider.base_url.as_deref(),
@@ -1061,7 +1093,7 @@ providers:
 
     #[test]
     fn test_credential_with_all_fields() {
-        let yaml_content = r#"
+        let yaml_content = r"
 credentials:
   - id: full-cred
     provider: openai
@@ -1074,7 +1106,7 @@ credentials:
     priority: 15
     daily_quota: 10000
     rate_limit: 60
-"#;
+";
         let config = config_from_yaml_content(yaml_content);
 
         let cred = &config.credentials[0];
@@ -1121,23 +1153,38 @@ providers:
 
         assert_eq!(config.providers.len(), 3);
 
-        let openai = config.providers.get("openai").unwrap();
+        let openai = config
+            .providers
+            .get("openai")
+            .expect("value must be present");
         assert!(openai.enabled);
         assert_eq!(
             openai.base_url.as_deref(),
             Some("https://api.openai.com/v1")
         );
 
-        let google = config.providers.get("google").unwrap();
+        let google = config
+            .providers
+            .get("google")
+            .expect("value must be present");
         assert!(!google.enabled);
 
-        let custom = config.providers.get("custom-llm").unwrap();
+        let custom = config
+            .providers
+            .get("custom-llm")
+            .expect("value must be present");
         assert!(custom.enabled);
         assert_eq!(
             custom.base_url.as_deref(),
             Some("https://custom-llm.example.com")
         );
-        assert_eq!(custom.headers.get("X-API-Version").unwrap(), "2024-01");
+        assert_eq!(
+            custom
+                .headers
+                .get("X-API-Version")
+                .expect("value must be present"),
+            "2024-01"
+        );
     }
 
     #[test]
@@ -1150,7 +1197,10 @@ credentials:
 "#;
         let result = GatewayConfig::from_yaml(yaml);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("empty API key"));
+        assert!(result
+            .expect_err("expected error should be present")
+            .to_string()
+            .contains("empty API key"));
     }
 
     #[test]
@@ -1163,7 +1213,10 @@ credentials:
 "#;
         let result = GatewayConfig::from_yaml(yaml);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("empty provider"));
+        assert!(result
+            .expect_err("expected error should be present")
+            .to_string()
+            .contains("empty provider"));
     }
 
     // --- Trust Proxy Headers Tests ---
@@ -1176,11 +1229,11 @@ credentials:
 
     #[test]
     fn test_trust_proxy_headers_from_yaml() {
-        let yaml = r#"
+        let yaml = r"
 server:
   trust_proxy_headers: true
-"#;
-        let config = GatewayConfig::from_yaml(yaml).unwrap();
+";
+        let config = GatewayConfig::from_yaml(yaml).expect("value must be present");
         assert!(config.server.trust_proxy_headers);
     }
 
@@ -1197,12 +1250,12 @@ server:
 
     #[test]
     fn test_is_provider_enabled_explicitly_disabled() {
-        let yaml = r#"
+        let yaml = r"
 providers:
   openai:
     enabled: false
-"#;
-        let config = GatewayConfig::from_yaml(yaml).unwrap();
+";
+        let config = GatewayConfig::from_yaml(yaml).expect("value must be present");
         assert!(!config.is_provider_enabled("openai"));
         // Other providers still default to enabled
         assert!(config.is_provider_enabled("google"));
@@ -1210,12 +1263,12 @@ providers:
 
     #[test]
     fn test_is_provider_enabled_explicitly_enabled() {
-        let yaml = r#"
+        let yaml = r"
 providers:
   google:
     enabled: true
-"#;
-        let config = GatewayConfig::from_yaml(yaml).unwrap();
+";
+        let config = GatewayConfig::from_yaml(yaml).expect("value must be present");
         assert!(config.is_provider_enabled("google"));
     }
 }

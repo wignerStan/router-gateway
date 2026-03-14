@@ -79,7 +79,7 @@ credentials:
         .arg("json")
         .assert()
         .success()
-        .stdout(predicates::str::is_match(r#""valid"\s*:\s*true"#).unwrap());
+        .stdout(predicates::str::is_match(r#""valid"\s*:\s*true"#).expect("value must be present"));
 }
 
 #[test]
@@ -143,7 +143,7 @@ async fn models_against_test_server_lists_models() {
                     "id": "gpt-4",
                     "provider": "openai",
                     "capabilities": ["chat"],
-                    "context_window": 128000
+                    "context_window": 128_000
                 }
             ],
             "count": 1

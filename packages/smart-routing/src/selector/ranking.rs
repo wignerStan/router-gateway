@@ -95,14 +95,12 @@ impl SmartSelector {
         let policy_factor = self
             .policy_matcher
             .as_ref()
-            .map(|m| m.calculate_weight_factor(model, context))
-            .unwrap_or(1.0);
+            .map_or(1.0, |m| m.calculate_weight_factor(model, context));
 
         let is_blocked = self
             .policy_matcher
             .as_ref()
-            .map(|m| m.is_blocked(model, context))
-            .unwrap_or(false);
+            .is_some_and(|m| m.is_blocked(model, context));
 
         if is_blocked {
             return Vec::new();
@@ -153,17 +151,28 @@ impl SmartSelector {
     /// Select auth by weighted random choice
     fn select_by_weight(&self, available: Vec<WeightedAuth>) -> String {
         if available.len() == 1 {
-            return available.into_iter().next().unwrap().id;
+            return available
+                .into_iter()
+                .next()
+                .expect("value must be present")
+                .id;
         }
 
         let total_weight: f64 = available.iter().map(|a| a.weight).sum();
 
         if total_weight <= 0.0 {
             let idx = rand::thread_rng().gen_range(0..available.len());
-            return available.into_iter().nth(idx).unwrap().id;
+            return available
+                .into_iter()
+                .nth(idx)
+                .expect("value must be present")
+                .id;
         }
 
-        let fallback = available.last().map(|a| a.id.clone()).unwrap();
+        let fallback = available
+            .last()
+            .map(|a| a.id.clone())
+            .expect("value must be present");
 
         let r = rand::thread_rng().gen::<f64>() * total_weight;
         let mut cumulative = 0.0;

@@ -1,4 +1,8 @@
-use super::*;
+use super::{
+    broadcast, Arc, CachedModelInfo, CancellationToken, CapabilityCategory, ContextWindowCategory,
+    CostCategory, FetchResult, HashMap, ModelCategorization, ModelInfo, Mutex, ProviderCategory,
+    Registry, RegistryConfig, RwLock, TierCategory, Utc,
+};
 
 use tokio::task::JoinSet;
 
@@ -56,8 +60,9 @@ impl Registry {
         // 1. Check cache first (read lock)
         {
             let cache = self.cache.read().await;
+            let now = Utc::now();
             if let Some(cached) = cache.get(model_id) {
-                if Utc::now() < cached.expires_at {
+                if now < cached.expires_at {
                     return Ok(Some(cached.info.clone()));
                 }
             }
@@ -102,12 +107,13 @@ impl Registry {
                             Err(e.to_string())
                         } else {
                             // Cache valid result
+                            let expires_at = Utc::now() + self.ttl;
                             let mut cache = self.cache.write().await;
                             cache.insert(
                                 model_id.to_string(),
                                 CachedModelInfo {
                                     info: info.clone(),
-                                    expires_at: Utc::now() + self.ttl,
+                                    expires_at,
                                 },
                             );
                             Ok(Some(info))
@@ -136,7 +142,7 @@ impl Registry {
     }
 
     /// Retrieves model information for multiple model IDs.
-    /// Returns a map of modelID -> ModelInfo for found models.
+    /// Returns a map of modelID -> `ModelInfo` for found models.
     pub async fn get_multiple(
         &self,
         model_ids: &[String],
@@ -147,11 +153,11 @@ impl Registry {
 
         let mut set = JoinSet::new();
         let mut result = HashMap::new();
-        let now = Utc::now();
 
         // Check cache and identify needed models
         {
             let cache = self.cache.read().await;
+            let now = Utc::now();
             for model_id in model_ids {
                 if model_id.is_empty() {
                     continue;
@@ -182,18 +188,17 @@ impl Registry {
     }
 
     /// Refreshes the cache for specific model IDs.
-    /// If model_ids is empty, refreshes all models from the fetcher.
+    /// If `model_ids` is empty, refreshes all models from the fetcher.
     pub async fn refresh(
         &self,
         model_ids: &[String],
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let now = Utc::now();
-
         if model_ids.is_empty() {
             // Refresh all models
             let models = self.fetcher.list_all().await?;
 
             let mut cache = self.cache.write().await;
+            let now = Utc::now();
             for (id, info) in models {
                 if info.validate().is_err() {
                     continue;
@@ -217,7 +222,7 @@ impl Registry {
     }
 
     /// Removes specific models from the cache.
-    /// If model_ids is empty, clears the entire cache.
+    /// If `model_ids` is empty, clears the entire cache.
     pub async fn invalidate(&self, model_ids: &[String]) {
         let mut cache = self.cache.write().await;
         if model_ids.is_empty() {
@@ -425,11 +430,13 @@ impl Registry {
             loop {
                 tokio::select! {
                     _ = interval_timer.tick() => {
+                        let fetch_result = fetcher.list_all().await;
+
                         let mut cache_write = cache.write().await;
                         let now = Utc::now();
 
                         // Refresh all models
-                        if let Ok(models) = fetcher.list_all().await {
+                        if let Ok(models) = fetch_result {
                             for (id, info) in models {
                                 if info.validate().is_ok() {
                                     cache_write.insert(
@@ -446,7 +453,7 @@ impl Registry {
                         // Cleanup expired entries
                         cache_write.retain(|_, cached| now < cached.expires_at);
                     }
-                    _ = token.cancelled() => {
+                    () = token.cancelled() => {
                         break;
                     }
                 }

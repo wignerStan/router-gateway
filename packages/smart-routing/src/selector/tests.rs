@@ -66,7 +66,7 @@ mod tests {
 
             let selected = selector.pick(auths).await;
             assert!(selected.is_some());
-            let selected_id = selected.unwrap();
+            let selected_id = selected.expect("value must be present");
             assert!(["auth1", "auth2", "auth3"].contains(&selected_id.as_str()));
         }
 
@@ -106,7 +106,7 @@ mod tests {
             for _ in 0..10 {
                 let selected = selector.pick(auths.clone()).await;
                 assert!(selected.is_some());
-                let selected_id = selected.unwrap();
+                let selected_id = selected.expect("value must be present");
                 assert_ne!(selected_id, "auth2");
             }
         }
@@ -146,7 +146,7 @@ mod tests {
 
             let selected = selector.pick_with_policy(auths, &model, &context).await;
             assert!(selected.is_some());
-            let selected_id = selected.unwrap();
+            let selected_id = selected.expect("value must be present");
             assert!(["auth1", "auth2"].contains(&selected_id.as_str()));
         }
 
@@ -230,7 +230,7 @@ mod tests {
         #[tokio::test]
         async fn test_set_config() {
             let config = SmartRoutingConfig::default();
-            let mut selector = SmartSelector::new(config.clone());
+            let mut selector = SmartSelector::new(config);
 
             assert_eq!(selector.config().strategy, "weighted");
 
@@ -243,7 +243,7 @@ mod tests {
                 ..Default::default()
             };
 
-            selector.set_config(new_config.clone());
+            selector.set_config(new_config);
 
             assert_eq!(selector.config().strategy, "adaptive");
             assert!((selector.config().weight.success_rate_weight - 0.5).abs() < 0.01);
@@ -265,7 +265,7 @@ mod tests {
 
             let metrics = selector.metrics().get_metrics("auth1").await;
             assert!(metrics.is_some());
-            assert_eq!(metrics.unwrap().total_requests, 1);
+            assert_eq!(metrics.expect("value must be present").total_requests, 1);
         }
 
         #[tokio::test]
@@ -545,7 +545,10 @@ mod tests {
             let mut normal_count = 0;
             let mut quota_count = 0;
             for _ in 0..500 {
-                let selected = selector.pick(auths.clone()).await.unwrap();
+                let selected = selector
+                    .pick(auths.clone())
+                    .await
+                    .expect("value must be present");
                 if selected == "normal-auth" {
                     normal_count += 1;
                 } else {
@@ -555,9 +558,7 @@ mod tests {
 
             assert!(
                 normal_count > quota_count * 4,
-                "Normal auth should dominate over quota-exceeded (normal: {}, quota: {})",
-                normal_count,
-                quota_count
+                "Normal auth should dominate over quota-exceeded (normal: {normal_count}, quota: {quota_count})"
             );
         }
     }
@@ -602,7 +603,10 @@ mod tests {
             let mut auth1_count = 0;
             let mut auth2_count = 0;
             for _ in 0..100 {
-                let selected = selector.pick(auths.clone()).await.unwrap();
+                let selected = selector
+                    .pick(auths.clone())
+                    .await
+                    .expect("value must be present");
                 if selected == "auth1" {
                     auth1_count += 1;
                 } else {
@@ -612,9 +616,7 @@ mod tests {
 
             assert!(
                 auth1_count > 20 && auth2_count > 20,
-                "Both auths should receive selections with near-equal weights (auth1: {}, auth2: {})",
-                auth1_count,
-                auth2_count
+                "Both auths should receive selections with near-equal weights (auth1: {auth1_count}, auth2: {auth2_count})"
             );
         }
 
@@ -657,7 +659,12 @@ mod tests {
             let mut high_count = 0;
             let mut low_count = 0;
             for _ in 0..100 {
-                match selector.pick(auths.clone()).await.unwrap().as_str() {
+                match selector
+                    .pick(auths.clone())
+                    .await
+                    .expect("value must be present")
+                    .as_str()
+                {
                     "high-perf" => high_count += 1,
                     "low-perf" => low_count += 1,
                     _ => {},
@@ -666,15 +673,12 @@ mod tests {
 
             assert!(
                 high_count > low_count,
-                "High-perf auth should be selected more often than low-perf (high: {}, low: {})",
-                high_count,
-                low_count
+                "High-perf auth should be selected more often than low-perf (high: {high_count}, low: {low_count})"
             );
 
             assert!(
                 high_count >= 60,
-                "High-perf auth should be selected at least 60% of the time (got {} out of 100)",
-                high_count
+                "High-perf auth should be selected at least 60% of the time (got {high_count} out of 100)"
             );
         }
     }
@@ -735,13 +739,12 @@ mod tests {
             let all_results: Vec<_> = futures::future::join_all(handles).await;
 
             for results in all_results {
-                for selected in results.unwrap() {
+                for selected in results.expect("value must be present") {
                     assert!(selected.is_some());
-                    let id = selected.unwrap();
+                    let id = selected.expect("value must be present");
                     assert!(
                         ["auth1", "auth2", "auth3"].contains(&id.as_str()),
-                        "Selected invalid auth: {}",
-                        id
+                        "Selected invalid auth: {id}"
                     );
                 }
             }
@@ -820,7 +823,7 @@ mod tests {
 
             let auths: Vec<AuthInfo> = (0..100)
                 .map(|i| AuthInfo {
-                    id: format!("auth-{}", i),
+                    id: format!("auth-{i}"),
                     priority: Some(i % 10 - 5),
                     quota_exceeded: false,
                     unavailable: false,

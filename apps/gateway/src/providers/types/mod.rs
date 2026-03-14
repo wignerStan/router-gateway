@@ -43,7 +43,7 @@ impl ProviderRequest {
     }
 }
 
-/// Builder for ProviderRequest
+/// Builder for `ProviderRequest`
 #[derive(Default)]
 pub struct ProviderRequestBuilder {
     messages: Vec<Message>,
@@ -69,17 +69,17 @@ impl ProviderRequestBuilder {
         self
     }
 
-    pub fn max_tokens(mut self, max_tokens: u32) -> Self {
+    pub const fn max_tokens(mut self, max_tokens: u32) -> Self {
         self.max_tokens = Some(max_tokens);
         self
     }
 
-    pub fn temperature(mut self, temperature: f32) -> Self {
+    pub const fn temperature(mut self, temperature: f32) -> Self {
         self.temperature = Some(temperature);
         self
     }
 
-    pub fn stream(mut self, stream: bool) -> Self {
+    pub const fn stream(mut self, stream: bool) -> Self {
         self.stream = stream;
         self
     }
@@ -132,10 +132,7 @@ pub struct ProviderResponse {
 impl ProviderResponse {
     /// Check if this is a tool call response
     pub fn has_tool_calls(&self) -> bool {
-        self.tool_calls
-            .as_ref()
-            .map(|t| !t.is_empty())
-            .unwrap_or(false)
+        self.tool_calls.as_ref().is_some_and(|t| !t.is_empty())
     }
 }
 
@@ -152,7 +149,7 @@ pub struct TokenUsage {
 
 impl TokenUsage {
     /// Create new token usage
-    pub fn new(prompt: u32, completion: u32) -> Self {
+    pub const fn new(prompt: u32, completion: u32) -> Self {
         Self {
             prompt_tokens: prompt,
             completion_tokens: completion,
@@ -239,7 +236,7 @@ mod tests {
             .temperature(0.7)
             .max_tokens(1024)
             .build()
-            .unwrap();
+            .expect("value must be present");
 
         assert_eq!(request.model, "gpt-4");
         assert_eq!(request.temperature, Some(0.7));

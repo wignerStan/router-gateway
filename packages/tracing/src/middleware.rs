@@ -28,18 +28,20 @@ impl TracingMiddleware {
             .get("x-request-id")
             .or_else(|| headers.get("x-trace-id"))
             .and_then(|v| v.to_str().ok())
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| {
-                // Generate UUID-based request ID
-                Uuid::new_v4().to_string()
-            })
+            .map_or_else(
+                || {
+                    // Generate UUID-based request ID
+                    Uuid::new_v4().to_string()
+                },
+                std::string::ToString::to_string,
+            )
     }
 
     /// Extract provider from request (e.g., from path or headers)
     fn extract_provider(&self, headers: &HeaderMap) -> Option<String> {
         // Try to get from header first
         if let Some(provider) = headers.get("x-llm-provider") {
-            return provider.to_str().ok().map(|s| s.to_string());
+            return provider.to_str().ok().map(std::string::ToString::to_string);
         }
         // Could also extract from URI path in a real implementation
         None
@@ -48,7 +50,7 @@ impl TracingMiddleware {
     /// Extract model from request (e.g., from body or headers)
     fn extract_model(&self, headers: &HeaderMap) -> Option<String> {
         if let Some(model) = headers.get("x-llm-model") {
-            return model.to_str().ok().map(|s| s.to_string());
+            return model.to_str().ok().map(std::string::ToString::to_string);
         }
         None
     }
@@ -72,7 +74,7 @@ impl TracingMiddleware {
     }
 
     /// Process the request and generate a trace
-    pub async fn trace_request(
+    pub fn trace_request(
         &self,
         _method: axum::http::Method,
         _uri: axum::http::Uri,
@@ -101,8 +103,7 @@ impl TracingMiddleware {
         span.is_streaming = headers
             .get("x-streaming")
             .and_then(|v| v.to_str().ok())
-            .map(|v| v == "true" || v == "1")
-            .unwrap_or(false);
+            .is_some_and(|v| v == "true" || v == "1");
 
         span
     }
@@ -120,7 +121,7 @@ pub async fn tracing_middleware(
     let headers = req.headers().clone();
 
     // Create initial trace span
-    let mut span = middleware.trace_request(method, uri, headers, vec![]).await;
+    let mut span = middleware.trace_request(method, uri, headers, vec![]);
 
     // Execute the request
     let response = next.run(req).await;
@@ -264,14 +265,12 @@ mod tests {
         headers.insert("x-input-tokens", HeaderValue::from_static("100"));
         headers.insert("x-streaming", HeaderValue::from_static("true"));
 
-        let span = middleware
-            .trace_request(
-                axum::http::Method::POST,
-                "/v1/messages".parse().unwrap(),
-                headers,
-                vec![],
-            )
-            .await;
+        let span = middleware.trace_request(
+            axum::http::Method::POST,
+            "/v1/messages".parse().expect("value must be present"),
+            headers,
+            vec![],
+        );
 
         assert_eq!(span.request_id, "req-123");
         assert_eq!(span.provider, "anthropic");
@@ -306,7 +305,7 @@ mod tests {
         // but test that we fall back to UUID generation when header value is not valid string
         headers.insert(
             "x-request-id",
-            HeaderValue::from_bytes(b"valid-id").unwrap(),
+            HeaderValue::from_bytes(b"valid-id").expect("value must be present"),
         );
         assert_eq!(middleware.extract_request_id(&headers), "valid-id");
 
@@ -378,14 +377,12 @@ mod tests {
 
         // Empty headers - should use defaults
         let headers = HeaderMap::new();
-        let span = middleware
-            .trace_request(
-                axum::http::Method::POST,
-                "/v1/messages".parse().unwrap(),
-                headers,
-                vec![],
-            )
-            .await;
+        let span = middleware.trace_request(
+            axum::http::Method::POST,
+            "/v1/messages".parse().expect("value must be present"),
+            headers,
+            vec![],
+        );
 
         // Should have generated a UUID request_id
         assert!(Uuid::parse_str(&span.request_id).is_ok());
@@ -408,14 +405,14 @@ mod tests {
         headers.insert("x-request-id", HeaderValue::from_static("req-large"));
         headers.insert("x-llm-provider", HeaderValue::from_static("openai"));
 
-        let span = middleware
-            .trace_request(
-                axum::http::Method::POST,
-                "/v1/chat/completions".parse().unwrap(),
-                headers,
-                large_body,
-            )
-            .await;
+        let span = middleware.trace_request(
+            axum::http::Method::POST,
+            "/v1/chat/completions"
+                .parse()
+                .expect("value must be present"),
+            headers,
+            large_body,
+        );
 
         assert_eq!(span.request_id, "req-large");
         assert_eq!(span.provider, "openai");
@@ -455,14 +452,12 @@ mod tests {
         headers.insert("x-request-id", HeaderValue::from_static("req-1"));
         headers.insert("x-input-tokens", HeaderValue::from_static("500"));
 
-        let span = middleware
-            .trace_request(
-                axum::http::Method::POST,
-                "/v1/messages".parse().unwrap(),
-                headers,
-                vec![],
-            )
-            .await;
+        let span = middleware.trace_request(
+            axum::http::Method::POST,
+            "/v1/messages".parse().expect("value must be present"),
+            headers,
+            vec![],
+        );
 
         assert_eq!(span.input_tokens, Some(500));
     }
@@ -476,52 +471,44 @@ mod tests {
         // Test "true"
         let mut headers1 = HeaderMap::new();
         headers1.insert("x-streaming", HeaderValue::from_static("true"));
-        let span1 = middleware
-            .trace_request(
-                axum::http::Method::POST,
-                "/v1/messages".parse().unwrap(),
-                headers1,
-                vec![],
-            )
-            .await;
+        let span1 = middleware.trace_request(
+            axum::http::Method::POST,
+            "/v1/messages".parse().expect("value must be present"),
+            headers1,
+            vec![],
+        );
         assert!(span1.is_streaming);
 
         // Test "1"
         let mut headers2 = HeaderMap::new();
         headers2.insert("x-streaming", HeaderValue::from_static("1"));
-        let span2 = middleware
-            .trace_request(
-                axum::http::Method::POST,
-                "/v1/messages".parse().unwrap(),
-                headers2,
-                vec![],
-            )
-            .await;
+        let span2 = middleware.trace_request(
+            axum::http::Method::POST,
+            "/v1/messages".parse().expect("value must be present"),
+            headers2,
+            vec![],
+        );
         assert!(span2.is_streaming);
 
         // Test "false"
         let mut headers3 = HeaderMap::new();
         headers3.insert("x-streaming", HeaderValue::from_static("false"));
-        let span3 = middleware
-            .trace_request(
-                axum::http::Method::POST,
-                "/v1/messages".parse().unwrap(),
-                headers3,
-                vec![],
-            )
-            .await;
+        let span3 = middleware.trace_request(
+            axum::http::Method::POST,
+            "/v1/messages".parse().expect("value must be present"),
+            headers3,
+            vec![],
+        );
         assert!(!span3.is_streaming);
 
         // Test no header
         let headers4 = HeaderMap::new();
-        let span4 = middleware
-            .trace_request(
-                axum::http::Method::POST,
-                "/v1/messages".parse().unwrap(),
-                headers4,
-                vec![],
-            )
-            .await;
+        let span4 = middleware.trace_request(
+            axum::http::Method::POST,
+            "/v1/messages".parse().expect("value must be present"),
+            headers4,
+            vec![],
+        );
         assert!(!span4.is_streaming);
     }
 }

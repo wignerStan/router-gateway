@@ -45,7 +45,7 @@ const KNOWN_PROVIDERS: &[&str] = &[
 impl FallbackPlanner {
     /// Generate ordered fallback routes from available auths
     ///
-    /// Returns a Vec of FallbackRoute ordered by:
+    /// Returns a Vec of `FallbackRoute` ordered by:
     /// 1. Weight (descending) - higher weight = better candidate
     /// 2. Provider diversity (if enabled) - prefer different providers
     /// 3. Health status - prefer healthy > degraded > unhealthy
@@ -174,13 +174,13 @@ impl FallbackPlanner {
         let mut remaining = Vec::new();
 
         // First pass: pick highest weighted auth from each provider
-        for auth in weighted_auths.into_iter() {
+        for auth in weighted_auths {
             if let Some(ref provider) = auth.provider {
-                if !used_providers.contains(provider) {
+                if used_providers.contains(provider) {
+                    remaining.push(auth);
+                } else {
                     used_providers.insert(provider.clone());
                     diversified.push(auth);
-                } else {
-                    remaining.push(auth);
                 }
             } else {
                 // No provider info, add to remaining
