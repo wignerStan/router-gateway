@@ -809,10 +809,9 @@ mod bdd_integration {
             manager.set_provider(session_id.to_string(), provider.to_string()).await.expect("session affinity should be updated");
         }
 
-        let affinity = manager.get_affinity(session_id).await;
-        assert!(affinity.is_some());
-        assert_eq!(affinity.expect("session affinity should be established").request_count, 5);
-        assert_eq!(affinity.expect("session affinity should be established").preferred_provider, provider);
+        let affinity = manager.get_affinity(session_id).await.expect("session affinity should be established");
+        assert_eq!(affinity.request_count, 5);
+        assert_eq!(affinity.preferred_provider, provider);
     }
 
     // ============================================================================
@@ -836,7 +835,6 @@ mod bdd_integration {
         metrics.record_result("primary-auth", true, 150.0, 200).await;
 
         let result = metrics.get_metrics("primary-auth").await;
-        assert!(result.is_some());
         assert_eq!(result.expect("metrics for primary-auth should be recorded").success_count, 1);
     }
 
@@ -1050,8 +1048,6 @@ mod bdd_integration {
         metrics.record_result("test-auth", true, 150.0, 200).await;
 
         let result = metrics.get_metrics("test-auth").await;
-        assert!(result.is_some());
-
         let metrics = result.expect("metrics for test-auth should be recorded");
         assert_eq!(metrics.success_count, 1);
         assert_eq!(metrics.failure_count, 0);
@@ -1071,8 +1067,6 @@ mod bdd_integration {
         metrics.record_result("test-auth", false, 5000.0, 500).await;
 
         let result = metrics.get_metrics("test-auth").await;
-        assert!(result.is_some());
-
         let metrics = result.expect("metrics for failed test-auth should be recorded");
         assert_eq!(metrics.success_count, 0);
         assert_eq!(metrics.failure_count, 1);
@@ -1133,8 +1127,6 @@ mod bdd_integration {
         collector.record_result("new-route", true, 150.0, 200).await;
 
         let stats = collector.get_metrics("new-route").await;
-        assert!(stats.is_some());
-
         let stats = stats.expect("metrics for new route should be created");
         assert_eq!(stats.total_requests, 1);
         assert_eq!(stats.success_count, 1);
@@ -1201,7 +1193,6 @@ mod bdd_integration {
         let routes = vec!["anthropic-route".to_string()];
         let selected = policy.select_route(&routes);
 
-        assert!(selected.is_some());
         assert_eq!(selected.expect("anthropic-route should be selected based on optimistic prior"), "anthropic-route");
     }
 
@@ -1252,8 +1243,6 @@ mod bdd_integration {
 
         // Get stats
         let stats = policy.get_stats("route-1");
-        assert!(stats.is_some());
-
         let stats = stats.expect("stats for route-1 should be recorded");
         assert_eq!(stats.pulls, 1);
         assert_eq!(stats.last_utility, 0.85);

@@ -548,7 +548,7 @@ mod integration_tests {
                     .expect("Axum request should be constructible"),
             )
             .await
-            .expect("Axum request should be constructible");
+            .expect("Router should handle request successfully");
 
         assert_eq!(response.status(), StatusCode::OK);
         let list: serde_json::Value = read_json_body(response).await;
@@ -571,7 +571,7 @@ mod integration_tests {
                     .expect("Axum request should be constructible"),
             )
             .await
-            .expect("Axum request should be constructible");
+            .expect("Router should handle request successfully");
 
         assert_eq!(response.status(), StatusCode::OK);
 
@@ -593,7 +593,7 @@ mod integration_tests {
                     .expect("Axum request should be constructible"),
             )
             .await
-            .expect("Axum request should be constructible");
+            .expect("Router should handle request successfully");
 
         assert_eq!(response.status(), StatusCode::OK);
     }
@@ -613,7 +613,7 @@ mod integration_tests {
                     .expect("Axum request should be constructible"),
             )
             .await
-            .expect("Axum request should be constructible");
+            .expect("Router should handle request successfully");
 
         assert_eq!(response.status(), StatusCode::OK);
     }
@@ -672,7 +672,7 @@ mod integration_tests {
                     .expect("Axum request should be constructible"),
             )
             .await
-            .expect("Axum request should be constructible");
+            .expect("Router should handle request successfully");
 
         assert_eq!(response.status(), StatusCode::OK);
     }
@@ -693,32 +693,32 @@ mod integration_tests {
                     .expect("Axum request should be constructible"),
             )
             .await
-            .expect("Axum request should be constructible");
+            .expect("Router should handle request successfully");
 
         let headers = response.headers();
 
         assert_eq!(
             headers
                 .get("X-Content-Type-Options")
-                .expect("Axum request should be constructible"),
+                .expect("X-Content-Type-Options header should be present"),
             "nosniff"
         );
         assert_eq!(
             headers
                 .get("X-Frame-Options")
-                .expect("Axum request should be constructible"),
+                .expect("X-Frame-Options header should be present"),
             "DENY"
         );
         assert_eq!(
             headers
                 .get("Referrer-Policy")
-                .expect("Axum request should be constructible"),
+                .expect("Referrer-Policy header should be present"),
             "strict-origin-when-cross-origin"
         );
         assert_eq!(
             headers
                 .get("Content-Security-Policy")
-                .expect("Axum request should be constructible"),
+                .expect("Content-Security-Policy header should be present"),
             "default-src 'none'; frame-ancestors 'none'"
         );
     }
@@ -750,7 +750,7 @@ mod integration_tests {
                 .clone()
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::OK);
         }
 
@@ -765,7 +765,7 @@ mod integration_tests {
         let response = app
             .oneshot(request)
             .await
-            .expect("Axum request should be constructible");
+            .expect("Router should handle request successfully");
 
         assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
     }
@@ -863,7 +863,7 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::OK);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -894,7 +894,7 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::OK);
 
             let health: HealthStatus = read_json_body(response).await;
@@ -940,7 +940,7 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             let health: HealthStatus = read_json_body(response).await;
 
             assert_eq!(health.credential_count, 2);
@@ -986,7 +986,7 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             let health: HealthStatus = read_json_body(response).await;
 
             assert_eq!(health.credential_count, 3);
@@ -1012,7 +1012,7 @@ mod integration_tests {
                 .clone()
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::OK);
 
             let mut request = Request::builder()
@@ -1025,7 +1025,7 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::OK);
         }
     }
@@ -1054,7 +1054,7 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::OK);
         }
 
@@ -1076,7 +1076,7 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -1104,13 +1104,13 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
             let value = read_json_body::<serde_json::Value>(response).await;
             assert!(value["error"]["message"]
                 .as_str()
-                .expect("Axum request should be constructible")
+                .expect("JSON value should be a string")
                 .contains("Missing Authorization header"));
         }
 
@@ -1132,13 +1132,13 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
             let value = read_json_body::<serde_json::Value>(response).await;
             assert!(value["error"]["message"]
                 .as_str()
-                .expect("Axum request should be constructible")
+                .expect("JSON value should be a string")
                 .contains("Invalid or expired API token"));
         }
 
@@ -1163,7 +1163,7 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -1191,7 +1191,7 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::OK);
         }
     }
@@ -1215,7 +1215,7 @@ mod integration_tests {
                     .clone()
                     .oneshot(request)
                     .await
-                    .expect("Axum request should be constructible");
+                    .expect("Router should handle request successfully");
                 assert_eq!(response.status(), StatusCode::OK);
             }
         }
@@ -1253,7 +1253,7 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -1281,7 +1281,7 @@ mod integration_tests {
                 .clone()
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::OK);
 
             let mut request = Request::builder()
@@ -1295,7 +1295,7 @@ mod integration_tests {
                 .clone()
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 
             let mut request = Request::builder()
@@ -1308,7 +1308,7 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::OK);
         }
 
@@ -1333,7 +1333,7 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -1341,7 +1341,7 @@ mod integration_tests {
             assert_eq!(value["error"]["type"], ERR_RATE_LIMIT);
             assert!(value["error"]["message"]
                 .as_str()
-                .expect("Axum request should be constructible")
+                .expect("JSON value should be a string")
                 .contains("Too many requests"));
         }
 
@@ -1367,7 +1367,7 @@ mod integration_tests {
                 .clone()
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 
             let mut request = Request::builder()
@@ -1380,7 +1380,7 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
         }
     }
@@ -1409,7 +1409,7 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         }
 
@@ -1430,7 +1430,7 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         }
 
@@ -1460,7 +1460,7 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         }
 
@@ -1490,7 +1490,7 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::OK);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -1498,7 +1498,7 @@ mod integration_tests {
             assert!(value["models"].is_array());
             assert!(!value["models"]
                 .as_array()
-                .expect("Axum request should be constructible")
+                .expect("Models list should be an array")
                 .is_empty());
             assert_eq!(value["count"], 1);
         }
@@ -1558,14 +1558,14 @@ mod integration_tests {
             let response = app
                 .oneshot(make_chat_request(test_addr))
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
             let value = read_json_body::<serde_json::Value>(response).await;
             assert_eq!(value["error"]["type"], ERR_NO_ROUTE);
             assert!(value["error"]["message"]
                 .as_str()
-                .expect("Axum request should be constructible")
+                .expect("JSON value should be a string")
                 .contains("No suitable routes"));
         }
 
@@ -1581,7 +1581,7 @@ mod integration_tests {
             let response = app
                 .oneshot(make_chat_request(test_addr))
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -1608,7 +1608,7 @@ mod integration_tests {
             let response = app
                 .oneshot(make_chat_request(test_addr))
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::OK);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -1647,7 +1647,7 @@ mod integration_tests {
             let response = app
                 .oneshot(make_chat_request(test_addr))
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::OK);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -1671,25 +1671,25 @@ mod integration_tests {
             assert_eq!(
                 headers
                     .get("X-Content-Type-Options")
-                    .expect("Axum request should be constructible"),
+                    .expect("X-Content-Type-Options header should be present"),
                 "nosniff"
             );
             assert_eq!(
                 headers
                     .get("X-Frame-Options")
-                    .expect("Axum request should be constructible"),
+                    .expect("X-Frame-Options header should be present"),
                 "DENY"
             );
             assert_eq!(
                 headers
                     .get("Referrer-Policy")
-                    .expect("Axum request should be constructible"),
+                    .expect("Referrer-Policy header should be present"),
                 "strict-origin-when-cross-origin"
             );
             assert_eq!(
                 headers
                     .get("Content-Security-Policy")
-                    .expect("Axum request should be constructible"),
+                    .expect("Content-Security-Policy header should be present"),
                 "default-src 'none'; frame-ancestors 'none'"
             );
         }
@@ -1711,7 +1711,7 @@ mod integration_tests {
                 .clone()
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             check_security_headers(response.headers());
 
             let mut request = Request::builder()
@@ -1725,7 +1725,7 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             check_security_headers(response.headers());
         }
 
@@ -1745,7 +1745,7 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
             check_security_headers(response.headers());
         }
@@ -1767,7 +1767,7 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
 
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
             assert_ne!(response.status(), StatusCode::NOT_FOUND);
@@ -1794,7 +1794,7 @@ mod integration_tests {
                 .clone()
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::OK);
 
             // No auth header — if auth ran before rate-limit, this would
@@ -1809,7 +1809,7 @@ mod integration_tests {
             let response = app
                 .oneshot(request)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -1842,8 +1842,7 @@ mod integration_tests {
         }
 
         fn make_chat_request(auth_token: &str, body: serde_json::Value) -> Request<Body> {
-            let body_bytes =
-                serde_json::to_vec(&body).expect("Axum request should be constructible");
+            let body_bytes = serde_json::to_vec(&body).expect("JSON body should be serializable");
             let mut req = Request::builder()
                 .method("POST")
                 .uri("/v1/chat/completions")
@@ -1886,7 +1885,7 @@ mod integration_tests {
             let response = app
                 .oneshot(req)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::OK);
 
             let json_body = read_json_body::<serde_json::Value>(response).await;
@@ -1910,7 +1909,7 @@ mod integration_tests {
             let response = app
                 .oneshot(req)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::OK);
 
             let json_body = read_json_body::<serde_json::Value>(response).await;
@@ -1938,7 +1937,7 @@ mod integration_tests {
             let response = app
                 .oneshot(req)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::OK);
 
             let json_body = read_json_body::<serde_json::Value>(response).await;
@@ -1967,7 +1966,7 @@ mod integration_tests {
             let response = app
                 .oneshot(req)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::OK);
 
             let json_body = read_json_body::<serde_json::Value>(response).await;
@@ -1996,7 +1995,7 @@ mod integration_tests {
             let response = app
                 .oneshot(req)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::OK);
 
             let json_body = read_json_body::<serde_json::Value>(response).await;
@@ -2024,7 +2023,7 @@ mod integration_tests {
             let response = app
                 .oneshot(req)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::OK);
 
             let json_body = read_json_body::<serde_json::Value>(response).await;
@@ -2052,7 +2051,7 @@ mod integration_tests {
             let response = app
                 .oneshot(req)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::OK);
 
             let json_body = read_json_body::<serde_json::Value>(response).await;
@@ -2080,7 +2079,7 @@ mod integration_tests {
             let response = app
                 .oneshot(req)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::OK);
 
             let json_body = read_json_body::<serde_json::Value>(response).await;
@@ -2116,7 +2115,7 @@ mod integration_tests {
             let response = app
                 .oneshot(req)
                 .await
-                .expect("Axum request should be constructible");
+                .expect("Router should handle request successfully");
             assert_eq!(response.status(), StatusCode::OK);
 
             let json_body = read_json_body::<serde_json::Value>(response).await;
