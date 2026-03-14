@@ -960,7 +960,9 @@ credentials:
 
     #[test]
     fn test_from_file_nonexistent() {
-        let result = GatewayConfig::from_file("nonexistent.yaml");
+        let dir = tempfile::tempdir().expect("Failed to create temporary directory");
+        let file_path = dir.path().join("nonexistent.yaml");
+        let result = GatewayConfig::from_file(file_path);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
