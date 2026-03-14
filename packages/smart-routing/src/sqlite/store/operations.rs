@@ -447,12 +447,12 @@ impl SQLiteStore {
             .next()
             .map_err(|e| SqliteError::query("read_health_row", e))?
         {
-            let auth_id: String = row.get(0)?;
-            let status_str: String = row.get(1)?;
-            let last_status_change_str: String = row.get(3)?;
-            let last_check_time_str: String = row.get(4)?;
-            let unavailable_until_str: Option<String> = row.get(5)?;
-            let error_counts_str: String = row.get(6)?;
+            let auth_id: String = row.get("auth_id")?;
+            let status_str: String = row.get("status")?;
+            let last_status_change_str: String = row.get("last_status_change")?;
+            let last_check_time_str: String = row.get("last_check_time")?;
+            let unavailable_until_str: Option<String> = row.get("unavailable_until")?;
+            let error_counts_str: String = row.get("error_counts")?;
 
             let status = match status_str.as_str() {
                 "Degraded" => HealthStatus::Degraded,
@@ -467,8 +467,8 @@ impl SQLiteStore {
                 auth_id,
                 AuthHealth {
                     status,
-                    consecutive_successes: row.get(2)?,
-                    consecutive_failures: row.get(3)?,
+                    consecutive_successes: row.get("consecutive_successes")?,
+                    consecutive_failures: row.get("consecutive_failures")?,
                     last_status_change: DateTime::parse_from_rfc3339(&last_status_change_str)
                         .map_or_else(|_| Utc::now(), |dt| dt.with_timezone(&Utc)),
                     last_check_time: DateTime::parse_from_rfc3339(&last_check_time_str)

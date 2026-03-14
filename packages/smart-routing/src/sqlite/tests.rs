@@ -265,6 +265,48 @@ mod sqlite_tests {
             assert_eq!(metrics.failure_count, 1);
         }
 
+
+        #[tokio::test]
+        async fn test_metrics_collector_flush_and_load() {
+            let config = SQLiteConfig {
+                database_path: ":memory:".to_string(),
+                ..Default::default()
+            };
+
+            let store = SQLiteStore::new(config).await.unwrap();
+            let collector = SQLiteMetricsCollector::new(store.clone());
+
+            collector.initialize_auth("test-auth-flush").await;
+            collector
+                .record_request("test-auth-flush", 100.0, true, 200)
+                .await;
+
+            // Database should not have it yet
+            let db_metrics = store.load_metrics("test-auth-flush").await.unwrap();
+            assert!(db_metrics.is_none(), "Metrics should not be in DB yet");
+
+            // Flush
+            collector.flush().await.unwrap();
+
+            // DB should now have it
+            let db_metrics = store.load_metrics("test-auth-flush").await.unwrap();
+            assert!(db_metrics.is_some(), "Metrics should be in DB after flush");
+            let db_metrics = db_metrics.unwrap();
+            assert_eq!(db_metrics.total_requests, 1);
+            assert_eq!(db_metrics.success_count, 1);
+
+            // Create a new collector and load from DB
+            let new_collector = SQLiteMetricsCollector::new(store);
+            let mem_metrics = new_collector.get_metrics("test-auth-flush").await;
+            assert!(mem_metrics.is_none(), "New collector should be empty initially");
+
+            new_collector.load_from_db().await.unwrap();
+
+            let loaded_metrics = new_collector.get_metrics("test-auth-flush").await;
+            assert!(loaded_metrics.is_some(), "Should have loaded metrics");
+            assert_eq!(loaded_metrics.unwrap().total_requests, 1);
+        }
+
         #[tokio::test]
         async fn test_health_manager() {
             let config = SQLiteConfig {
@@ -299,6 +341,44 @@ mod sqlite_tests {
             let available = manager.is_available("test-auth").await;
             assert!(!available, "Should be unavailable during cooldown");
         }
+
+        #[tokio::test]
+        async fn test_health_manager_flush_and_load() {
+            let config = SQLiteConfig {
+                database_path: ":memory:".to_string(),
+                ..Default::default()
+            };
+
+            let store = SQLiteStore::new(config).await.unwrap();
+            let manager = SQLiteHealthManager::new(store.clone());
+
+            manager.record_success("test-auth-health-flush").await;
+
+            // Database should not have it yet
+            let db_health = store.load_health("test-auth-health-flush").await.unwrap();
+            assert!(db_health.is_none(), "Health should not be in DB yet");
+
+            // Flush
+            manager.flush().await.unwrap();
+
+            // DB should now have it
+            let db_health = store.load_health("test-auth-health-flush").await.unwrap();
+            assert!(db_health.is_some(), "Health should be in DB after flush");
+            let db_health = db_health.unwrap();
+            assert_eq!(db_health.status, HealthStatus::Healthy);
+
+            // Create a new manager and load from DB
+            let new_manager = SQLiteHealthManager::new(store);
+            let mem_health = new_manager.get_health("test-auth-health-flush").await;
+            assert!(mem_health.is_none(), "New manager should be empty initially");
+
+            new_manager.load_from_db().await.unwrap();
+
+            let loaded_health = new_manager.get_health("test-auth-health-flush").await;
+            assert!(loaded_health.is_some(), "Should have loaded health");
+            assert_eq!(loaded_health.unwrap().status, HealthStatus::Healthy);
+        }
+
     }
 
     mod selector_basic {
