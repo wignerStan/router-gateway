@@ -7,7 +7,7 @@ use model_registry::{DataSource, ModelCapabilities, ModelInfo, RateLimits};
 fn create_test_model(id: &str, provider: &str, context_window: usize) -> ModelInfo {
     ModelInfo {
         id: id.to_string(),
-        name: format!("Test Model {}", id),
+        name: format!("Test Model {id}"),
         provider: provider.to_string(),
         context_window,
         max_output_tokens: 4096,
@@ -52,7 +52,7 @@ mod creation_and_defaults {
     #[tokio::test]
     async fn test_router_creation() {
         let router = Router::new();
-        let _router2 = router.clone();
+        let _router2 = router;
     }
 
     #[tokio::test]

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use thiserror::Error;
 
-/// ModelInfo contains model metadata for routing decisions.
+/// `ModelInfo` contains model metadata for routing decisions.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ModelInfo {
     /// ID is the unique model identifier (e.g., "claude-sonnet-4-20250514")
@@ -14,30 +14,30 @@ pub struct ModelInfo {
     /// Provider is the model provider (e.g., "anthropic", "openai", "google")
     pub provider: String,
 
-    /// ContextWindow is the maximum context window in tokens
+    /// `ContextWindow` is the maximum context window in tokens
     pub context_window: usize,
 
-    /// MaxOutputTokens is the maximum output tokens
+    /// `MaxOutputTokens` is the maximum output tokens
     pub max_output_tokens: usize,
 
-    /// InputPricePerMillion is input price per 1M tokens in USD
+    /// `InputPricePerMillion` is input price per 1M tokens in USD
     pub input_price_per_million: f64,
 
-    /// OutputPricePerMillion is output price per 1M tokens in USD
+    /// `OutputPricePerMillion` is output price per 1M tokens in USD
     pub output_price_per_million: f64,
 
     /// Capabilities lists supported features
     pub capabilities: ModelCapabilities,
 
-    /// RateLimits defines rate limiting constraints
+    /// `RateLimits` defines rate limiting constraints
     pub rate_limits: RateLimits,
 
     /// Source indicates where this data came from
     pub source: DataSource,
 }
 
-/// ModelCapabilities defines supported model features.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// `ModelCapabilities` defines supported model features.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ModelCapabilities {
     /// Streaming indicates if streaming responses are supported
     pub streaming: bool,
@@ -52,25 +52,25 @@ pub struct ModelCapabilities {
     pub thinking: bool,
 }
 
-/// RateLimits defines rate limiting constraints.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// `RateLimits` defines rate limiting constraints.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RateLimits {
-    /// RequestsPerMinute is the rate limit for requests
+    /// `RequestsPerMinute` is the rate limit for requests
     pub requests_per_minute: usize,
 
-    /// TokensPerMinute is the rate limit for tokens
+    /// `TokensPerMinute` is the rate limit for tokens
     pub tokens_per_minute: usize,
 }
 
-/// DataSource indicates where model data originated.
+/// `DataSource` indicates where model data originated.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[non_exhaustive]
 pub enum DataSource {
     /// Static indicates hardcoded fallback data
     Static,
-    /// ModelsDev indicates data from models.dev API
+    /// `ModelsDev` indicates data from models.dev API
     ModelsDev,
-    /// LiteLLM indicates data from LiteLLM proxy
+    /// `LiteLLM` indicates data from `LiteLLM` proxy
     LiteLLM,
     /// Local indicates locally configured data
     Local,
@@ -79,15 +79,15 @@ pub enum DataSource {
 impl fmt::Display for DataSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DataSource::Static => write!(f, "static"),
-            DataSource::ModelsDev => write!(f, "models.dev"),
-            DataSource::LiteLLM => write!(f, "litellm"),
-            DataSource::Local => write!(f, "local"),
+            Self::Static => write!(f, "static"),
+            Self::ModelsDev => write!(f, "models.dev"),
+            Self::LiteLLM => write!(f, "litellm"),
+            Self::Local => write!(f, "local"),
         }
     }
 }
 
-/// Errors that can occur when working with ModelInfo
+/// Errors that can occur when working with `ModelInfo`
 #[derive(Debug, Error)]
 pub enum ModelInfoError {
     #[error("model ID cannot be empty")]
@@ -105,7 +105,7 @@ pub enum ModelInfoError {
 }
 
 impl ModelInfo {
-    /// SupportsCapability checks if the model supports a specific capability.
+    /// `SupportsCapability` checks if the model supports a specific capability.
     pub fn supports_capability(&self, capability: &str) -> bool {
         match capability {
             "streaming" => self.capabilities.streaming,
@@ -116,19 +116,19 @@ impl ModelInfo {
         }
     }
 
-    /// EstimateCost calculates the estimated cost for a request in USD.
+    /// `EstimateCost` calculates the estimated cost for a request in USD.
     pub fn estimate_cost(&self, input_tokens: usize, output_tokens: usize) -> f64 {
         let input_cost = (input_tokens as f64) / 1_000_000.0 * self.input_price_per_million;
         let output_cost = (output_tokens as f64) / 1_000_000.0 * self.output_price_per_million;
         input_cost + output_cost
     }
 
-    /// CanFitContext checks if the model can handle the given token count.
-    pub fn can_fit_context(&self, tokens: usize) -> bool {
+    /// `CanFitContext` checks if the model can handle the given token count.
+    pub const fn can_fit_context(&self, tokens: usize) -> bool {
         tokens > 0 && tokens <= self.context_window
     }
 
-    /// GetMaxTokens returns the maximum output tokens allowed.
+    /// `GetMaxTokens` returns the maximum output tokens allowed.
     pub fn get_max_tokens(&self) -> usize {
         if self.max_output_tokens > 0 && self.max_output_tokens < self.context_window {
             self.max_output_tokens
@@ -167,7 +167,7 @@ impl ModelInfo {
     }
 }
 
-/// EstimateRequestTokens provides a rough token estimate for text input.
+/// `EstimateRequestTokens` provides a rough token estimate for text input.
 /// This is a simple heuristic: ~4 characters per token for English text.
 pub fn estimate_request_tokens(text: &str) -> usize {
     // Rough estimate: 4 chars per token for English text
@@ -185,7 +185,7 @@ mod tests {
             id: "test-model".to_string(),
             name: "Test Model".to_string(),
             provider: "test".to_string(),
-            context_window: 128000,
+            context_window: 128_000,
             max_output_tokens: 4096,
             input_price_per_million: 1.0,
             output_price_per_million: 2.0,
@@ -211,7 +211,7 @@ mod tests {
             id: "".to_string(),
             name: "Test".to_string(),
             provider: "test".to_string(),
-            context_window: 128000,
+            context_window: 128_000,
             max_output_tokens: 4096,
             input_price_per_million: 1.0,
             output_price_per_million: 2.0,
@@ -237,7 +237,7 @@ mod tests {
             id: "test".to_string(),
             name: "Test".to_string(),
             provider: "test".to_string(),
-            context_window: 128000,
+            context_window: 128_000,
             max_output_tokens: 4096,
             input_price_per_million: 3.0,
             output_price_per_million: 15.0,
@@ -264,7 +264,7 @@ mod tests {
             id: "test".to_string(),
             name: "Test".to_string(),
             provider: "test".to_string(),
-            context_window: 128000,
+            context_window: 128_000,
             max_output_tokens: 4096,
             input_price_per_million: 1.0,
             output_price_per_million: 2.0,
@@ -281,9 +281,9 @@ mod tests {
             source: DataSource::Static,
         };
 
-        assert!(info.can_fit_context(100000));
-        assert!(info.can_fit_context(128000));
-        assert!(!info.can_fit_context(129000));
+        assert!(info.can_fit_context(100_000));
+        assert!(info.can_fit_context(128_000));
+        assert!(!info.can_fit_context(129_000));
         assert!(!info.can_fit_context(0));
     }
 
@@ -328,12 +328,13 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::panic)]
     fn test_validate_negative_input_price() {
         let info = ModelInfo {
             id: "test-model".to_string(),
             name: "Test Model".to_string(),
             provider: "test".to_string(),
-            context_window: 128000,
+            context_window: 128_000,
             max_output_tokens: 4096,
             input_price_per_million: -1.0, // Invalid: negative price
             output_price_per_million: 2.0,
@@ -363,12 +364,13 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::panic)]
     fn test_validate_negative_output_price() {
         let info = ModelInfo {
             id: "test-model".to_string(),
             name: "Test Model".to_string(),
             provider: "test".to_string(),
-            context_window: 128000,
+            context_window: 128_000,
             max_output_tokens: 4096,
             input_price_per_million: 1.0,
             output_price_per_million: -5.0, // Invalid: negative price
@@ -404,7 +406,7 @@ mod tests {
             id: "free-model".to_string(),
             name: "Free Model".to_string(),
             provider: "test".to_string(),
-            context_window: 128000,
+            context_window: 128_000,
             max_output_tokens: 4096,
             input_price_per_million: 0.0,  // Valid: free model
             output_price_per_million: 0.0, // Valid: free model
@@ -434,7 +436,7 @@ mod tests {
             id: "test-model".to_string(),
             name: "Test Model".to_string(),
             provider: "test".to_string(),
-            context_window: 128000,
+            context_window: 128_000,
             max_output_tokens: 4096,
             input_price_per_million: 1.0,
             output_price_per_million: 2.0,
@@ -464,7 +466,7 @@ mod tests {
             id: "test-model".to_string(),
             name: "Test Model".to_string(),
             provider: "test".to_string(),
-            context_window: 128000,
+            context_window: 128_000,
             max_output_tokens: 4096,
             input_price_per_million: 1.0,
             output_price_per_million: 2.0,
@@ -498,7 +500,7 @@ mod tests {
             id: "test-model".to_string(),
             name: "Test Model".to_string(),
             provider: "test".to_string(),
-            context_window: 128000,
+            context_window: 128_000,
             max_output_tokens: 4096,
             input_price_per_million: 1.0,
             output_price_per_million: 2.0,
@@ -531,7 +533,7 @@ mod tests {
             id: "test-model".to_string(),
             name: "Test Model".to_string(),
             provider: "test".to_string(),
-            context_window: 128000,
+            context_window: 128_000,
             max_output_tokens: 4096,
             input_price_per_million: 1.0,
             output_price_per_million: 2.0,
@@ -558,7 +560,7 @@ mod tests {
             id: "test-model".to_string(),
             name: "Test Model".to_string(),
             provider: "test".to_string(),
-            context_window: 128000,
+            context_window: 128_000,
             max_output_tokens: 4096,
             input_price_per_million: 1.0,
             output_price_per_million: 2.0,
@@ -576,9 +578,9 @@ mod tests {
         };
 
         // Exact boundary cases
-        assert!(info.can_fit_context(128000)); // Exactly at limit - should fit
-        assert!(info.can_fit_context(127999)); // One less than limit
-        assert!(!info.can_fit_context(128001)); // One more than limit
+        assert!(info.can_fit_context(128_000)); // Exactly at limit - should fit
+        assert!(info.can_fit_context(127_999)); // One less than limit
+        assert!(!info.can_fit_context(128_001)); // One more than limit
     }
 
     #[test]
@@ -587,7 +589,7 @@ mod tests {
             id: "test-model".to_string(),
             name: "Test Model".to_string(),
             provider: "test".to_string(),
-            context_window: 128000,
+            context_window: 128_000,
             max_output_tokens: 4096,
             input_price_per_million: 1.0,
             output_price_per_million: 2.0,
@@ -618,7 +620,7 @@ mod tests {
             id: "test-model".to_string(),
             name: "Test Model".to_string(),
             provider: "test".to_string(),
-            context_window: 128000,
+            context_window: 128_000,
             max_output_tokens: 4096, // Smaller than context window
             input_price_per_million: 1.0,
             output_price_per_million: 2.0,
@@ -645,7 +647,7 @@ mod tests {
             id: "test-model".to_string(),
             name: "Test Model".to_string(),
             provider: "test".to_string(),
-            context_window: 128000,
+            context_window: 128_000,
             max_output_tokens: 0, // Zero means use fallback
             input_price_per_million: 1.0,
             output_price_per_million: 2.0,
@@ -663,7 +665,7 @@ mod tests {
         };
 
         // Should return 75% of context window as fallback
-        let expected = (128000_f64 * 0.75) as usize;
+        let expected = (128_000_f64 * 0.75) as usize;
         assert_eq!(info.get_max_tokens(), expected);
     }
 
@@ -673,8 +675,8 @@ mod tests {
             id: "test-model".to_string(),
             name: "Test Model".to_string(),
             provider: "test".to_string(),
-            context_window: 128000,
-            max_output_tokens: 200000, // Larger than context window
+            context_window: 128_000,
+            max_output_tokens: 200_000, // Larger than context window
             input_price_per_million: 1.0,
             output_price_per_million: 2.0,
             capabilities: ModelCapabilities {
@@ -691,7 +693,7 @@ mod tests {
         };
 
         // Should return 75% of context window when max_output_tokens >= context_window
-        let expected = (128000_f64 * 0.75) as usize;
+        let expected = (128_000_f64 * 0.75) as usize;
         assert_eq!(info.get_max_tokens(), expected);
     }
 
@@ -701,8 +703,8 @@ mod tests {
             id: "test-model".to_string(),
             name: "Test Model".to_string(),
             provider: "test".to_string(),
-            context_window: 128000,
-            max_output_tokens: 128000, // Equal to context window
+            context_window: 128_000,
+            max_output_tokens: 128_000, // Equal to context window
             input_price_per_million: 1.0,
             output_price_per_million: 2.0,
             capabilities: ModelCapabilities {
@@ -719,7 +721,7 @@ mod tests {
         };
 
         // Should return 75% fallback when max_output_tokens >= context_window
-        let expected = (128000_f64 * 0.75) as usize;
+        let expected = (128_000_f64 * 0.75) as usize;
         assert_eq!(info.get_max_tokens(), expected);
     }
 
@@ -729,8 +731,8 @@ mod tests {
             id: "test-model".to_string(),
             name: "Test Model".to_string(),
             provider: "test".to_string(),
-            context_window: 128000,
-            max_output_tokens: 127999, // Just under context window
+            context_window: 128_000,
+            max_output_tokens: 127_999, // Just under context window
             input_price_per_million: 1.0,
             output_price_per_million: 2.0,
             capabilities: ModelCapabilities {
@@ -747,7 +749,7 @@ mod tests {
         };
 
         // Should return actual max_output_tokens
-        assert_eq!(info.get_max_tokens(), 127999);
+        assert_eq!(info.get_max_tokens(), 127_999);
     }
 
     // ========================================

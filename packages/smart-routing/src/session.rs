@@ -376,7 +376,7 @@ mod tests {
         // Add multiple sessions
         for i in 0..5 {
             manager
-                .set_provider(format!("session-{}", i), "provider-a".to_string())
+                .set_provider(format!("session-{i}"), "provider-a".to_string())
                 .await
                 .expect("value must be present");
         }
@@ -448,13 +448,13 @@ mod tests {
         // Add sessions with multiple providers
         for i in 0..3 {
             manager
-                .set_provider(format!("session-{}", i), "provider-a".to_string())
+                .set_provider(format!("session-{i}"), "provider-a".to_string())
                 .await
                 .expect("value must be present");
         }
         for i in 3..5 {
             manager
-                .set_provider(format!("session-{}", i), "provider-b".to_string())
+                .set_provider(format!("session-{i}"), "provider-b".to_string())
                 .await
                 .expect("value must be present");
         }
@@ -493,7 +493,7 @@ mod tests {
         // Add more sessions than limit
         for i in 0..5 {
             manager
-                .set_provider(format!("session-{}", i), "provider-a".to_string())
+                .set_provider(format!("session-{i}"), "provider-a".to_string())
                 .await
                 .expect("value must be present");
 

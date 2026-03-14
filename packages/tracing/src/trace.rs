@@ -99,9 +99,7 @@ impl TraceSpan {
 
     /// Check if the trace was successful
     pub fn is_success(&self) -> bool {
-        self.status_code
-            .map(|s| (200..300).contains(&s))
-            .unwrap_or(false)
+        self.status_code.is_some_and(|s| (200..300).contains(&s))
     }
 }
 

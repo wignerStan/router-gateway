@@ -154,7 +154,7 @@ mod sqlite_tests {
             // Write some history entries
             for i in 0..5 {
                 let result = store
-                    .write_status_history(&format!("auth-{}", i), 200, 100.0, true)
+                    .write_status_history(&format!("auth-{i}"), 200, 100.0, true)
                     .await;
                 assert!(result.is_ok(), "Failed to write status history");
             }
@@ -205,7 +205,7 @@ mod sqlite_tests {
                 };
 
                 store
-                    .write_metrics(&format!("auth-{}", i), &metrics)
+                    .write_metrics(&format!("auth-{i}"), &metrics)
                     .await
                     .expect("value must be present");
             }
@@ -470,6 +470,7 @@ mod sqlite_tests {
         use super::*;
 
         #[tokio::test]
+        #[allow(clippy::panic)]
         async fn test_sqlite_selector_weighted_selection() {
             use crate::config::SmartRoutingConfig;
             use crate::metrics::AuthMetrics;
@@ -564,7 +565,7 @@ mod sqlite_tests {
                 match selected_id.as_str() {
                     "auth1" => auth1_count += 1,
                     "auth2" => auth2_count += 1,
-                    _ => panic!("Unexpected auth selected: {}", selected_id),
+                    _ => panic!("Unexpected auth selected: {selected_id}"),
                 }
             }
 
@@ -630,15 +631,14 @@ mod sqlite_tests {
 
             // Spawn 10 concurrent selection tasks
             for i in 0..10 {
-                let selector_clone = selector.clone();
+                let selector_clone = std::sync::Arc::clone(&selector);
                 let auths = auths_template.clone();
 
                 join_set.spawn(async move {
                     let selected: Option<String> = selector_clone.pick(auths).await;
                     assert!(
                         selected.is_some(),
-                        "Task {} should successfully select an auth",
-                        i
+                        "Task {i} should successfully select an auth"
                     );
                     selected
                 });
@@ -654,21 +654,17 @@ mod sqlite_tests {
 
             // Verify all selections are valid
             for (i, selected) in results.iter().enumerate() {
-                assert!(
-                    selected.is_some(),
-                    "Task {} should have a valid selection",
-                    i
-                );
+                assert!(selected.is_some(), "Task {i} should have a valid selection");
                 let id = selected.as_ref().expect("value must be present");
                 assert!(
                     id == "auth1" || id == "auth2" || id == "auth3",
-                    "Task {} should select a valid auth ID",
-                    i
+                    "Task {i} should select a valid auth ID"
                 );
             }
         }
 
         #[tokio::test]
+        #[allow(clippy::panic)]
         async fn test_sqlite_selector_precompute_weights() {
             use crate::config::SmartRoutingConfig;
             use crate::sqlite::selector::SQLiteSelector;
@@ -698,8 +694,8 @@ mod sqlite_tests {
             .await;
 
             match result {
-                Ok(Ok(_)) => {}, // Success
-                Ok(Err(e)) => panic!("Failed to precompute weights: {}", e),
+                Ok(Ok(())) => {}, // Success
+                Ok(Err(e)) => panic!("Failed to precompute weights: {e}"),
                 Err(_) => {}, // Timeout - acceptable for empty database
             }
 
@@ -716,6 +712,7 @@ mod sqlite_tests {
         use super::*;
 
         #[tokio::test]
+        #[allow(clippy::panic)]
         async fn test_sqlite_selector_quota_exceeded() {
             use crate::config::SmartRoutingConfig;
             use crate::metrics::AuthMetrics;
@@ -810,20 +807,19 @@ mod sqlite_tests {
                 match selected_id.as_str() {
                     "auth1" => auth1_count += 1,
                     "auth2" => auth2_count += 1,
-                    _ => panic!("Unexpected auth selected: {}", selected_id),
+                    _ => panic!("Unexpected auth selected: {selected_id}"),
                 }
             }
 
             // auth2 should be selected more often due to quota availability
             assert!(
                 auth2_count > auth1_count,
-                "auth2 (no quota) should be selected more often than auth1 (quota exceeded) (auth1: {}, auth2: {})",
-                auth1_count,
-                auth2_count
+                "auth2 (no quota) should be selected more often than auth1 (quota exceeded) (auth1: {auth1_count}, auth2: {auth2_count})"
             );
         }
 
         #[tokio::test]
+        #[allow(clippy::panic)]
         async fn test_sqlite_selector_priority_influence() {
             use crate::config::{SmartRoutingConfig, WeightConfig};
             use crate::sqlite::selector::SQLiteSelector;
@@ -886,7 +882,7 @@ mod sqlite_tests {
                 match selected_id.as_str() {
                     "auth1" => auth1_count += 1,
                     "auth2" => auth2_count += 1,
-                    _ => panic!("Unexpected auth selected: {}", selected_id),
+                    _ => panic!("Unexpected auth selected: {selected_id}"),
                 }
             }
 
@@ -894,9 +890,7 @@ mod sqlite_tests {
             // With high priority weight and 200 iterations, this should be reliable
             assert!(
                 auth1_count > auth2_count,
-                "auth1 (high priority) should be selected more often than auth2 (low priority) (auth1: {}, auth2: {})",
-                auth1_count,
-                auth2_count
+                "auth1 (high priority) should be selected more often than auth2 (low priority) (auth1: {auth1_count}, auth2: {auth2_count})"
             );
         }
 

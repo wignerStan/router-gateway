@@ -51,7 +51,7 @@ impl PolicyAwareWeightCalculator {
 
     /// Calculate full weight including policy factor
     ///
-    /// Returns (base_weight, policy_factor, final_weight)
+    /// Returns (`base_weight`, `policy_factor`, `final_weight`)
     pub fn calculate_with_policy(
         &self,
         auth: &AuthInfo,
@@ -73,7 +73,7 @@ impl PolicyAwareWeightCalculator {
     }
 
     /// Get reference to the weight configuration
-    pub fn config(&self) -> &WeightConfig {
+    pub const fn config(&self) -> &WeightConfig {
         &self.config
     }
 }

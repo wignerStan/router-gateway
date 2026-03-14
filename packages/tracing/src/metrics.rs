@@ -62,7 +62,7 @@ impl TraceMetrics {
         if prev_ewma == 0.0 {
             new_value
         } else {
-            alpha * new_value + (1.0 - alpha) * prev_ewma
+            alpha.mul_add(new_value, (1.0 - alpha) * prev_ewma)
         }
     }
 
@@ -83,8 +83,9 @@ impl TraceMetrics {
             let latency_f64 = latency as f64;
 
             // Simple average
-            self.avg_latency_ms = (self.avg_latency_ms * (self.latency_count - 1) as f64
-                + latency_f64)
+            self.avg_latency_ms = self
+                .avg_latency_ms
+                .mul_add((self.latency_count - 1) as f64, latency_f64)
                 / self.latency_count as f64;
 
             // EWMA with alpha=0.1 (smoothing factor)
@@ -118,7 +119,7 @@ impl TraceMetrics {
 
     /// Get percentile approximation using simple interpolation
     /// Note: This requires storing all values; for production, consider t-digest or similar
-    pub fn get_percentile(&self, _percentile: f64) -> Option<f64> {
+    pub const fn get_percentile(&self, _percentile: f64) -> Option<f64> {
         // Placeholder: would need to store actual latency values
         // For production, use a proper percentile approximation algorithm
         None
@@ -135,8 +136,9 @@ impl ProviderMetrics {
         if let Some(latency) = trace.latency_ms {
             self.latency_count += 1;
             let latency_f64 = latency as f64;
-            self.avg_latency_ms = (self.avg_latency_ms * (self.latency_count - 1) as f64
-                + latency_f64)
+            self.avg_latency_ms = self
+                .avg_latency_ms
+                .mul_add((self.latency_count - 1) as f64, latency_f64)
                 / self.latency_count as f64;
             self.ewma_latency_ms =
                 TraceMetrics::calculate_ewma(self.ewma_latency_ms, latency_f64, 0.1);
@@ -163,17 +165,18 @@ impl ModelMetrics {
         if let Some(latency) = trace.latency_ms {
             self.latency_count += 1;
             let latency_f64 = latency as f64;
-            self.avg_latency_ms = (self.avg_latency_ms * (self.latency_count - 1) as f64
-                + latency_f64)
+            self.avg_latency_ms = self
+                .avg_latency_ms
+                .mul_add((self.latency_count - 1) as f64, latency_f64)
                 / self.latency_count as f64;
         }
 
         if let Some(tokens) = trace.input_tokens {
-            self.total_input_tokens += tokens as u64;
+            self.total_input_tokens += u64::from(tokens);
         }
 
         if let Some(tokens) = trace.output_tokens {
-            self.total_output_tokens += tokens as u64;
+            self.total_output_tokens += u64::from(tokens);
         }
     }
 
@@ -378,7 +381,7 @@ mod tests {
             .map(|i| {
                 let status = if i % 4 == 0 { 500 } else { 200 }; // 25% failure rate
                 create_test_trace(
-                    &format!("req-{}", i),
+                    &format!("req-{i}"),
                     if i % 2 == 0 { "openai" } else { "anthropic" },
                     if i % 3 == 0 { "gpt-4" } else { "gpt-3.5" },
                     100 + (i % 100) as u64,

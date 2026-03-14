@@ -24,7 +24,7 @@ impl GoogleAdapter {
         Self::default()
     }
 
-    pub fn with_base_url(base_url: String) -> Self {
+    pub const fn with_base_url(base_url: String) -> Self {
         Self {
             default_base_url: base_url,
         }
@@ -32,7 +32,7 @@ impl GoogleAdapter {
 }
 
 impl ProviderAdapter for GoogleAdapter {
-    fn provider_name(&self) -> &str {
+    fn provider_name(&self) -> &'static str {
         "google"
     }
 
@@ -87,7 +87,7 @@ impl ProviderAdapter for GoogleAdapter {
                                 json!({
                                     "inlineData": {
                                         "mimeType": "image/jpeg",
-                                        "data": p.image_url.as_ref().map(|u| &u.url).unwrap_or(&String::new())
+                                        "data": p.image_url.as_ref().map_or(&String::new(), |u| &u.url)
                                     }
                                 })
                             } else {
@@ -239,7 +239,7 @@ impl ProviderAdapter for GoogleAdapter {
         // Sanitize model_id to prevent path traversal/SSRF attacks
         // Remove any path traversal characters
         let sanitized_model_id = model_id.replace(['/', '\\'], "");
-        format!("{}/models/{}:generateContent", base, sanitized_model_id)
+        format!("{base}/models/{sanitized_model_id}:generateContent")
     }
 
     fn build_headers(&self, api_key: &str) -> Vec<(String, String)> {
@@ -611,8 +611,7 @@ mod tests {
         let top_p = gen_config["topP"].as_f64().expect("value must be present");
         assert!(
             (top_p - 0.9).abs() < 0.01,
-            "Expected topP ~0.9, got {}",
-            top_p
+            "Expected topP ~0.9, got {top_p}"
         );
         assert!(gen_config.get("stopSequences").is_some());
         assert!(transformed.get("systemInstruction").is_some());

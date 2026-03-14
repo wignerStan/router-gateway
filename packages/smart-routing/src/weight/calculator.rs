@@ -44,7 +44,7 @@ impl DefaultWeightCalculator {
     /// let weight = calc.calculate(&auth, None, HealthStatus::Healthy);
     /// assert!(weight > 0.0, "healthy credential should have positive weight");
     /// ```
-    pub fn new(config: WeightConfig) -> Self {
+    pub const fn new(config: WeightConfig) -> Self {
         Self { config }
     }
 
@@ -69,7 +69,7 @@ impl DefaultWeightCalculator {
     }
 
     /// Select planner mode based on data availability and error state
-    fn select_planner_mode(
+    const fn select_planner_mode(
         &self,
         data_availability: DataAvailability,
         health: HealthStatus,
@@ -106,7 +106,7 @@ impl DefaultWeightCalculator {
     }
 
     /// Calculate health status score
-    fn calculate_health_score(&self, health: HealthStatus) -> f64 {
+    const fn calculate_health_score(&self, health: HealthStatus) -> f64 {
         match health {
             HealthStatus::Healthy => 1.0,
             HealthStatus::Degraded => 0.6,
@@ -141,7 +141,7 @@ impl DefaultWeightCalculator {
     /// Calculate priority score
     fn calculate_priority_score(&self, auth: &AuthInfo) -> f64 {
         auth.priority.map_or(0.5, |priority| {
-            let score = (priority as f64 + 100.0) / 200.0;
+            let score = (f64::from(priority) + 100.0) / 200.0;
             score.clamp(0.0, 1.0)
         })
     }
@@ -161,11 +161,19 @@ impl DefaultWeightCalculator {
         let load_score = self.calculate_load_score(auth, metrics);
         let priority_score = self.calculate_priority_score(auth);
 
-        let mut total_weight = success_rate_score * self.config.success_rate_weight
-            + latency_score * self.config.latency_weight
-            + health_score * self.config.health_weight
-            + load_score * self.config.load_weight
-            + priority_score * self.config.priority_weight;
+        let mut total_weight = priority_score.mul_add(
+            self.config.priority_weight,
+            load_score.mul_add(
+                self.config.load_weight,
+                health_score.mul_add(
+                    self.config.health_weight,
+                    success_rate_score.mul_add(
+                        self.config.success_rate_weight,
+                        latency_score * self.config.latency_weight,
+                    ),
+                ),
+            ),
+        );
 
         match health {
             HealthStatus::Unhealthy => {
@@ -230,7 +238,7 @@ impl DefaultWeightCalculator {
         let health_score = self.calculate_health_score(health);
         let priority_score = self.calculate_priority_score(auth);
 
-        let total_weight = health_score * 0.7 + priority_score * 0.3;
+        let total_weight = health_score.mul_add(0.7, priority_score * 0.3);
 
         let mut weight = total_weight;
         match health {
@@ -262,7 +270,7 @@ impl DefaultWeightCalculator {
             HealthStatus::Unhealthy => 0.1,
         };
 
-        let mut weight = (priority_score + health_score) / 2.0;
+        let mut weight = f64::midpoint(priority_score, health_score);
 
         if auth.quota_exceeded || auth.unavailable || matches!(health, HealthStatus::Unhealthy) {
             weight = 0.0;

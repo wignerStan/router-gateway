@@ -45,8 +45,8 @@ fn create_completed_trace(
 #[tokio::test]
 async fn test_end_to_end_http_request_tracing() {
     // Create collector and middleware
-    let collector = Arc::new(MemoryTraceCollector::new(100));
-    let middleware = TracingMiddleware::new(collector.clone());
+    let collector: Arc<dyn TraceCollector> = Arc::new(MemoryTraceCollector::new(100));
+    let middleware = TracingMiddleware::new(Arc::clone(&collector));
 
     // Create a simple test handler
     async fn test_handler() -> impl IntoResponse {
@@ -91,8 +91,8 @@ async fn test_end_to_end_http_request_tracing() {
 
 #[tokio::test]
 async fn test_end_to_end_failed_request() {
-    let collector = Arc::new(MemoryTraceCollector::new(100));
-    let middleware = TracingMiddleware::new(collector.clone());
+    let collector: Arc<dyn TraceCollector> = Arc::new(MemoryTraceCollector::new(100));
+    let middleware = TracingMiddleware::new(Arc::clone(&collector));
 
     // Create a handler that returns an error
     async fn error_handler() -> impl IntoResponse {
@@ -135,11 +135,11 @@ async fn test_concurrent_collector_access() {
 
     // Spawn multiple concurrent tasks
     for i in 0..50 {
-        let collector = collector.clone();
+        let collector = Arc::clone(&collector);
         tasks.spawn(async move {
             for j in 0..20 {
                 let trace = create_completed_trace(
-                    &format!("concurrent-{}-{}", i, j),
+                    &format!("concurrent-{i}-{j}"),
                     "openai",
                     "gpt-4",
                     100,
@@ -164,11 +164,11 @@ async fn test_concurrent_read_write() {
 
     // Spawn writers
     for i in 0..25 {
-        let collector = collector.clone();
+        let collector = Arc::clone(&collector);
         tasks.spawn(async move {
             for j in 0..40 {
                 let trace = create_completed_trace(
-                    &format!("writer-{}-{}", i, j),
+                    &format!("writer-{i}-{j}"),
                     "anthropic",
                     "claude-3",
                     150,
@@ -182,7 +182,7 @@ async fn test_concurrent_read_write() {
 
     // Spawn readers
     for _ in 0..25 {
-        let collector = collector.clone();
+        let collector = Arc::clone(&collector);
         tasks.spawn(async move {
             for _ in 0..40 {
                 let count = collector.trace_count().await;
@@ -258,7 +258,7 @@ async fn test_collector_eviction_policy() {
 
     // Add 20 traces to a collector with capacity 10
     for i in 0..20 {
-        let trace = create_completed_trace(&format!("req-{}", i), "openai", "gpt-4", 100, 200);
+        let trace = create_completed_trace(&format!("req-{i}"), "openai", "gpt-4", 100, 200);
         collector.record_trace(trace).await;
     }
 
@@ -278,7 +278,7 @@ async fn test_collector_clear_and_refill() {
 
     // Fill with traces
     for i in 0..50 {
-        let trace = create_completed_trace(&format!("req-{}", i), "openai", "gpt-4", 100, 200);
+        let trace = create_completed_trace(&format!("req-{i}"), "openai", "gpt-4", 100, 200);
         collector.record_trace(trace).await;
     }
     assert_eq!(collector.trace_count().await, 50);
@@ -290,7 +290,7 @@ async fn test_collector_clear_and_refill() {
     // Refill
     for i in 0..30 {
         let trace =
-            create_completed_trace(&format!("new-req-{}", i), "anthropic", "claude-3", 150, 200);
+            create_completed_trace(&format!("new-req-{i}"), "anthropic", "claude-3", 150, 200);
         collector.record_trace(trace).await;
     }
     assert_eq!(collector.trace_count().await, 30);
@@ -363,7 +363,7 @@ async fn test_middleware_builder_integration() {
     let collector = Arc::new(MemoryTraceCollector::new(50)) as Arc<dyn TraceCollector>;
 
     let middleware = TracingMiddlewareBuilder::new()
-        .with_collector(collector.clone())
+        .with_collector(Arc::clone(&collector))
         .build();
 
     // Verify middleware was created correctly
@@ -400,11 +400,11 @@ async fn test_high_throughput_tracing() {
 
     // Simulate high throughput: 100 tasks, each recording 100 traces
     for task_id in 0..100 {
-        let collector = collector.clone();
+        let collector = Arc::clone(&collector);
         tasks.spawn(async move {
             for i in 0..100 {
                 let trace = create_completed_trace(
-                    &format!("high-throughput-{}-{}", task_id, i),
+                    &format!("high-throughput-{task_id}-{i}"),
                     "openai",
                     "gpt-4",
                     50 + (i % 50) as u64,

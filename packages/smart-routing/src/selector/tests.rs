@@ -230,7 +230,7 @@ mod tests {
         #[tokio::test]
         async fn test_set_config() {
             let config = SmartRoutingConfig::default();
-            let mut selector = SmartSelector::new(config.clone());
+            let mut selector = SmartSelector::new(config);
 
             assert_eq!(selector.config().strategy, "weighted");
 
@@ -243,7 +243,7 @@ mod tests {
                 ..Default::default()
             };
 
-            selector.set_config(new_config.clone());
+            selector.set_config(new_config);
 
             assert_eq!(selector.config().strategy, "adaptive");
             assert!((selector.config().weight.success_rate_weight - 0.5).abs() < 0.01);
@@ -558,9 +558,7 @@ mod tests {
 
             assert!(
                 normal_count > quota_count * 4,
-                "Normal auth should dominate over quota-exceeded (normal: {}, quota: {})",
-                normal_count,
-                quota_count
+                "Normal auth should dominate over quota-exceeded (normal: {normal_count}, quota: {quota_count})"
             );
         }
     }
@@ -618,9 +616,7 @@ mod tests {
 
             assert!(
                 auth1_count > 20 && auth2_count > 20,
-                "Both auths should receive selections with near-equal weights (auth1: {}, auth2: {})",
-                auth1_count,
-                auth2_count
+                "Both auths should receive selections with near-equal weights (auth1: {auth1_count}, auth2: {auth2_count})"
             );
         }
 
@@ -677,15 +673,12 @@ mod tests {
 
             assert!(
                 high_count > low_count,
-                "High-perf auth should be selected more often than low-perf (high: {}, low: {})",
-                high_count,
-                low_count
+                "High-perf auth should be selected more often than low-perf (high: {high_count}, low: {low_count})"
             );
 
             assert!(
                 high_count >= 60,
-                "High-perf auth should be selected at least 60% of the time (got {} out of 100)",
-                high_count
+                "High-perf auth should be selected at least 60% of the time (got {high_count} out of 100)"
             );
         }
     }
@@ -751,8 +744,7 @@ mod tests {
                     let id = selected.expect("value must be present");
                     assert!(
                         ["auth1", "auth2", "auth3"].contains(&id.as_str()),
-                        "Selected invalid auth: {}",
-                        id
+                        "Selected invalid auth: {id}"
                     );
                 }
             }
@@ -831,7 +823,7 @@ mod tests {
 
             let auths: Vec<AuthInfo> = (0..100)
                 .map(|i| AuthInfo {
-                    id: format!("auth-{}", i),
+                    id: format!("auth-{i}"),
                     priority: Some(i % 10 - 5),
                     quota_exceeded: false,
                     unavailable: false,

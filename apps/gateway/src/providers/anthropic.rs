@@ -26,7 +26,7 @@ impl AnthropicAdapter {
     }
 
     /// Create with custom base URL
-    pub fn with_base_url(base_url: String) -> Self {
+    pub const fn with_base_url(base_url: String) -> Self {
         Self {
             default_base_url: base_url,
         }
@@ -34,7 +34,7 @@ impl AnthropicAdapter {
 }
 
 impl ProviderAdapter for AnthropicAdapter {
-    fn provider_name(&self) -> &str {
+    fn provider_name(&self) -> &'static str {
         "anthropic"
     }
 
@@ -235,7 +235,7 @@ impl ProviderAdapter for AnthropicAdapter {
         };
         // Remove trailing slash to prevent double-slash issues
         let base = base.trim_end_matches('/');
-        format!("{}/messages", base)
+        format!("{base}/messages")
     }
 
     fn build_headers(&self, api_key: &str) -> Vec<(String, String)> {
@@ -575,16 +575,14 @@ mod tests {
             .expect("value must be present");
         assert!(
             (temp - 0.7).abs() < 0.001,
-            "Expected temperature ~0.7, got {}",
-            temp
+            "Expected temperature ~0.7, got {temp}"
         );
         let top_p = transformed["top_p"]
             .as_f64()
             .expect("value must be present");
         assert!(
             (top_p - 0.9).abs() < 0.001,
-            "Expected top_p ~0.9, got {}",
-            top_p
+            "Expected top_p ~0.9, got {top_p}"
         );
         let stop = transformed["stop_sequences"]
             .as_array()

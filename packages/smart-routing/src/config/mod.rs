@@ -25,7 +25,7 @@ const DEFAULT_PRIORITY_WEIGHT: f64 = 0.05;
 pub struct SmartRoutingConfig {
     /// Whether smart routing is enabled
     pub enabled: bool,
-    /// Routing strategy: weighted, time_aware, quota_aware, adaptive, policy_aware
+    /// Routing strategy: weighted, `time_aware`, `quota_aware`, adaptive, `policy_aware`
     pub strategy: String,
     /// Weight configuration
     pub weight: WeightConfig,
@@ -62,7 +62,7 @@ pub struct PolicyConfig {
     pub cache_enabled: bool,
 }
 
-fn default_cache_enabled() -> bool {
+const fn default_cache_enabled() -> bool {
     true
 }
 
@@ -179,13 +179,13 @@ impl SmartRoutingConfig {
         default: f64,
         warnings: &mut Vec<String>,
     ) -> f64 {
-        if !(0.0..=1.0).contains(&value) {
+        if (0.0..=1.0).contains(&value) {
+            value
+        } else {
             warnings.push(format!(
                 "{name} {value} out of range [0, 1], reset to {default}"
             ));
             default
-        } else {
-            value
         }
     }
 
@@ -823,8 +823,7 @@ mod tests {
         let warnings = config.validate().expect("value must be present");
         assert!(
             warnings.is_empty(),
-            "Valid config should produce no warnings, got: {:?}",
-            warnings
+            "Valid config should produce no warnings, got: {warnings:?}"
         );
     }
 

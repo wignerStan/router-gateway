@@ -1,4 +1,8 @@
-use super::*;
+use super::{
+    broadcast, Arc, CachedModelInfo, CancellationToken, CapabilityCategory, ContextWindowCategory,
+    CostCategory, FetchResult, HashMap, ModelCategorization, ModelFetcher, ModelInfo, Mutex,
+    ProviderCategory, Registry, RegistryConfig, RwLock, TierCategory, Utc,
+};
 
 use tokio::task::JoinSet;
 
@@ -136,7 +140,7 @@ impl Registry {
     }
 
     /// Retrieves model information for multiple model IDs.
-    /// Returns a map of modelID -> ModelInfo for found models.
+    /// Returns a map of modelID -> `ModelInfo` for found models.
     pub async fn get_multiple(
         &self,
         model_ids: &[String],
@@ -182,7 +186,7 @@ impl Registry {
     }
 
     /// Refreshes the cache for specific model IDs.
-    /// If model_ids is empty, refreshes all models from the fetcher.
+    /// If `model_ids` is empty, refreshes all models from the fetcher.
     pub async fn refresh(
         &self,
         model_ids: &[String],
@@ -217,7 +221,7 @@ impl Registry {
     }
 
     /// Removes specific models from the cache.
-    /// If model_ids is empty, clears the entire cache.
+    /// If `model_ids` is empty, clears the entire cache.
     pub async fn invalidate(&self, model_ids: &[String]) {
         let mut cache = self.cache.write().await;
         if model_ids.is_empty() {
@@ -446,7 +450,7 @@ impl Registry {
                         // Cleanup expired entries
                         cache_write.retain(|_, cached| now < cached.expires_at);
                     }
-                    _ = token.cancelled() => {
+                    () = token.cancelled() => {
                         break;
                     }
                 }

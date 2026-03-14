@@ -178,7 +178,7 @@ mod cache_management {
 
         // Spawn multiple concurrent readers
         for i in 0..10 {
-            let registry_clone = registry.clone();
+            let registry_clone = Arc::clone(&registry);
             let handle = tokio::spawn(async move {
                 let model_id = if i % 2 == 0 {
                     "gpt-4o"
@@ -497,9 +497,11 @@ mod find_best_fit {
         // Populate cache
         let _ = registry.get("gpt-4o").await;
 
-        let best = registry.find_best_fit(100000).await;
+        let best = registry.find_best_fit(100_000).await;
         assert!(best.is_some());
-        assert!(best.expect("value must be present").can_fit_context(100000));
+        assert!(best
+            .expect("value must be present")
+            .can_fit_context(100_000));
     }
 
     #[tokio::test]
@@ -567,12 +569,12 @@ mod find_best_fit {
         let _ = registry.get("claude-sonnet-4-20250514").await; // Cheaper
 
         // Both can fit 100K tokens, should prefer the cheaper one
-        let best = registry.find_best_fit(100000).await;
+        let best = registry.find_best_fit(100_000).await;
         assert!(best.is_some());
 
         if let Some(model) = best {
             // Gemini Flash is cheaper
-            assert!(model.can_fit_context(100000));
+            assert!(model.can_fit_context(100_000));
         }
     }
 
@@ -582,11 +584,11 @@ mod find_best_fit {
         let _ = registry.get("gpt-4o").await; // 128K context
 
         // Request exactly at context boundary
-        let best = registry.find_best_fit(128000).await;
+        let best = registry.find_best_fit(128_000).await;
         assert!(best.is_some(), "Should find model at exact boundary");
 
         // Request just over boundary
-        let best = registry.find_best_fit(128001).await;
+        let best = registry.find_best_fit(128_001).await;
         // Depends on whether other models with larger context are available
         // Just verify it doesn't panic
         drop(best);

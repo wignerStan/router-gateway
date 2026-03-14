@@ -177,7 +177,7 @@ impl MetricsCollector {
                 entry.avg_latency_ms = latency_ms;
             } else {
                 entry.avg_latency_ms =
-                    EWMA_ALPHA * latency_ms + (1.0 - EWMA_ALPHA) * entry.avg_latency_ms;
+                    EWMA_ALPHA.mul_add(latency_ms, (1.0 - EWMA_ALPHA) * entry.avg_latency_ms);
             }
 
             if latency_ms < entry.min_latency_ms {
@@ -190,7 +190,8 @@ impl MetricsCollector {
 
         // Update success/error rate using EWMA
         let current_success = if success { 1.0 } else { 0.0 };
-        entry.success_rate = EWMA_ALPHA * current_success + (1.0 - EWMA_ALPHA) * entry.success_rate;
+        entry.success_rate =
+            EWMA_ALPHA.mul_add(current_success, (1.0 - EWMA_ALPHA) * entry.success_rate);
         entry.error_rate = 1.0 - entry.success_rate;
     }
 
@@ -389,7 +390,7 @@ mod tests {
 
         // Add more entries than the limit
         for i in 0..10 {
-            collector.initialize_auth(&format!("auth-{}", i)).await;
+            collector.initialize_auth(&format!("auth-{i}")).await;
         }
 
         // Cleanup should have removed oldest entries
@@ -404,11 +405,11 @@ mod tests {
 
         // Spawn multiple concurrent recorders
         for i in 0..10 {
-            let collector_clone = collector.clone();
+            let collector_clone = Arc::clone(&collector);
             let handle = tokio::spawn(async move {
                 for j in 0..10 {
                     collector_clone
-                        .record_result(&format!("auth-{}", i), true, 100.0 + j as f64, 200)
+                        .record_result(&format!("auth-{i}"), true, 100.0 + j as f64, 200)
                         .await;
                 }
             });
@@ -426,7 +427,7 @@ mod tests {
 
         for i in 0..10 {
             let metrics = collector
-                .get_metrics(&format!("auth-{}", i))
+                .get_metrics(&format!("auth-{i}"))
                 .await
                 .expect("value must be present");
             assert_eq!(metrics.total_requests, 10);
@@ -633,7 +634,7 @@ mod tests {
 
         // Spawn many concurrent recorders for the SAME auth (tests locking)
         for _ in 0..10 {
-            let collector_clone = collector.clone();
+            let collector_clone = Arc::clone(&collector);
             let handle = tokio::spawn(async move {
                 for _ in 0..100 {
                     collector_clone
@@ -721,7 +722,7 @@ mod tests {
 
         // EWMA should smooth the jump (not immediately jump to 1000)
         // EWMA = 0.3 * new + 0.7 * old
-        let expected = 0.3 * 1000.0 + 0.7 * 100.0;
+        let expected = 0.3f64.mul_add(1000.0, 0.7 * 100.0);
         assert!(
             (m2.avg_latency_ms - expected).abs() < 0.1,
             "EWMA should smooth latency: expected {}, got {}",
@@ -757,7 +758,7 @@ mod tests {
 
         // Success rate should decrease smoothly
         // EWMA = 0.3 * 0 + 0.7 * previous
-        let expected = 0.3 * 0.0 + 0.7 * m1.success_rate;
+        let expected = 0.3f64.mul_add(0.0, 0.7 * m1.success_rate);
         assert!(
             (m2.success_rate - expected).abs() < 0.1,
             "EWMA should smooth success rate"
