@@ -866,7 +866,7 @@ mod integration_tests {
             CredentialConfig {
                 id: id.to_string(),
                 provider: provider.to_string(),
-                api_key: "sk-test-key".to_string(),
+                api_key: "test-key-123".to_string(),
                 allowed_models: models.iter().map(|m| m.to_string()).collect(),
                 ..Default::default()
             }
@@ -946,7 +946,7 @@ mod integration_tests {
         }
 
         #[tokio::test]
-        async fn test_unknown_provider_is_routed_successfully() {
+        async fn test_unknown_provider_preserves_provider_name() {
             let creds = vec![make_credential(
                 "unknown-1",
                 "unknown-provider",

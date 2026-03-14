@@ -939,9 +939,10 @@ credentials:
     api_key: sk-test-key-123 # gitleaks:allow
     priority: 5
 "#;
-        let mut tmp_file = NamedTempFile::new().unwrap();
-        write!(tmp_file, "{}", yaml_content).unwrap();
-        let config = GatewayConfig::from_file(tmp_file.path()).unwrap();
+        let mut tmp_file = NamedTempFile::new().expect("failed to create temp file");
+        write!(tmp_file, "{}", yaml_content).expect("failed to write temp file");
+        let config =
+            GatewayConfig::from_file(tmp_file.path()).expect("failed to load config from file");
 
         assert_eq!(config.server.port, 9090);
         assert_eq!(config.server.host, "127.0.0.1");
@@ -1005,9 +1006,10 @@ providers:
     enabled: true
     base_url: https://generativelanguage.googleapis.com/v1beta
 "#;
-        let mut tmp_file = NamedTempFile::new().unwrap();
-        write!(tmp_file, "{}", yaml_content).unwrap();
-        let config = GatewayConfig::from_file(tmp_file.path()).unwrap();
+        let mut tmp_file = NamedTempFile::new().expect("failed to create temp file");
+        write!(tmp_file, "{}", yaml_content).expect("failed to write temp file");
+        let config =
+            GatewayConfig::from_file(tmp_file.path()).expect("failed to load config from file");
 
         // Server section
         assert_eq!(config.server.port, 8080);
@@ -1072,9 +1074,10 @@ credentials:
     daily_quota: 10000
     rate_limit: 60
 "#;
-        let mut tmp_file = NamedTempFile::new().unwrap();
-        write!(tmp_file, "{}", yaml_content).unwrap();
-        let config = GatewayConfig::from_file(tmp_file.path()).unwrap();
+        let mut tmp_file = NamedTempFile::new().expect("failed to create temp file");
+        write!(tmp_file, "{}", yaml_content).expect("failed to write temp file");
+        let config =
+            GatewayConfig::from_file(tmp_file.path()).expect("failed to load config from file");
 
         let cred = &config.credentials[0];
         assert_eq!(cred.id, "full-cred");
@@ -1116,9 +1119,10 @@ providers:
     headers:
       X-API-Version: "2024-01"
 "#;
-        let mut tmp_file = NamedTempFile::new().unwrap();
-        write!(tmp_file, "{}", yaml_content).unwrap();
-        let config = GatewayConfig::from_file(tmp_file.path()).unwrap();
+        let mut tmp_file = NamedTempFile::new().expect("failed to create temp file");
+        write!(tmp_file, "{}", yaml_content).expect("failed to write temp file");
+        let config =
+            GatewayConfig::from_file(tmp_file.path()).expect("failed to load config from file");
 
         assert_eq!(config.providers.len(), 3);
 
