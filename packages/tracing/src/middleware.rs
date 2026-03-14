@@ -558,8 +558,8 @@ mod tests {
 
         let collector =
             std::sync::Arc::new(crate::collector::MemoryTraceCollector::with_default_size());
-        let collector_dyn =
-            collector.clone() as std::sync::Arc<dyn crate::collector::TraceCollector>;
+        let collector_dyn = std::sync::Arc::clone(&collector)
+            as std::sync::Arc<dyn crate::collector::TraceCollector>;
         let middleware = TracingMiddleware::new(collector_dyn);
 
         let app = Router::new()
@@ -585,9 +585,12 @@ mod tests {
             .header("x-request-id", "test-req-axum")
             .header("x-llm-provider", "test-provider")
             .body(Body::empty())
-            .unwrap();
+            .expect("Axum request should be constructible");
 
-        let response = app.oneshot(request).await.unwrap();
+        let response = app
+            .oneshot(request)
+            .await
+            .expect("Router should handle request successfully");
         assert_eq!(response.status(), StatusCode::OK);
 
         let traces = collector.get_traces().await;
@@ -613,8 +616,8 @@ mod tests {
 
         let collector =
             std::sync::Arc::new(crate::collector::MemoryTraceCollector::with_default_size());
-        let collector_dyn =
-            collector.clone() as std::sync::Arc<dyn crate::collector::TraceCollector>;
+        let collector_dyn = std::sync::Arc::clone(&collector)
+            as std::sync::Arc<dyn crate::collector::TraceCollector>;
         let middleware = TracingMiddleware::new(collector_dyn);
 
         let app = Router::new()
@@ -632,9 +635,12 @@ mod tests {
             .uri("/error")
             .header("x-request-id", "err-req-axum")
             .body(Body::empty())
-            .unwrap();
+            .expect("Axum request should be constructible");
 
-        let response = app.oneshot(request).await.unwrap();
+        let response = app
+            .oneshot(request)
+            .await
+            .expect("Router should handle request successfully");
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 
         let traces = collector.get_traces().await;

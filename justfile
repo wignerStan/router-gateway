@@ -310,7 +310,7 @@ ci-fmt:
 
 # CI lint (strict, matches local `just lint`)
 ci-lint:
-    cargo clippy --all-targets --all-features -- -D warnings -A missing_docs
+    cargo clippy --all-targets --all-features -- -D warnings
 
 # CI test (all features)
 ci-test:
