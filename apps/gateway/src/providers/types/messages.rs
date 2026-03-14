@@ -156,8 +156,11 @@ pub enum ToolChoice {
     None,
     /// Must use a tool
     Required,
-    /// Use a specific function
-    Function { name: String },
+    /// Use a specific function.
+    Function {
+        /// Name of the function to call.
+        name: String,
+    },
 }
 
 #[cfg(test)]

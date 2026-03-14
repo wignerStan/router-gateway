@@ -1,8 +1,11 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+/// Content type detection for LLM requests.
 pub mod detection;
+/// Request format and protocol detection.
 pub mod format;
+/// Token estimation for LLM requests.
 pub mod token;
 
 pub use detection::{ContentTypeDetector, StreamingExtractor, ToolDetector};

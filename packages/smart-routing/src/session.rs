@@ -96,30 +96,32 @@ impl SessionAffinityManager {
             return Err("Provider cannot be empty".to_string());
         }
 
-        let mut sessions = self.sessions.write().await;
+        {
+            let mut sessions = self.sessions.write().await;
 
-        use std::collections::hash_map::Entry;
-        match sessions.entry(session_id) {
-            Entry::Occupied(mut entry) => {
-                let affinity = entry.get_mut();
-                affinity.preferred_provider = provider;
-                affinity.last_access = Utc::now();
-                affinity.request_count += 1;
-            },
-            Entry::Vacant(entry) => {
-                let session_id = entry.key().clone();
-                entry.insert(SessionAffinity {
-                    session_id,
-                    preferred_provider: provider,
-                    last_access: Utc::now(),
-                    request_count: 1,
-                });
-            },
-        }
+            use std::collections::hash_map::Entry;
+            match sessions.entry(session_id) {
+                Entry::Occupied(mut entry) => {
+                    let affinity = entry.get_mut();
+                    affinity.preferred_provider = provider;
+                    affinity.last_access = Utc::now();
+                    affinity.request_count += 1;
+                },
+                Entry::Vacant(entry) => {
+                    let session_id = entry.key().clone();
+                    entry.insert(SessionAffinity {
+                        session_id,
+                        preferred_provider: provider,
+                        last_access: Utc::now(),
+                        request_count: 1,
+                    });
+                },
+            }
 
-        // Cleanup if over limit
-        if sessions.len() > self.max_sessions {
-            self.cleanup_expired(&mut sessions);
+            // Cleanup if over limit
+            if sessions.len() > self.max_sessions {
+                self.cleanup_expired(&mut sessions);
+            }
         }
 
         Ok(())

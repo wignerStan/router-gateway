@@ -30,10 +30,15 @@ pub struct TraceMetrics {
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
 pub struct ProviderMetrics {
+    /// Total number of requests for this provider.
     pub total_requests: u64,
+    /// Number of successful requests for this provider.
     pub successful_requests: u64,
+    /// Number of requests with recorded latency.
     pub latency_count: u64,
+    /// Average latency in milliseconds.
     pub avg_latency_ms: f64,
+    /// Exponentially weighted moving average of latency.
     pub ewma_latency_ms: f64,
 }
 
@@ -41,11 +46,17 @@ pub struct ProviderMetrics {
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
 pub struct ModelMetrics {
+    /// Total number of requests for this model.
     pub total_requests: u64,
+    /// Number of successful requests for this model.
     pub successful_requests: u64,
+    /// Number of requests with recorded latency.
     pub latency_count: u64,
+    /// Average latency in milliseconds.
     pub avg_latency_ms: f64,
+    /// Cumulative input tokens across all requests.
     pub total_input_tokens: u64,
+    /// Cumulative output tokens across all requests.
     pub total_output_tokens: u64,
 }
 

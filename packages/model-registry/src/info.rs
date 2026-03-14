@@ -90,16 +90,22 @@ impl fmt::Display for DataSource {
 /// Errors that can occur when working with `ModelInfo`
 #[derive(Debug, Error)]
 pub enum ModelInfoError {
+    /// The model ID is empty.
     #[error("model ID cannot be empty")]
     EmptyId,
+    /// The context window size is invalid.
     #[error("invalid context window for model {model}: {window}", model = .0, window = .1)]
     InvalidContextWindow(String, usize),
+    /// The input price is negative.
     #[error("invalid input price for model {model}: {price}", model = .0, price = .1)]
     InvalidInputPrice(String, f64),
+    /// The output price is negative.
     #[error("invalid output price for model {model}: {price}", model = .0, price = .1)]
     InvalidOutputPrice(String, f64),
+    /// The request rate limit is invalid.
     #[error("invalid request rate limit for model {model}: {limit}", model = .0, limit = .1)]
     InvalidRequestRateLimit(String, usize),
+    /// The token rate limit is invalid.
     #[error("invalid token rate limit for model {model}: {limit}", model = .0, limit = .1)]
     InvalidTokenRateLimit(String, usize),
 }

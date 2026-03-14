@@ -83,51 +83,53 @@ impl HealthManager {
             }
         }
 
-        let mut health = self.health.write().await;
-        let entry = health
-            .entry(auth_id.to_string())
-            .or_insert_with(|| AuthHealth {
-                status: HealthStatus::Healthy,
-                consecutive_successes: 0,
-                consecutive_failures: 0,
-                last_status_change: Utc::now(),
-                last_check_time: Utc::now(),
-                unavailable_until: None,
-                error_counts: HashMap::new(),
-            });
-
-        let now = Utc::now();
-        entry.last_check_time = now;
-
-        // Record error type
-        if status_code > 0 {
-            *entry.error_counts.entry(status_code).or_insert(0) += 1;
-        }
-
-        // Update consecutive success/failure counts
-        if success {
-            entry.consecutive_successes += 1;
-            entry.consecutive_failures = 0;
-        } else {
-            entry.consecutive_failures += 1;
-            entry.consecutive_successes = 0;
-        }
-
-        // Calculate health status based on status code and consecutive counts
-        let new_status = self.calculate_health_status(entry, success, status_code);
-
-        // Update status if changed
-        if new_status != entry.status {
-            entry.status = new_status;
-            entry.last_status_change = now;
-        }
-
-        // Set cooldown period for unhealthy credentials
-        if entry.status == HealthStatus::Unhealthy
-            && entry.consecutive_failures >= self.config.unhealthy_threshold
         {
-            let cooldown = Duration::seconds(self.config.cooldown_period_seconds);
-            entry.unavailable_until = Some(now + cooldown);
+            let mut health = self.health.write().await;
+            let entry = health
+                .entry(auth_id.to_string())
+                .or_insert_with(|| AuthHealth {
+                    status: HealthStatus::Healthy,
+                    consecutive_successes: 0,
+                    consecutive_failures: 0,
+                    last_status_change: Utc::now(),
+                    last_check_time: Utc::now(),
+                    unavailable_until: None,
+                    error_counts: HashMap::new(),
+                });
+
+            let now = Utc::now();
+            entry.last_check_time = now;
+
+            // Record error type
+            if status_code > 0 {
+                *entry.error_counts.entry(status_code).or_insert(0) += 1;
+            }
+
+            // Update consecutive success/failure counts
+            if success {
+                entry.consecutive_successes += 1;
+                entry.consecutive_failures = 0;
+            } else {
+                entry.consecutive_failures += 1;
+                entry.consecutive_successes = 0;
+            }
+
+            // Calculate health status based on status code and consecutive counts
+            let new_status = self.calculate_health_status(entry, success, status_code);
+
+            // Update status if changed
+            if new_status != entry.status {
+                entry.status = new_status;
+                entry.last_status_change = now;
+            }
+
+            // Set cooldown period for unhealthy credentials
+            if entry.status == HealthStatus::Unhealthy
+                && entry.consecutive_failures >= self.config.unhealthy_threshold
+            {
+                let cooldown = Duration::seconds(self.config.cooldown_period_seconds);
+                entry.unavailable_until = Some(now + cooldown);
+            }
         }
     }
 
@@ -196,22 +198,24 @@ impl HealthManager {
             return;
         }
 
-        let mut health = self.health.write().await;
-        let entry = health
-            .entry(auth_id.to_string())
-            .or_insert_with(|| AuthHealth {
-                status: HealthStatus::Healthy,
-                consecutive_successes: 0,
-                consecutive_failures: 0,
-                last_status_change: Utc::now(),
-                last_check_time: Utc::now(),
-                unavailable_until: None,
-                error_counts: HashMap::new(),
-            });
+        {
+            let mut health = self.health.write().await;
+            let entry = health
+                .entry(auth_id.to_string())
+                .or_insert_with(|| AuthHealth {
+                    status: HealthStatus::Healthy,
+                    consecutive_successes: 0,
+                    consecutive_failures: 0,
+                    last_status_change: Utc::now(),
+                    last_check_time: Utc::now(),
+                    unavailable_until: None,
+                    error_counts: HashMap::new(),
+                });
 
-        entry.unavailable_until = Some(Utc::now() + duration);
-        entry.status = HealthStatus::Unhealthy;
-        entry.last_status_change = Utc::now();
+            entry.unavailable_until = Some(Utc::now() + duration);
+            entry.status = HealthStatus::Unhealthy;
+            entry.last_status_change = Utc::now();
+        }
     }
 
     /// Reset auth health status

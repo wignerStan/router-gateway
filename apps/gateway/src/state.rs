@@ -131,6 +131,7 @@ impl RateLimiter {
 
     /// Check whether a request from the given IP should be allowed.
     /// Returns `true` if under the limit, `false` if rate limited.
+    #[allow(clippy::significant_drop_tightening)]
     pub(crate) fn check(&self, ip: &str) -> bool {
         let mut buckets = self
             .buckets

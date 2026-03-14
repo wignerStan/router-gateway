@@ -1,17 +1,24 @@
 /// Auth info for weight calculation
 #[derive(Debug, Clone)]
 pub struct AuthInfo {
+    /// Unique identifier for this credential.
     pub id: String,
+    /// Routing priority (higher = preferred).
     pub priority: Option<i32>,
+    /// Whether the credential has exceeded its quota.
     pub quota_exceeded: bool,
+    /// Whether the credential is currently unavailable.
     pub unavailable: bool,
+    /// Per-model state overrides.
     pub model_states: Vec<ModelState>,
 }
 
 /// Model state information
 #[derive(Debug, Clone)]
 pub struct ModelState {
+    /// Whether this model is unavailable on the credential.
     pub unavailable: bool,
+    /// Whether this model has exceeded quota on the credential.
     pub quota_exceeded: bool,
 }
 

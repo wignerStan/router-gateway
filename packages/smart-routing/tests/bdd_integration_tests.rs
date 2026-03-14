@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 // BDD (Behavior-Driven Development) tests for smart-routing
 //
 // This module contains Cucumber-style tests that verify the behavior of

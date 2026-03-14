@@ -8,10 +8,13 @@ pub use crate::categories::{
 /// Error type for policy loading operations
 #[derive(Debug, thiserror::Error)]
 pub enum PolicyLoadError {
+    /// An I/O error occurred while loading policy data.
     #[error("I/O error: {0}")]
     Io(String),
+    /// Failed to parse policy data.
     #[error("parse error: {0}")]
     Parse(String),
+    /// Policy data failed schema validation.
     #[error("schema validation failed: {0}")]
     Schema(String),
 }
@@ -97,6 +100,7 @@ pub enum ModalityCategory {
 }
 
 impl ModalityCategory {
+    /// Returns the string representation of this modality category.
     pub const fn as_str(&self) -> &str {
         match self {
             Self::Text => "text",
@@ -108,6 +112,7 @@ impl ModalityCategory {
         }
     }
 
+    /// Parse a modality name string into a `ModalityCategory`.
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "text" => Some(Self::Text),
@@ -171,6 +176,7 @@ pub struct PolicyCondition {
     pub operator: String,
 }
 
+/// Types of conditions for conditional policy application.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum PolicyConditionType {

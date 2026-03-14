@@ -703,10 +703,7 @@ mod counting_and_cleanup {
         }
 
         // After enough operations, cleanup should have been triggered
-        let all_health = manager.health.read().await;
-        // Cleanup removes oldest entries when over limit
-        // The exact count depends on when cleanup triggers
-        assert!(all_health.len() <= 10); // Should not have grown unbounded
+        assert!(manager.health.read().await.len() <= 10); // Should not have grown unbounded
     }
 }
 

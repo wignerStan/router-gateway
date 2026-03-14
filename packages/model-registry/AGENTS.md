@@ -17,3 +17,19 @@ This project is part of the workspace. Please refer to the root [AGENTS.md](../.
 - 20+ providers in ProviderCategory enum
 - Routing policy system with filters, actions, and conditions
 - Leaf package — no internal workspace dependencies
+
+## Known Pitfalls
+
+- `Registry::get()` requires model ID to be non-empty (returns `Error::InvalidModelId`)
+- Cache TTL is 1 hour by default — clones may serve stale data within that window
+- Policy validation uses JSON schema at `config/policies.schema.json`, embedded at compile time via `include_str!`
+
+## Error Types
+
+```rust
+pub enum Error {
+    ModelNotFound(String),  // No model matches the given ID
+    Policy(String),         // Policy validation or application failure
+    InvalidModelId(String), // Empty or malformed model ID
+}
+```
