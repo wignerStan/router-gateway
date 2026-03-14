@@ -1,6 +1,6 @@
 [alias]
-# Strict lint: warnings as errors, but allow missing_docs (tracked separately)
-lint = "clippy --workspace --all-targets --all-features -- -D warnings -A missing_docs"
+# Strict lint: warnings as errors
+lint = "clippy --workspace --all-targets --all-features -- -D warnings"
 
 [target.'cfg(all())']
 # Add additional cargo configs if required

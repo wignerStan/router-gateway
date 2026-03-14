@@ -57,28 +57,28 @@ mod basic_tracking {
         let health = manager
             .get_health("test-auth")
             .await
-            .expect("value must be present");
+            .expect("Operation should succeed during test");
 
         // Verify error counts
         assert_eq!(
             *health
                 .error_counts
                 .get(&500)
-                .expect("value must be present"),
+                .expect("Operation should succeed during test"),
             2
         );
         assert_eq!(
             *health
                 .error_counts
                 .get(&503)
-                .expect("value must be present"),
+                .expect("Operation should succeed during test"),
             1
         );
         assert_eq!(
             *health
                 .error_counts
                 .get(&429)
-                .expect("value must be present"),
+                .expect("Operation should succeed during test"),
             1
         );
     }
@@ -115,9 +115,9 @@ mod availability_and_cooldown {
         assert!(health.is_some());
         assert!(
             health
-                .expect("value must be present")
+                .expect("Operation should succeed during test")
                 .unavailable_until
-                .expect("value must be present")
+                .expect("Operation should succeed during test")
                 < Utc::now()
         );
     }
@@ -144,7 +144,7 @@ mod availability_and_cooldown {
         let health = manager
             .get_health("test-auth")
             .await
-            .expect("value must be present");
+            .expect("Operation should succeed during test");
         assert!(health.unavailable_until.is_some());
 
         // Should be unavailable
@@ -176,7 +176,7 @@ mod availability_and_cooldown {
         let health = manager
             .get_health("test-auth")
             .await
-            .expect("value must be present");
+            .expect("Operation should succeed during test");
         assert!(health.unavailable_until.is_some());
     }
 
@@ -308,7 +308,7 @@ mod status_transitions {
         let health = manager
             .get_health("test-auth")
             .await
-            .expect("value must be present");
+            .expect("Operation should succeed during test");
         assert_eq!(
             health.consecutive_successes, 2,
             "Should have 2 consecutive successes"
@@ -390,7 +390,7 @@ mod status_transitions {
         let health = manager
             .get_health("test-auth")
             .await
-            .expect("value must be present");
+            .expect("Operation should succeed during test");
         assert_eq!(health.consecutive_successes, 1);
 
         // First failure should immediately make unhealthy with threshold 0
@@ -398,7 +398,7 @@ mod status_transitions {
         let health2 = manager
             .get_health("test-auth2")
             .await
-            .expect("value must be present");
+            .expect("Operation should succeed during test");
         assert_eq!(health2.consecutive_failures, 1);
         // With threshold 0, consecutive_failures >= 0 is always true
         assert_eq!(
@@ -425,7 +425,7 @@ mod status_transitions {
         let health = manager
             .get_health("test-auth")
             .await
-            .expect("value must be present");
+            .expect("Operation should succeed during test");
         assert_eq!(health.consecutive_successes, 100);
         assert_eq!(health.consecutive_failures, 0);
         assert_eq!(manager.get_status("test-auth").await, HealthStatus::Healthy);
@@ -438,7 +438,7 @@ mod status_transitions {
         let health = manager
             .get_health("test-auth")
             .await
-            .expect("value must be present");
+            .expect("Operation should succeed during test");
         assert_eq!(health.consecutive_successes, 0);
         assert_eq!(health.consecutive_failures, 100);
         assert_eq!(
@@ -550,7 +550,7 @@ mod state_management {
         let health1 = manager
             .get_health("test-auth")
             .await
-            .expect("value must be present");
+            .expect("Operation should succeed during test");
         let first_change = health1.last_status_change;
 
         // Status changes to unhealthy
@@ -560,7 +560,7 @@ mod state_management {
         let health2 = manager
             .get_health("test-auth")
             .await
-            .expect("value must be present");
+            .expect("Operation should succeed during test");
         assert!(health2.last_status_change > first_change);
     }
 
@@ -585,7 +585,7 @@ mod state_management {
         let health = manager
             .get_health("test-auth")
             .await
-            .expect("value must be present");
+            .expect("Operation should succeed during test");
         assert_eq!(health.status, HealthStatus::Healthy);
         assert_eq!(health.consecutive_failures, 0);
         assert_eq!(health.consecutive_successes, 0);

@@ -68,10 +68,10 @@ async fn test_end_to_end_http_request_tracing() {
                 .header("x-llm-provider", "test-provider")
                 .header("x-llm-model", "test-model")
                 .body(Body::empty())
-                .expect("value must be present"),
+                .expect("Tracing integration test should succeed"),
         )
         .await
-        .expect("value must be present");
+        .expect("Tracing integration test should succeed");
 
     // Verify response
     assert_eq!(response.status(), StatusCode::OK);
@@ -110,10 +110,10 @@ async fn test_end_to_end_failed_request() {
                 .uri("/error")
                 .header("x-request-id", "error-req")
                 .body(Body::empty())
-                .expect("value must be present"),
+                .expect("Tracing integration test should succeed"),
         )
         .await
-        .expect("value must be present");
+        .expect("Tracing integration test should succeed");
 
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 
@@ -245,7 +245,7 @@ async fn test_error_trace_to_metrics() {
     let provider = metrics
         .provider_metrics
         .get("openai")
-        .expect("value must be present");
+        .expect("Tracing integration test should succeed");
     assert_eq!(provider.successful_requests, 0);
     assert_eq!(provider.total_requests, 1);
 }
@@ -334,21 +334,21 @@ async fn test_collector_to_metrics_integration() {
     let openai = metrics
         .provider_metrics
         .get("openai")
-        .expect("value must be present");
+        .expect("Tracing integration test should succeed");
     assert_eq!(openai.total_requests, 3);
     assert_eq!(openai.successful_requests, 3);
 
     let anthropic = metrics
         .provider_metrics
         .get("anthropic")
-        .expect("value must be present");
+        .expect("Tracing integration test should succeed");
     assert_eq!(anthropic.total_requests, 2);
     assert_eq!(anthropic.successful_requests, 1);
 
     let google = metrics
         .provider_metrics
         .get("google")
-        .expect("value must be present");
+        .expect("Tracing integration test should succeed");
     assert_eq!(google.total_requests, 1);
     assert_eq!(google.successful_requests, 0);
 
@@ -382,10 +382,10 @@ async fn test_middleware_builder_integration() {
                 .method("GET")
                 .uri("/test")
                 .body(Body::empty())
-                .expect("value must be present"),
+                .expect("Tracing integration test should succeed"),
         )
         .await
-        .expect("value must be present");
+        .expect("Tracing integration test should succeed");
 
     // Verify collector received the trace
     assert_eq!(collector.trace_count().await, 1);

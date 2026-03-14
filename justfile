@@ -78,9 +78,9 @@ fmt-check:
 lint-fast:
     cargo clippy --all-targets --all-features
 
-# Strict lint (treat warnings as errors; missing_docs tracked separately)
+# Strict lint (treat warnings as errors)
 lint:
-    cargo clippy --all-targets --all-features -- -D warnings -A missing_docs
+    cargo clippy --all-targets --all-features -- -D warnings
 
 # Run clippy with auto-fix
 lint-fix:
@@ -310,7 +310,7 @@ ci-fmt:
 
 # CI lint (strict, matches local `just lint`)
 ci-lint:
-    cargo clippy --all-targets --all-features -- -D warnings -A missing_docs
+    cargo clippy --all-targets --all-features -- -D warnings
 
 # CI test (all features)
 ci-test:

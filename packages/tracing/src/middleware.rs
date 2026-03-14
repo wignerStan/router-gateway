@@ -74,7 +74,8 @@ impl TracingMiddleware {
     }
 
     /// Process the request and generate a trace
-    pub fn trace_request(
+    #[allow(clippy::unused_async)]
+    pub async fn trace_request(
         &self,
         _method: axum::http::Method,
         _uri: axum::http::Uri,
@@ -121,7 +122,7 @@ pub async fn tracing_middleware(
     let headers = req.headers().clone();
 
     // Create initial trace span
-    let mut span = middleware.trace_request(method, uri, headers, vec![]);
+    let mut span = middleware.trace_request(method, uri, headers, vec![]).await;
 
     // Execute the request
     let response = next.run(req).await;
@@ -265,12 +266,16 @@ mod tests {
         headers.insert("x-input-tokens", HeaderValue::from_static("100"));
         headers.insert("x-streaming", HeaderValue::from_static("true"));
 
-        let span = middleware.trace_request(
-            axum::http::Method::POST,
-            "/v1/messages".parse().expect("value must be present"),
-            headers,
-            vec![],
-        );
+        let span = middleware
+            .trace_request(
+                axum::http::Method::POST,
+                "/v1/messages"
+                    .parse()
+                    .expect("Tracing operation should succeed during test"),
+                headers,
+                vec![],
+            )
+            .await;
 
         assert_eq!(span.request_id, "req-123");
         assert_eq!(span.provider, "anthropic");
@@ -305,7 +310,8 @@ mod tests {
         // but test that we fall back to UUID generation when header value is not valid string
         headers.insert(
             "x-request-id",
-            HeaderValue::from_bytes(b"valid-id").expect("value must be present"),
+            HeaderValue::from_bytes(b"valid-id")
+                .expect("Tracing operation should succeed during test"),
         );
         assert_eq!(middleware.extract_request_id(&headers), "valid-id");
 
@@ -377,12 +383,16 @@ mod tests {
 
         // Empty headers - should use defaults
         let headers = HeaderMap::new();
-        let span = middleware.trace_request(
-            axum::http::Method::POST,
-            "/v1/messages".parse().expect("value must be present"),
-            headers,
-            vec![],
-        );
+        let span = middleware
+            .trace_request(
+                axum::http::Method::POST,
+                "/v1/messages"
+                    .parse()
+                    .expect("Tracing operation should succeed during test"),
+                headers,
+                vec![],
+            )
+            .await;
 
         // Should have generated a UUID request_id
         assert!(Uuid::parse_str(&span.request_id).is_ok());
@@ -405,14 +415,16 @@ mod tests {
         headers.insert("x-request-id", HeaderValue::from_static("req-large"));
         headers.insert("x-llm-provider", HeaderValue::from_static("openai"));
 
-        let span = middleware.trace_request(
-            axum::http::Method::POST,
-            "/v1/chat/completions"
-                .parse()
-                .expect("value must be present"),
-            headers,
-            large_body,
-        );
+        let span = middleware
+            .trace_request(
+                axum::http::Method::POST,
+                "/v1/chat/completions"
+                    .parse()
+                    .expect("Tracing operation should succeed during test"),
+                headers,
+                large_body,
+            )
+            .await;
 
         assert_eq!(span.request_id, "req-large");
         assert_eq!(span.provider, "openai");
@@ -452,12 +464,16 @@ mod tests {
         headers.insert("x-request-id", HeaderValue::from_static("req-1"));
         headers.insert("x-input-tokens", HeaderValue::from_static("500"));
 
-        let span = middleware.trace_request(
-            axum::http::Method::POST,
-            "/v1/messages".parse().expect("value must be present"),
-            headers,
-            vec![],
-        );
+        let span = middleware
+            .trace_request(
+                axum::http::Method::POST,
+                "/v1/messages"
+                    .parse()
+                    .expect("Tracing operation should succeed during test"),
+                headers,
+                vec![],
+            )
+            .await;
 
         assert_eq!(span.input_tokens, Some(500));
     }
@@ -471,44 +487,60 @@ mod tests {
         // Test "true"
         let mut headers1 = HeaderMap::new();
         headers1.insert("x-streaming", HeaderValue::from_static("true"));
-        let span1 = middleware.trace_request(
-            axum::http::Method::POST,
-            "/v1/messages".parse().expect("value must be present"),
-            headers1,
-            vec![],
-        );
+        let span1 = middleware
+            .trace_request(
+                axum::http::Method::POST,
+                "/v1/messages"
+                    .parse()
+                    .expect("Tracing operation should succeed during test"),
+                headers1,
+                vec![],
+            )
+            .await;
         assert!(span1.is_streaming);
 
         // Test "1"
         let mut headers2 = HeaderMap::new();
         headers2.insert("x-streaming", HeaderValue::from_static("1"));
-        let span2 = middleware.trace_request(
-            axum::http::Method::POST,
-            "/v1/messages".parse().expect("value must be present"),
-            headers2,
-            vec![],
-        );
+        let span2 = middleware
+            .trace_request(
+                axum::http::Method::POST,
+                "/v1/messages"
+                    .parse()
+                    .expect("Tracing operation should succeed during test"),
+                headers2,
+                vec![],
+            )
+            .await;
         assert!(span2.is_streaming);
 
         // Test "false"
         let mut headers3 = HeaderMap::new();
         headers3.insert("x-streaming", HeaderValue::from_static("false"));
-        let span3 = middleware.trace_request(
-            axum::http::Method::POST,
-            "/v1/messages".parse().expect("value must be present"),
-            headers3,
-            vec![],
-        );
+        let span3 = middleware
+            .trace_request(
+                axum::http::Method::POST,
+                "/v1/messages"
+                    .parse()
+                    .expect("Tracing operation should succeed during test"),
+                headers3,
+                vec![],
+            )
+            .await;
         assert!(!span3.is_streaming);
 
         // Test no header
         let headers4 = HeaderMap::new();
-        let span4 = middleware.trace_request(
-            axum::http::Method::POST,
-            "/v1/messages".parse().expect("value must be present"),
-            headers4,
-            vec![],
-        );
+        let span4 = middleware
+            .trace_request(
+                axum::http::Method::POST,
+                "/v1/messages"
+                    .parse()
+                    .expect("Tracing operation should succeed during test"),
+                headers4,
+                vec![],
+            )
+            .await;
         assert!(!span4.is_streaming);
     }
 
@@ -526,8 +558,8 @@ mod tests {
 
         let collector =
             std::sync::Arc::new(crate::collector::MemoryTraceCollector::with_default_size());
-        let collector_dyn =
-            collector.clone() as std::sync::Arc<dyn crate::collector::TraceCollector>;
+        let collector_dyn = std::sync::Arc::clone(&collector)
+            as std::sync::Arc<dyn crate::collector::TraceCollector>;
         let middleware = TracingMiddleware::new(collector_dyn);
 
         let app = Router::new()
@@ -553,9 +585,12 @@ mod tests {
             .header("x-request-id", "test-req-axum")
             .header("x-llm-provider", "test-provider")
             .body(Body::empty())
-            .unwrap();
+            .expect("Axum request should be constructible");
 
-        let response = app.oneshot(request).await.unwrap();
+        let response = app
+            .oneshot(request)
+            .await
+            .expect("Router should handle request successfully");
         assert_eq!(response.status(), StatusCode::OK);
 
         let traces = collector.get_traces().await;
@@ -581,8 +616,8 @@ mod tests {
 
         let collector =
             std::sync::Arc::new(crate::collector::MemoryTraceCollector::with_default_size());
-        let collector_dyn =
-            collector.clone() as std::sync::Arc<dyn crate::collector::TraceCollector>;
+        let collector_dyn = std::sync::Arc::clone(&collector)
+            as std::sync::Arc<dyn crate::collector::TraceCollector>;
         let middleware = TracingMiddleware::new(collector_dyn);
 
         let app = Router::new()
@@ -600,9 +635,12 @@ mod tests {
             .uri("/error")
             .header("x-request-id", "err-req-axum")
             .body(Body::empty())
-            .unwrap();
+            .expect("Axum request should be constructible");
 
-        let response = app.oneshot(request).await.unwrap();
+        let response = app
+            .oneshot(request)
+            .await
+            .expect("Router should handle request successfully");
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 
         let traces = collector.get_traces().await;

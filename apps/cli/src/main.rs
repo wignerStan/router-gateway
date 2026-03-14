@@ -477,7 +477,7 @@ routing:
 "#;
         let result = validate_config_content(yaml);
         assert!(result.is_ok());
-        let (_, errors, _) = result.expect("value must be present");
+        let (_, errors, _) = result.expect("Validation result should be available");
         assert!(errors.is_empty());
     }
 
@@ -493,7 +493,7 @@ routing:
 "#;
         let result = validate_config_content(yaml);
         assert!(result.is_ok());
-        let (_, errors, _) = result.expect("value must be present");
+        let (_, errors, _) = result.expect("Validation result should be available");
         assert!(!errors.is_empty());
         assert!(errors[0].contains("Invalid routing strategy"));
     }
@@ -508,7 +508,7 @@ credentials:
 "#;
         let result = validate_config_content(yaml);
         assert!(result.is_ok());
-        let (_, errors, _) = result.expect("value must be present");
+        let (_, errors, _) = result.expect("Validation result should be available");
         assert_eq!(errors.len(), 3);
         assert!(errors[0].contains("'id' field is empty"));
         assert!(errors[1].contains("'provider' field is empty"));
@@ -532,7 +532,7 @@ credentials:
 "#;
         let result = validate_config_content(yaml);
         assert!(result.is_ok());
-        let (_, _, warnings) = result.expect("value must be present");
+        let (_, _, warnings) = result.expect("Validation result should be available");
         assert!(!warnings.is_empty());
         assert!(warnings[0].contains("environment variable 'NON_EXISTENT_VAR_123' not set"));
     }

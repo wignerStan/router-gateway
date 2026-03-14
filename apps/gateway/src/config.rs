@@ -533,7 +533,7 @@ mod tests {
 server:
   port: 8080
 ";
-        let config = GatewayConfig::from_yaml(yaml).expect("value must be present");
+        let config = GatewayConfig::from_yaml(yaml).expect("Gateway config should be valid YAML");
         assert_eq!(config.server.port, 8080);
     }
 
@@ -546,7 +546,7 @@ credentials:
     api_key: sk-test-key
     priority: 10
 ";
-        let config = GatewayConfig::from_yaml(yaml).expect("value must be present");
+        let config = GatewayConfig::from_yaml(yaml).expect("Gateway config should be valid YAML");
         assert_eq!(config.credentials.len(), 1);
         assert_eq!(config.credentials[0].id, "anthropic-primary");
         assert_eq!(config.credentials[0].provider, "anthropic");
@@ -617,7 +617,7 @@ credentials:
     api_key: key3
 ",
         )
-        .expect("value must be present");
+        .expect("Gateway config should be valid YAML");
 
         let anthropic_creds = config.credentials_for_provider("anthropic");
         assert_eq!(anthropic_creds.len(), 2);
@@ -664,18 +664,18 @@ providers:
       Authorization: Bearer ${PROVIDER_AUTH}
 ",
         )
-        .expect("value must be present");
+        .expect("Gateway config should be valid YAML");
 
         let openai = config
             .providers
             .get("openai")
-            .expect("value must be present");
+            .expect("OpenAI provider configuration should exist");
         assert_eq!(openai.base_url.as_deref(), Some("https://api.openai.com"));
         assert_eq!(
             openai
                 .headers
                 .get("Authorization")
-                .expect("value must be present"),
+                .expect("Expected header should be present in provider config"),
             "Bearer ",
             "Unset env var should expand to empty string"
         );
@@ -870,7 +870,7 @@ server:
   auth_tokens:
     - "my-secret-token"
 "#;
-        let config = GatewayConfig::from_yaml(yaml).expect("value must be present");
+        let config = GatewayConfig::from_yaml(yaml).expect("Gateway config should be valid YAML");
         assert!(config.is_auth_enabled());
     }
 
@@ -893,12 +893,12 @@ providers:
       X-Api-Key: ${TEST_PROVIDER_KEY}
 ",
         )
-        .expect("value must be present");
+        .expect("Gateway config should be valid YAML");
 
         let openai = config
             .providers
             .get("openai")
-            .expect("value must be present");
+            .expect("OpenAI provider configuration should exist");
         assert_eq!(
             openai.base_url.as_deref(),
             Some("https://custom.provider.com")
@@ -907,7 +907,7 @@ providers:
             openai
                 .headers
                 .get("X-Api-Key")
-                .expect("value must be present"),
+                .expect("Expected header should be present in provider config"),
             "secret-key"
         );
 
@@ -931,18 +931,18 @@ providers:
       X-Custom: literal-value
 ",
         )
-        .expect("value must be present");
+        .expect("Gateway config should be valid YAML");
 
         let openai = config
             .providers
             .get("openai")
-            .expect("value must be present");
+            .expect("OpenAI provider configuration should exist");
         assert_eq!(openai.base_url.as_deref(), Some("https://api.openai.com"));
         assert_eq!(
             openai
                 .headers
                 .get("X-Custom")
-                .expect("value must be present"),
+                .expect("Expected header should be present in provider config"),
             "literal-value"
         );
     }
@@ -1062,21 +1062,21 @@ providers:
         let openai_provider = config
             .providers
             .get("openai")
-            .expect("value must be present");
+            .expect("OpenAI provider configuration should exist");
         assert!(openai_provider.enabled);
         assert_eq!(openai_provider.timeout_secs, Some(120));
         assert_eq!(
             openai_provider
                 .headers
                 .get("X-Custom-Header")
-                .expect("value must be present"),
+                .expect("Expected header should be present in provider config"),
             "custom-value"
         );
 
         let google_provider = config
             .providers
             .get("google")
-            .expect("value must be present");
+            .expect("Google provider configuration should exist");
         assert!(google_provider.enabled);
         assert_eq!(
             google_provider.base_url.as_deref(),
@@ -1156,7 +1156,7 @@ providers:
         let openai = config
             .providers
             .get("openai")
-            .expect("value must be present");
+            .expect("OpenAI provider configuration should exist");
         assert!(openai.enabled);
         assert_eq!(
             openai.base_url.as_deref(),
@@ -1166,13 +1166,13 @@ providers:
         let google = config
             .providers
             .get("google")
-            .expect("value must be present");
+            .expect("Google provider configuration should exist");
         assert!(!google.enabled);
 
         let custom = config
             .providers
             .get("custom-llm")
-            .expect("value must be present");
+            .expect("Custom LLM provider configuration should exist");
         assert!(custom.enabled);
         assert_eq!(
             custom.base_url.as_deref(),
@@ -1182,7 +1182,7 @@ providers:
             custom
                 .headers
                 .get("X-API-Version")
-                .expect("value must be present"),
+                .expect("Expected header should be present in provider config"),
             "2024-01"
         );
     }
@@ -1233,7 +1233,7 @@ credentials:
 server:
   trust_proxy_headers: true
 ";
-        let config = GatewayConfig::from_yaml(yaml).expect("value must be present");
+        let config = GatewayConfig::from_yaml(yaml).expect("Gateway config should be valid YAML");
         assert!(config.server.trust_proxy_headers);
     }
 
@@ -1255,7 +1255,7 @@ providers:
   openai:
     enabled: false
 ";
-        let config = GatewayConfig::from_yaml(yaml).expect("value must be present");
+        let config = GatewayConfig::from_yaml(yaml).expect("Gateway config should be valid YAML");
         assert!(!config.is_provider_enabled("openai"));
         // Other providers still default to enabled
         assert!(config.is_provider_enabled("google"));
@@ -1268,7 +1268,7 @@ providers:
   google:
     enabled: true
 ";
-        let config = GatewayConfig::from_yaml(yaml).expect("value must be present");
+        let config = GatewayConfig::from_yaml(yaml).expect("Gateway config should be valid YAML");
         assert!(config.is_provider_enabled("google"));
     }
 }
