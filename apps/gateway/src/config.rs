@@ -200,7 +200,7 @@ impl GatewayConfig {
             serde_yaml::from_str(yaml).with_context(|| "Failed to parse YAML configuration")?;
 
         // Expand environment variables in secrets
-        config.expand_env_vars()?;
+        config.expand_env_vars();
 
         // Validate configuration
         config.validate()?;
@@ -209,8 +209,7 @@ impl GatewayConfig {
     }
 
     /// Expand environment variable references in secrets
-    #[allow(clippy::unnecessary_wraps)]
-    fn expand_env_vars(&mut self) -> Result<()> {
+    fn expand_env_vars(&mut self) {
         for cred in &mut self.credentials {
             cred.api_key = expand_env_var(&cred.api_key);
             if let Some(ref mut base_url) = cred.base_url {
@@ -225,7 +224,6 @@ impl GatewayConfig {
                 *value = expand_env_var(value);
             }
         }
-        Ok(())
     }
 
     /// Validate the configuration

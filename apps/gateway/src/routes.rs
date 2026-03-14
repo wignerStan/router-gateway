@@ -497,19 +497,14 @@ mod integration_tests {
     const ERR_RATE_LIMIT: &str = "rate_limit_error";
     const ERR_NO_ROUTE: &str = "no_route_available";
 
-    #[allow(clippy::panic)]
     async fn read_json_body<T: serde::de::DeserializeOwned>(
         response: axum::response::Response,
     ) -> T {
         let body_bytes = axum::body::to_bytes(response.into_body(), MAX_RESPONSE_BYTES)
             .await
             .expect("response body should be readable");
-        serde_json::from_slice(&body_bytes).unwrap_or_else(|e| {
-            panic!(
-                "Failed to deserialize JSON: {e}. Body: {}",
-                String::from_utf8_lossy(&body_bytes)
-            )
-        })
+        serde_json::from_slice(&body_bytes)
+            .expect("test response body should deserialize as valid JSON")
     }
 
     fn create_test_state() -> AppState {

@@ -312,29 +312,25 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::panic)]
     fn test_message_content_parts() {
         let content = MessageContent::Parts(vec![
             ContentPart::text("Hello"),
             ContentPart::image_url("https://example.com/img.png"),
         ]);
-        match content {
-            MessageContent::Parts(parts) => {
-                assert_eq!(parts.len(), 2);
-                assert_eq!(parts[0].part_type, "text");
-                assert_eq!(parts[1].part_type, "image_url");
-            },
-            _ => panic!("Expected Parts variant"),
+        assert!(matches!(content, MessageContent::Parts(_)));
+        if let MessageContent::Parts(parts) = content {
+            assert_eq!(parts.len(), 2);
+            assert_eq!(parts[0].part_type, "text");
+            assert_eq!(parts[1].part_type, "image_url");
         }
     }
 
     #[test]
-    #[allow(clippy::panic)]
     fn test_message_content_text_variant() {
         let content = MessageContent::Text("Hello world".to_string());
-        match content {
-            MessageContent::Text(text) => assert_eq!(text, "Hello world"),
-            _ => panic!("Expected Text variant"),
+        assert!(matches!(content, MessageContent::Text(_)));
+        if let MessageContent::Text(text) = content {
+            assert_eq!(text, "Hello world");
         }
     }
 

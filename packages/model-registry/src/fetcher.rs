@@ -304,6 +304,7 @@ mod tests {
     }
     use std::panic::{self, AssertUnwindSafe};
 
+    // Intentionally panics to poison the RwLock for testing recovery behavior
     #[allow(clippy::panic)]
     fn poison_lock(fetcher: &StaticFetcher) {
         let _ = panic::catch_unwind(AssertUnwindSafe(|| {

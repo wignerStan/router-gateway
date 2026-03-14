@@ -470,7 +470,6 @@ mod sqlite_tests {
         use super::*;
 
         #[tokio::test]
-        #[allow(clippy::panic)]
         async fn test_sqlite_selector_weighted_selection() {
             use crate::config::SmartRoutingConfig;
             use crate::metrics::AuthMetrics;
@@ -562,10 +561,14 @@ mod sqlite_tests {
                 assert!(selected.is_some());
 
                 let selected_id = selected.expect("value must be present");
-                match selected_id.as_str() {
-                    "auth1" => auth1_count += 1,
-                    "auth2" => auth2_count += 1,
-                    _ => panic!("Unexpected auth selected: {selected_id}"),
+                assert!(
+                    matches!(selected_id.as_str(), "auth1" | "auth2"),
+                    "Unexpected auth selected: {selected_id}"
+                );
+                if selected_id == "auth1" {
+                    auth1_count += 1;
+                } else {
+                    auth2_count += 1;
                 }
             }
 
@@ -664,7 +667,6 @@ mod sqlite_tests {
         }
 
         #[tokio::test]
-        #[allow(clippy::panic)]
         async fn test_sqlite_selector_precompute_weights() {
             use crate::config::SmartRoutingConfig;
             use crate::sqlite::selector::SQLiteSelector;
@@ -693,11 +695,11 @@ mod sqlite_tests {
             )
             .await;
 
-            match result {
-                Ok(Ok(())) => {}, // Success
-                Ok(Err(e)) => panic!("Failed to precompute weights: {e}"),
-                Err(_) => {}, // Timeout - acceptable for empty database
-            }
+            // Timeout is acceptable for empty database; inner error indicates a bug
+            assert!(
+                result.as_ref().map_or(true, Result::is_ok),
+                "precompute_weights should not fail: {result:?}"
+            );
 
             // Get stats to verify operation was tracked
             let stats = selector.get_stats();
@@ -712,7 +714,6 @@ mod sqlite_tests {
         use super::*;
 
         #[tokio::test]
-        #[allow(clippy::panic)]
         async fn test_sqlite_selector_quota_exceeded() {
             use crate::config::SmartRoutingConfig;
             use crate::metrics::AuthMetrics;
@@ -804,10 +805,14 @@ mod sqlite_tests {
                 assert!(selected.is_some());
 
                 let selected_id = selected.expect("value must be present");
-                match selected_id.as_str() {
-                    "auth1" => auth1_count += 1,
-                    "auth2" => auth2_count += 1,
-                    _ => panic!("Unexpected auth selected: {selected_id}"),
+                assert!(
+                    matches!(selected_id.as_str(), "auth1" | "auth2"),
+                    "Unexpected auth selected: {selected_id}"
+                );
+                if selected_id == "auth1" {
+                    auth1_count += 1;
+                } else {
+                    auth2_count += 1;
                 }
             }
 
@@ -819,7 +824,6 @@ mod sqlite_tests {
         }
 
         #[tokio::test]
-        #[allow(clippy::panic)]
         async fn test_sqlite_selector_priority_influence() {
             use crate::config::{SmartRoutingConfig, WeightConfig};
             use crate::sqlite::selector::SQLiteSelector;
@@ -879,10 +883,14 @@ mod sqlite_tests {
                 assert!(selected.is_some());
 
                 let selected_id = selected.expect("value must be present");
-                match selected_id.as_str() {
-                    "auth1" => auth1_count += 1,
-                    "auth2" => auth2_count += 1,
-                    _ => panic!("Unexpected auth selected: {selected_id}"),
+                assert!(
+                    matches!(selected_id.as_str(), "auth1" | "auth2"),
+                    "Unexpected auth selected: {selected_id}"
+                );
+                if selected_id == "auth1" {
+                    auth1_count += 1;
+                } else {
+                    auth2_count += 1;
                 }
             }
 

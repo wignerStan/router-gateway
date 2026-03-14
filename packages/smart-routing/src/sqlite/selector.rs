@@ -471,7 +471,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(clippy::panic)]
     async fn test_precompute_weights() {
         let config = SQLiteConfig::default();
         let store = SQLiteStore::new(config)
@@ -491,12 +490,11 @@ mod tests {
         .await;
 
         // Either Ok or timeout is acceptable for this test
-        // The important thing is it doesn't panic
-        match result {
-            Ok(Ok(())) => {}, // Success
-            Ok(Err(e)) => panic!("Failed to precompute weights: {e}"),
-            Err(_) => {}, // Timeout - acceptable for empty database
-        }
+        // Inner error indicates a bug
+        assert!(
+            result.as_ref().map_or(true, Result::is_ok),
+            "precompute_weights should not fail: {result:?}"
+        );
     }
 
     #[tokio::test]

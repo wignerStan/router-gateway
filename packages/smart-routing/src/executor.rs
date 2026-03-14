@@ -573,6 +573,7 @@ mod tests {
     }
 
     #[tokio::test]
+    // Intentional sentinel: panics if executor reaches this credential (should be skipped)
     #[allow(clippy::panic)]
     async fn test_loop_guard_provider_diversity() {
         // Scenario: Same provider triggers diversity enforcement
@@ -612,6 +613,7 @@ mod tests {
     }
 
     #[tokio::test]
+    // Intentional sentinel: panics if executor retries beyond the success point
     #[allow(clippy::panic)]
     async fn test_success_within_budget_stops_retrying() {
         // Scenario: Success within budget stops retrying
