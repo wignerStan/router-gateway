@@ -1499,6 +1499,8 @@ mod integration_tests {
             assert!(caps["vision"].is_boolean());
             assert!(caps["tools"].is_boolean());
             assert!(caps["streaming"].is_boolean());
+            // thinking is currently omitted by the chat_completions handler
+            assert!(caps["thinking"].is_null());
         }
 
         #[tokio::test]
@@ -1526,6 +1528,8 @@ mod integration_tests {
             assert_eq!(caps["vision"], false);
             assert_eq!(caps["tools"], false);
             assert_eq!(caps["streaming"], false);
+            // thinking is currently omitted by the chat_completions handler
+            assert!(caps["thinking"].is_null());
         }
     }
 
@@ -1634,9 +1638,10 @@ mod integration_tests {
             let response = app.clone().oneshot(request).await.unwrap();
             assert_eq!(response.status(), StatusCode::OK);
 
+            // No auth header — if auth ran before rate-limit, this would
+            // return 401 UNAUTHORIZED, not 429 TOO_MANY_REQUESTS.
             let mut request = Request::builder()
                 .uri("/api/models")
-                .header("authorization", "Bearer test-token")
                 .body(Body::empty())
                 .unwrap();
             request
