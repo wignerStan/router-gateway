@@ -145,7 +145,7 @@ fn test_matcher_best_match() {
     assert!(best.is_some());
 
     // Quality first has higher priority, should be selected
-    let best = best.unwrap();
+    let best = best.expect("value must be present");
     assert_eq!(best.policy.id, "quality_first");
 }
 
@@ -636,7 +636,7 @@ fn test_matcher_evaluate_best_priority_conflicts() {
     let best = matcher.evaluate_best(&model, &context);
     assert!(best.is_some());
     assert_eq!(
-        best.unwrap().policy.id,
+        best.expect("value must be present").policy.id,
         "high",
         "Should return highest priority policy"
     );

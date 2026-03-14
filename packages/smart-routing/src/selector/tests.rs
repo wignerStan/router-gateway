@@ -66,7 +66,7 @@ mod tests {
 
             let selected = selector.pick(auths).await;
             assert!(selected.is_some());
-            let selected_id = selected.unwrap();
+            let selected_id = selected.expect("value must be present");
             assert!(["auth1", "auth2", "auth3"].contains(&selected_id.as_str()));
         }
 
@@ -106,7 +106,7 @@ mod tests {
             for _ in 0..10 {
                 let selected = selector.pick(auths.clone()).await;
                 assert!(selected.is_some());
-                let selected_id = selected.unwrap();
+                let selected_id = selected.expect("value must be present");
                 assert_ne!(selected_id, "auth2");
             }
         }
@@ -146,7 +146,7 @@ mod tests {
 
             let selected = selector.pick_with_policy(auths, &model, &context).await;
             assert!(selected.is_some());
-            let selected_id = selected.unwrap();
+            let selected_id = selected.expect("value must be present");
             assert!(["auth1", "auth2"].contains(&selected_id.as_str()));
         }
 
@@ -265,7 +265,7 @@ mod tests {
 
             let metrics = selector.metrics().get_metrics("auth1").await;
             assert!(metrics.is_some());
-            assert_eq!(metrics.unwrap().total_requests, 1);
+            assert_eq!(metrics.expect("value must be present").total_requests, 1);
         }
 
         #[tokio::test]
@@ -545,7 +545,10 @@ mod tests {
             let mut normal_count = 0;
             let mut quota_count = 0;
             for _ in 0..500 {
-                let selected = selector.pick(auths.clone()).await.unwrap();
+                let selected = selector
+                    .pick(auths.clone())
+                    .await
+                    .expect("value must be present");
                 if selected == "normal-auth" {
                     normal_count += 1;
                 } else {
@@ -602,7 +605,10 @@ mod tests {
             let mut auth1_count = 0;
             let mut auth2_count = 0;
             for _ in 0..100 {
-                let selected = selector.pick(auths.clone()).await.unwrap();
+                let selected = selector
+                    .pick(auths.clone())
+                    .await
+                    .expect("value must be present");
                 if selected == "auth1" {
                     auth1_count += 1;
                 } else {
@@ -657,7 +663,12 @@ mod tests {
             let mut high_count = 0;
             let mut low_count = 0;
             for _ in 0..100 {
-                match selector.pick(auths.clone()).await.unwrap().as_str() {
+                match selector
+                    .pick(auths.clone())
+                    .await
+                    .expect("value must be present")
+                    .as_str()
+                {
                     "high-perf" => high_count += 1,
                     "low-perf" => low_count += 1,
                     _ => {},
@@ -735,9 +746,9 @@ mod tests {
             let all_results: Vec<_> = futures::future::join_all(handles).await;
 
             for results in all_results {
-                for selected in results.unwrap() {
+                for selected in results.expect("value must be present") {
                     assert!(selected.is_some());
-                    let id = selected.unwrap();
+                    let id = selected.expect("value must be present");
                     assert!(
                         ["auth1", "auth2", "auth3"].contains(&id.as_str()),
                         "Selected invalid auth: {}",

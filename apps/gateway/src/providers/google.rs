@@ -500,7 +500,9 @@ mod tests {
         };
 
         let transformed = adapter.transform_request(&request);
-        let contents = transformed["contents"].as_array().unwrap();
+        let contents = transformed["contents"]
+            .as_array()
+            .expect("value must be present");
         assert_eq!(contents[1]["role"], "model");
     }
 
@@ -572,8 +574,12 @@ mod tests {
         };
 
         let transformed = adapter.transform_request(&request);
-        let contents = transformed["contents"].as_array().unwrap();
-        let parts = contents[0]["parts"].as_array().unwrap();
+        let contents = transformed["contents"]
+            .as_array()
+            .expect("value must be present");
+        let parts = contents[0]["parts"]
+            .as_array()
+            .expect("value must be present");
         assert_eq!(parts.len(), 2);
     }
 
@@ -602,7 +608,7 @@ mod tests {
         assert_eq!(gen_config["maxOutputTokens"], 2048);
         assert_eq!(gen_config["temperature"], 0.5);
         // Use approximate comparison for top_p due to floating point precision
-        let top_p = gen_config["topP"].as_f64().unwrap();
+        let top_p = gen_config["topP"].as_f64().expect("value must be present");
         assert!(
             (top_p - 0.9).abs() < 0.01,
             "Expected topP ~0.9, got {}",
@@ -634,7 +640,9 @@ mod tests {
             "modelVersion": "gemini-1.5-pro"
         });
 
-        let result = adapter.transform_response(response).unwrap();
+        let result = adapter
+            .transform_response(response)
+            .expect("value must be present");
         assert_eq!(result.content, "Hello there!");
         assert_eq!(result.finish_reason, "STOP");
         assert_eq!(result.usage.prompt_tokens, 10);
@@ -671,7 +679,9 @@ mod tests {
             }]
         });
 
-        let result = adapter.transform_response(response).unwrap();
+        let result = adapter
+            .transform_response(response)
+            .expect("value must be present");
         assert_eq!(result.usage.prompt_tokens, 0);
         assert_eq!(result.usage.completion_tokens, 0);
         assert_eq!(result.usage.total_tokens, 0);
@@ -697,9 +707,11 @@ mod tests {
             }
         });
 
-        let result = adapter.transform_response(response).unwrap();
+        let result = adapter
+            .transform_response(response)
+            .expect("value must be present");
         assert!(result.tool_calls.is_some());
-        let tool_calls = result.tool_calls.unwrap();
+        let tool_calls = result.tool_calls.expect("value must be present");
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].function.name, "get_weather");
     }
@@ -720,7 +732,9 @@ mod tests {
             "usageMetadata": {}
         });
 
-        let result = adapter.transform_response(response).unwrap();
+        let result = adapter
+            .transform_response(response)
+            .expect("value must be present");
         assert_eq!(result.content, "Hello there!");
     }
 
@@ -737,7 +751,9 @@ mod tests {
             "usageMetadata": {}
         });
 
-        let result = adapter.transform_response(response).unwrap();
+        let result = adapter
+            .transform_response(response)
+            .expect("value must be present");
         assert_eq!(result.content, "");
     }
 
@@ -753,7 +769,9 @@ mod tests {
             "usageMetadata": {}
         });
 
-        let result = adapter.transform_response(response).unwrap();
+        let result = adapter
+            .transform_response(response)
+            .expect("value must be present");
         assert_eq!(result.finish_reason, "UNKNOWN");
     }
 }

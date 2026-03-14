@@ -267,7 +267,7 @@ mod tests {
         let span = middleware
             .trace_request(
                 axum::http::Method::POST,
-                "/v1/messages".parse().unwrap(),
+                "/v1/messages".parse().expect("value must be present"),
                 headers,
                 vec![],
             )
@@ -306,7 +306,7 @@ mod tests {
         // but test that we fall back to UUID generation when header value is not valid string
         headers.insert(
             "x-request-id",
-            HeaderValue::from_bytes(b"valid-id").unwrap(),
+            HeaderValue::from_bytes(b"valid-id").expect("value must be present"),
         );
         assert_eq!(middleware.extract_request_id(&headers), "valid-id");
 
@@ -381,7 +381,7 @@ mod tests {
         let span = middleware
             .trace_request(
                 axum::http::Method::POST,
-                "/v1/messages".parse().unwrap(),
+                "/v1/messages".parse().expect("value must be present"),
                 headers,
                 vec![],
             )
@@ -411,7 +411,9 @@ mod tests {
         let span = middleware
             .trace_request(
                 axum::http::Method::POST,
-                "/v1/chat/completions".parse().unwrap(),
+                "/v1/chat/completions"
+                    .parse()
+                    .expect("value must be present"),
                 headers,
                 large_body,
             )
@@ -458,7 +460,7 @@ mod tests {
         let span = middleware
             .trace_request(
                 axum::http::Method::POST,
-                "/v1/messages".parse().unwrap(),
+                "/v1/messages".parse().expect("value must be present"),
                 headers,
                 vec![],
             )
@@ -479,7 +481,7 @@ mod tests {
         let span1 = middleware
             .trace_request(
                 axum::http::Method::POST,
-                "/v1/messages".parse().unwrap(),
+                "/v1/messages".parse().expect("value must be present"),
                 headers1,
                 vec![],
             )
@@ -492,7 +494,7 @@ mod tests {
         let span2 = middleware
             .trace_request(
                 axum::http::Method::POST,
-                "/v1/messages".parse().unwrap(),
+                "/v1/messages".parse().expect("value must be present"),
                 headers2,
                 vec![],
             )
@@ -505,7 +507,7 @@ mod tests {
         let span3 = middleware
             .trace_request(
                 axum::http::Method::POST,
-                "/v1/messages".parse().unwrap(),
+                "/v1/messages".parse().expect("value must be present"),
                 headers3,
                 vec![],
             )
@@ -517,7 +519,7 @@ mod tests {
         let span4 = middleware
             .trace_request(
                 axum::http::Method::POST,
-                "/v1/messages".parse().unwrap(),
+                "/v1/messages".parse().expect("value must be present"),
                 headers4,
                 vec![],
             )

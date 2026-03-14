@@ -536,7 +536,7 @@ mod tests {
 server:
   port: 8080
 "#;
-        let config = GatewayConfig::from_yaml(yaml).unwrap();
+        let config = GatewayConfig::from_yaml(yaml).expect("value must be present");
         assert_eq!(config.server.port, 8080);
     }
 
@@ -549,7 +549,7 @@ credentials:
     api_key: sk-test-key
     priority: 10
 "#;
-        let config = GatewayConfig::from_yaml(yaml).unwrap();
+        let config = GatewayConfig::from_yaml(yaml).expect("value must be present");
         assert_eq!(config.credentials.len(), 1);
         assert_eq!(config.credentials[0].id, "anthropic-primary");
         assert_eq!(config.credentials[0].provider, "anthropic");
@@ -570,7 +570,7 @@ credentials:
         let result = GatewayConfig::from_yaml(yaml);
         assert!(result.is_err());
         assert!(result
-            .unwrap_err()
+            .expect_err("expected error should be present")
             .to_string()
             .contains("Duplicate credential ID"));
     }
@@ -584,7 +584,7 @@ routing:
         let result = GatewayConfig::from_yaml(yaml);
         assert!(result.is_err());
         assert!(result
-            .unwrap_err()
+            .expect_err("expected error should be present")
             .to_string()
             .contains("Invalid routing strategy"));
     }
@@ -620,7 +620,7 @@ credentials:
     api_key: key3
 "#,
         )
-        .unwrap();
+        .expect("value must be present");
 
         let anthropic_creds = config.credentials_for_provider("anthropic");
         assert_eq!(anthropic_creds.len(), 2);
@@ -642,7 +642,9 @@ credentials:
 "#;
         let result = GatewayConfig::from_yaml(yaml);
         assert!(result.is_err());
-        let err_msg = result.unwrap_err().to_string();
+        let err_msg = result
+            .expect_err("expected error should be present")
+            .to_string();
         assert!(
             err_msg.contains("private/internal IP") || err_msg.contains("invalid base_url"),
             "Unexpected error: {err_msg}"
@@ -665,12 +667,18 @@ providers:
       Authorization: Bearer ${PROVIDER_AUTH}
 "#,
         )
-        .unwrap();
+        .expect("value must be present");
 
-        let openai = config.providers.get("openai").unwrap();
+        let openai = config
+            .providers
+            .get("openai")
+            .expect("value must be present");
         assert_eq!(openai.base_url.as_deref(), Some("https://api.openai.com"));
         assert_eq!(
-            openai.headers.get("Authorization").unwrap(),
+            openai
+                .headers
+                .get("Authorization")
+                .expect("value must be present"),
             "Bearer ",
             "Unset env var should expand to empty string"
         );
@@ -865,7 +873,7 @@ server:
   auth_tokens:
     - "my-secret-token"
 "#;
-        let config = GatewayConfig::from_yaml(yaml).unwrap();
+        let config = GatewayConfig::from_yaml(yaml).expect("value must be present");
         assert!(config.is_auth_enabled());
     }
 
@@ -888,14 +896,23 @@ providers:
       X-Api-Key: ${TEST_PROVIDER_KEY}
 "#,
         )
-        .unwrap();
+        .expect("value must be present");
 
-        let openai = config.providers.get("openai").unwrap();
+        let openai = config
+            .providers
+            .get("openai")
+            .expect("value must be present");
         assert_eq!(
             openai.base_url.as_deref(),
             Some("https://custom.provider.com")
         );
-        assert_eq!(openai.headers.get("X-Api-Key").unwrap(), "secret-key");
+        assert_eq!(
+            openai
+                .headers
+                .get("X-Api-Key")
+                .expect("value must be present"),
+            "secret-key"
+        );
 
         std::env::remove_var("TEST_PROVIDER_URL");
         std::env::remove_var("TEST_PROVIDER_KEY");
@@ -917,11 +934,20 @@ providers:
       X-Custom: literal-value
 "#,
         )
-        .unwrap();
+        .expect("value must be present");
 
-        let openai = config.providers.get("openai").unwrap();
+        let openai = config
+            .providers
+            .get("openai")
+            .expect("value must be present");
         assert_eq!(openai.base_url.as_deref(), Some("https://api.openai.com"));
-        assert_eq!(openai.headers.get("X-Custom").unwrap(), "literal-value");
+        assert_eq!(
+            openai
+                .headers
+                .get("X-Custom")
+                .expect("value must be present"),
+            "literal-value"
+        );
     }
 
     // --- Config File Integration Tests ---
@@ -963,7 +989,7 @@ credentials:
         let result = GatewayConfig::from_file("nonexistent.yaml");
         assert!(result.is_err());
         assert!(result
-            .unwrap_err()
+            .expect_err("expected error should be present")
             .to_string()
             .contains("Failed to read configuration file"));
     }
@@ -1036,15 +1062,24 @@ providers:
         assert_eq!(config.routing.fallback_depth, 3);
 
         // Providers section
-        let openai_provider = config.providers.get("openai").unwrap();
+        let openai_provider = config
+            .providers
+            .get("openai")
+            .expect("value must be present");
         assert!(openai_provider.enabled);
         assert_eq!(openai_provider.timeout_secs, Some(120));
         assert_eq!(
-            openai_provider.headers.get("X-Custom-Header").unwrap(),
+            openai_provider
+                .headers
+                .get("X-Custom-Header")
+                .expect("value must be present"),
             "custom-value"
         );
 
-        let google_provider = config.providers.get("google").unwrap();
+        let google_provider = config
+            .providers
+            .get("google")
+            .expect("value must be present");
         assert!(google_provider.enabled);
         assert_eq!(
             google_provider.base_url.as_deref(),
@@ -1121,23 +1156,38 @@ providers:
 
         assert_eq!(config.providers.len(), 3);
 
-        let openai = config.providers.get("openai").unwrap();
+        let openai = config
+            .providers
+            .get("openai")
+            .expect("value must be present");
         assert!(openai.enabled);
         assert_eq!(
             openai.base_url.as_deref(),
             Some("https://api.openai.com/v1")
         );
 
-        let google = config.providers.get("google").unwrap();
+        let google = config
+            .providers
+            .get("google")
+            .expect("value must be present");
         assert!(!google.enabled);
 
-        let custom = config.providers.get("custom-llm").unwrap();
+        let custom = config
+            .providers
+            .get("custom-llm")
+            .expect("value must be present");
         assert!(custom.enabled);
         assert_eq!(
             custom.base_url.as_deref(),
             Some("https://custom-llm.example.com")
         );
-        assert_eq!(custom.headers.get("X-API-Version").unwrap(), "2024-01");
+        assert_eq!(
+            custom
+                .headers
+                .get("X-API-Version")
+                .expect("value must be present"),
+            "2024-01"
+        );
     }
 
     #[test]
@@ -1150,7 +1200,10 @@ credentials:
 "#;
         let result = GatewayConfig::from_yaml(yaml);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("empty API key"));
+        assert!(result
+            .expect_err("expected error should be present")
+            .to_string()
+            .contains("empty API key"));
     }
 
     #[test]
@@ -1163,7 +1216,10 @@ credentials:
 "#;
         let result = GatewayConfig::from_yaml(yaml);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("empty provider"));
+        assert!(result
+            .expect_err("expected error should be present")
+            .to_string()
+            .contains("empty provider"));
     }
 
     // --- Trust Proxy Headers Tests ---
@@ -1180,7 +1236,7 @@ credentials:
 server:
   trust_proxy_headers: true
 "#;
-        let config = GatewayConfig::from_yaml(yaml).unwrap();
+        let config = GatewayConfig::from_yaml(yaml).expect("value must be present");
         assert!(config.server.trust_proxy_headers);
     }
 
@@ -1202,7 +1258,7 @@ providers:
   openai:
     enabled: false
 "#;
-        let config = GatewayConfig::from_yaml(yaml).unwrap();
+        let config = GatewayConfig::from_yaml(yaml).expect("value must be present");
         assert!(!config.is_provider_enabled("openai"));
         // Other providers still default to enabled
         assert!(config.is_provider_enabled("google"));
@@ -1215,7 +1271,7 @@ providers:
   google:
     enabled: true
 "#;
-        let config = GatewayConfig::from_yaml(yaml).unwrap();
+        let config = GatewayConfig::from_yaml(yaml).expect("value must be present");
         assert!(config.is_provider_enabled("google"));
     }
 }

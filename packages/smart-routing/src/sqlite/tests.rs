@@ -21,11 +21,11 @@ mod sqlite_tests {
             let store = SQLiteStore::new(config).await;
             assert!(store.is_ok(), "Failed to create SQLite store");
 
-            let store = store.unwrap();
+            let store = store.expect("value must be present");
             // Test that we can query the database
             let stats = store.get_history_stats().await;
             assert!(stats.is_ok(), "Failed to get history stats");
-            let (count, _) = stats.unwrap();
+            let (count, _) = stats.expect("value must be present");
             assert_eq!(count, 0, "History should be empty initially");
         }
 
@@ -36,7 +36,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.unwrap();
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("value must be present");
 
             // Write metrics
             let metrics = AuthMetrics {
@@ -61,9 +63,9 @@ mod sqlite_tests {
             // Load metrics
             let loaded = store.load_metrics("test-auth").await;
             assert!(loaded.is_ok(), "Failed to load metrics");
-            let loaded = loaded.unwrap();
+            let loaded = loaded.expect("value must be present");
             assert!(loaded.is_some(), "No metrics found");
-            let loaded = loaded.unwrap();
+            let loaded = loaded.expect("value must be present");
 
             assert_eq!(loaded.total_requests, 100);
             assert_eq!(loaded.success_count, 95);
@@ -79,7 +81,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.unwrap();
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("value must be present");
 
             // Write health
             let health = AuthHealth {
@@ -98,9 +102,9 @@ mod sqlite_tests {
             // Load health
             let loaded = store.load_health("test-auth").await;
             assert!(loaded.is_ok(), "Failed to load health");
-            let loaded = loaded.unwrap();
+            let loaded = loaded.expect("value must be present");
             assert!(loaded.is_some(), "No health found");
-            let loaded = loaded.unwrap();
+            let loaded = loaded.expect("value must be present");
 
             assert_eq!(loaded.status, HealthStatus::Healthy);
             assert_eq!(loaded.consecutive_successes, 5);
@@ -114,7 +118,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.unwrap();
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("value must be present");
 
             // Write status history entries
             let result = store
@@ -130,7 +136,7 @@ mod sqlite_tests {
             // Check stats
             let stats = store.get_history_stats().await;
             assert!(stats.is_ok(), "Failed to get history stats");
-            let (count, _) = stats.unwrap();
+            let (count, _) = stats.expect("value must be present");
             assert_eq!(count, 2, "Should have 2 history entries");
         }
 
@@ -141,7 +147,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.unwrap();
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("value must be present");
 
             // Write some history entries
             for i in 0..5 {
@@ -152,11 +160,17 @@ mod sqlite_tests {
             }
 
             // Verify entries exist
-            let stats = store.get_history_stats().await.unwrap();
+            let stats = store
+                .get_history_stats()
+                .await
+                .expect("value must be present");
             assert_eq!(stats.0, 5, "Should have 5 history entries");
 
             // Cleanup old history (with a very short max age)
-            let deleted = store.cleanup_old_history(0).await.unwrap();
+            let deleted = store
+                .cleanup_old_history(0)
+                .await
+                .expect("value must be present");
             // The cleanup might not delete everything if timestamps are very recent
             assert!(deleted >= 0, "Cleanup should return non-negative count");
         }
@@ -168,7 +182,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.unwrap();
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("value must be present");
 
             // Write metrics for multiple auths
             for i in 1..=3 {
@@ -191,15 +207,18 @@ mod sqlite_tests {
                 store
                     .write_metrics(&format!("auth-{}", i), &metrics)
                     .await
-                    .unwrap();
+                    .expect("value must be present");
             }
 
             // Load all metrics
-            let all_metrics = store.load_all_metrics().await.unwrap();
+            let all_metrics = store
+                .load_all_metrics()
+                .await
+                .expect("value must be present");
             assert_eq!(all_metrics.len(), 3, "Should have 3 auth metrics");
 
             // Verify one entry
-            let metrics = all_metrics.get("auth-2").unwrap();
+            let metrics = all_metrics.get("auth-2").expect("value must be present");
             assert_eq!(metrics.total_requests, 20);
             assert_eq!(metrics.success_count, 18);
         }
@@ -215,7 +234,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.unwrap();
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("value must be present");
             let collector = SQLiteMetricsCollector::new(store);
 
             // Initialize auth
@@ -235,7 +256,7 @@ mod sqlite_tests {
             // Get metrics
             let metrics = collector.get_metrics("test-auth").await;
             assert!(metrics.is_some(), "Should have metrics");
-            let metrics = metrics.unwrap();
+            let metrics = metrics.expect("value must be present");
 
             assert_eq!(metrics.total_requests, 3);
             assert_eq!(metrics.success_count, 2);
@@ -249,7 +270,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.unwrap();
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("value must be present");
             let manager = SQLiteHealthManager::new(store);
 
             // Record successes
@@ -290,7 +313,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.unwrap();
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("value must be present");
 
             let routing_config = SmartRoutingConfig::default();
             let selector = SQLiteSelector::new(store, routing_config);
@@ -316,7 +341,7 @@ mod sqlite_tests {
             let selected = selector.pick(auths).await;
             assert!(selected.is_some(), "Should select an auth when available");
 
-            let selected_id = selected.unwrap();
+            let selected_id = selected.expect("value must be present");
             assert!(
                 selected_id == "auth1" || selected_id == "auth2",
                 "Should select one of the provided auths"
@@ -333,7 +358,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.unwrap();
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("value must be present");
             let routing_config = SmartRoutingConfig::default();
             let selector = SQLiteSelector::new(store, routing_config);
 
@@ -357,7 +384,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.unwrap();
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("value must be present");
             let routing_config = SmartRoutingConfig::default();
             let selector = SQLiteSelector::new(store, routing_config);
 
@@ -396,7 +425,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.unwrap();
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("value must be present");
 
             // Create selector with smart routing disabled
             let routing_config = SmartRoutingConfig {
@@ -427,7 +458,7 @@ mod sqlite_tests {
             let selected = selector.pick(auths).await;
             assert!(selected.is_some());
 
-            let selected_id = selected.unwrap();
+            let selected_id = selected.expect("value must be present");
             assert_eq!(
                 selected_id, "auth2",
                 "With routing disabled, should return the first auth"
@@ -451,7 +482,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.unwrap();
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("value must be present");
 
             // Setup metrics for auth1 (good performance)
             let metrics1 = AuthMetrics {
@@ -470,7 +503,10 @@ mod sqlite_tests {
                 last_failure_time: None,
             };
 
-            store.write_metrics("auth1", &metrics1).await.unwrap();
+            store
+                .write_metrics("auth1", &metrics1)
+                .await
+                .expect("value must be present");
 
             // Setup metrics for auth2 (poor performance)
             let metrics2 = AuthMetrics {
@@ -489,7 +525,10 @@ mod sqlite_tests {
                 last_failure_time: Some(Utc::now()),
             };
 
-            store.write_metrics("auth2", &metrics2).await.unwrap();
+            store
+                .write_metrics("auth2", &metrics2)
+                .await
+                .expect("value must be present");
 
             let routing_config = SmartRoutingConfig::default();
             let selector = SQLiteSelector::new(store, routing_config);
@@ -521,7 +560,7 @@ mod sqlite_tests {
                 let selected = selector.pick(auths_clone).await;
                 assert!(selected.is_some());
 
-                let selected_id = selected.unwrap();
+                let selected_id = selected.expect("value must be present");
                 match selected_id.as_str() {
                     "auth1" => auth1_count += 1,
                     "auth2" => auth2_count += 1,
@@ -557,7 +596,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.unwrap();
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("value must be present");
             let routing_config = SmartRoutingConfig::default();
             let selector = std::sync::Arc::new(SQLiteSelector::new(store, routing_config));
 
@@ -606,7 +647,7 @@ mod sqlite_tests {
             // Wait for all tasks to complete
             let mut results: Vec<Option<String>> = Vec::new();
             while let Some(result) = join_set.join_next().await {
-                results.push(result.unwrap());
+                results.push(result.expect("value must be present"));
             }
 
             assert_eq!(results.len(), 10, "All concurrent tasks should complete");
@@ -618,7 +659,7 @@ mod sqlite_tests {
                     "Task {} should have a valid selection",
                     i
                 );
-                let id = selected.as_ref().unwrap();
+                let id = selected.as_ref().expect("value must be present");
                 assert!(
                     id == "auth1" || id == "auth2" || id == "auth3",
                     "Task {} should select a valid auth ID",
@@ -637,7 +678,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.unwrap();
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("value must be present");
             let routing_config = SmartRoutingConfig::default();
             let selector = SQLiteSelector::new(store, routing_config);
 
@@ -685,7 +728,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.unwrap();
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("value must be present");
 
             // Setup good metrics for auth1
             let metrics1 = AuthMetrics {
@@ -704,7 +749,10 @@ mod sqlite_tests {
                 last_failure_time: None,
             };
 
-            store.write_metrics("auth1", &metrics1).await.unwrap();
+            store
+                .write_metrics("auth1", &metrics1)
+                .await
+                .expect("value must be present");
 
             // Setup good metrics for auth2
             let metrics2 = AuthMetrics {
@@ -723,7 +771,10 @@ mod sqlite_tests {
                 last_failure_time: None,
             };
 
-            store.write_metrics("auth2", &metrics2).await.unwrap();
+            store
+                .write_metrics("auth2", &metrics2)
+                .await
+                .expect("value must be present");
 
             let routing_config = SmartRoutingConfig::default();
             let selector = SQLiteSelector::new(store, routing_config);
@@ -755,7 +806,7 @@ mod sqlite_tests {
                 let selected = selector.pick(auths_clone).await;
                 assert!(selected.is_some());
 
-                let selected_id = selected.unwrap();
+                let selected_id = selected.expect("value must be present");
                 match selected_id.as_str() {
                     "auth1" => auth1_count += 1,
                     "auth2" => auth2_count += 1,
@@ -783,7 +834,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.unwrap();
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("value must be present");
 
             // Use a config where priority has a much higher weight
             let routing_config = SmartRoutingConfig {
@@ -829,7 +882,7 @@ mod sqlite_tests {
                 let selected = selector.pick(auths_clone).await;
                 assert!(selected.is_some());
 
-                let selected_id = selected.unwrap();
+                let selected_id = selected.expect("value must be present");
                 match selected_id.as_str() {
                     "auth1" => auth1_count += 1,
                     "auth2" => auth2_count += 1,
@@ -858,7 +911,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.unwrap();
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("value must be present");
             let routing_config = SmartRoutingConfig::default();
             let selector = SQLiteSelector::new(store, routing_config);
 

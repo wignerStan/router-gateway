@@ -444,7 +444,7 @@ mod tests {
     fn test_time_bucket_from_timestamp() {
         // Monday at 10 AM (peak, weekday)
         let timestamp = DateTime::parse_from_rfc3339("2024-01-08T10:00:00Z")
-            .unwrap()
+            .expect("value must be present")
             .with_timezone(&Utc);
 
         let buckets = TimeBucket::from_timestamp(timestamp);
@@ -458,7 +458,7 @@ mod tests {
     fn test_time_bucket_weekend() {
         // Saturday at 10 AM (peak, weekend)
         let timestamp = DateTime::parse_from_rfc3339("2024-01-06T10:00:00Z")
-            .unwrap()
+            .expect("value must be present")
             .with_timezone(&Utc);
 
         let buckets = TimeBucket::from_timestamp(timestamp);
@@ -471,7 +471,7 @@ mod tests {
     fn test_time_bucket_off_peak() {
         // Monday at 2 AM (off-peak, weekday)
         let timestamp = DateTime::parse_from_rfc3339("2024-01-08T02:00:00Z")
-            .unwrap()
+            .expect("value must be present")
             .with_timezone(&Utc);
 
         let buckets = TimeBucket::from_timestamp(timestamp);
@@ -502,7 +502,7 @@ mod tests {
         let mut stats = RouteStatistics::new("route-1".to_string());
 
         let timestamp = DateTime::parse_from_rfc3339("2024-01-08T10:00:00Z")
-            .unwrap()
+            .expect("value must be present")
             .with_timezone(&Utc);
 
         let mut outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
@@ -567,7 +567,7 @@ mod tests {
         assert_eq!(
             aggregator
                 .get_stats("route-1")
-                .unwrap()
+                .expect("value must be present")
                 .overall
                 .total_requests,
             1
@@ -677,7 +677,7 @@ mod tests {
     fn test_compound_buckets_isolate_weekday_peak() {
         // Monday 10:00 UTC -> weekday + peak
         let ts = DateTime::parse_from_rfc3339("2026-03-09T10:00:00Z")
-            .unwrap()
+            .expect("value must be present")
             .with_timezone(&Utc);
         let buckets = TimeBucket::from_timestamp(ts);
         assert!(
@@ -693,7 +693,7 @@ mod tests {
     fn test_compound_buckets_isolate_weekday_offpeak() {
         // Tuesday 03:00 UTC -> weekday + off-peak
         let ts = DateTime::parse_from_rfc3339("2026-03-10T03:00:00Z")
-            .unwrap()
+            .expect("value must be present")
             .with_timezone(&Utc);
         let buckets = TimeBucket::from_timestamp(ts);
         assert!(
@@ -709,7 +709,7 @@ mod tests {
     fn test_compound_buckets_isolate_weekend_peak() {
         // Saturday 14:00 UTC -> weekend + peak
         let ts = DateTime::parse_from_rfc3339("2026-03-14T14:00:00Z")
-            .unwrap()
+            .expect("value must be present")
             .with_timezone(&Utc);
         let buckets = TimeBucket::from_timestamp(ts);
         assert!(
@@ -725,7 +725,7 @@ mod tests {
     fn test_compound_buckets_isolate_weekend_offpeak() {
         // Sunday 02:00 UTC -> weekend + off-peak
         let ts = DateTime::parse_from_rfc3339("2026-03-15T02:00:00Z")
-            .unwrap()
+            .expect("value must be present")
             .with_timezone(&Utc);
         let buckets = TimeBucket::from_timestamp(ts);
         assert!(
@@ -741,7 +741,7 @@ mod tests {
     fn test_weekday_peak_boundary_hours() {
         // Monday 08:59 -> weekday off-peak (just before peak)
         let ts = DateTime::parse_from_rfc3339("2026-03-09T08:59:00Z")
-            .unwrap()
+            .expect("value must be present")
             .with_timezone(&Utc);
         let buckets = TimeBucket::from_timestamp(ts);
         assert!(buckets.contains(&TimeBucket::WeekdayOffPeak));
@@ -749,7 +749,7 @@ mod tests {
 
         // Monday 09:00 -> weekday peak (peak starts)
         let ts = DateTime::parse_from_rfc3339("2026-03-09T09:00:00Z")
-            .unwrap()
+            .expect("value must be present")
             .with_timezone(&Utc);
         let buckets = TimeBucket::from_timestamp(ts);
         assert!(buckets.contains(&TimeBucket::WeekdayPeak));
@@ -757,14 +757,14 @@ mod tests {
 
         // Monday 20:59 -> weekday peak (just before off-peak)
         let ts = DateTime::parse_from_rfc3339("2026-03-09T20:59:00Z")
-            .unwrap()
+            .expect("value must be present")
             .with_timezone(&Utc);
         let buckets = TimeBucket::from_timestamp(ts);
         assert!(buckets.contains(&TimeBucket::WeekdayPeak));
 
         // Monday 21:00 -> weekday off-peak (off-peak starts)
         let ts = DateTime::parse_from_rfc3339("2026-03-09T21:00:00Z")
-            .unwrap()
+            .expect("value must be present")
             .with_timezone(&Utc);
         let buckets = TimeBucket::from_timestamp(ts);
         assert!(buckets.contains(&TimeBucket::WeekdayOffPeak));
@@ -777,7 +777,7 @@ mod tests {
         // Record a weekday peak event (Monday 10am)
         let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 200, 300, 200);
         let ts = DateTime::parse_from_rfc3339("2026-03-09T10:00:00Z")
-            .unwrap()
+            .expect("value must be present")
             .with_timezone(&Utc);
         let mut outcome_wp = outcome.clone();
         outcome_wp.timestamp = ts;
@@ -786,7 +786,7 @@ mod tests {
         // Record a weekend off-peak event (Sunday 2am)
         let mut outcome_wo = outcome.clone();
         outcome_wo.timestamp = DateTime::parse_from_rfc3339("2026-03-15T02:00:00Z")
-            .unwrap()
+            .expect("value must be present")
             .with_timezone(&Utc);
         stats.update(&outcome_wo);
 
@@ -794,7 +794,7 @@ mod tests {
         assert_eq!(
             stats
                 .get_bucket_stats(&TimeBucket::WeekdayPeak)
-                .unwrap()
+                .expect("value must be present")
                 .total_requests,
             1,
             "WeekdayPeak should have exactly 1 request"
@@ -802,7 +802,7 @@ mod tests {
         assert_eq!(
             stats
                 .get_bucket_stats(&TimeBucket::WeekendOffPeak)
-                .unwrap()
+                .expect("value must be present")
                 .total_requests,
             1,
             "WeekendOffPeak should have exactly 1 request"
@@ -827,7 +827,7 @@ mod tests {
         assert_eq!(
             stats
                 .get_bucket_stats(&TimeBucket::Weekday)
-                .unwrap()
+                .expect("value must be present")
                 .total_requests,
             1,
             "Weekday should aggregate all weekday requests"
@@ -835,7 +835,7 @@ mod tests {
         assert_eq!(
             stats
                 .get_bucket_stats(&TimeBucket::Weekend)
-                .unwrap()
+                .expect("value must be present")
                 .total_requests,
             1,
             "Weekend should aggregate all weekend requests"
@@ -843,7 +843,7 @@ mod tests {
         assert_eq!(
             stats
                 .get_bucket_stats(&TimeBucket::Peak)
-                .unwrap()
+                .expect("value must be present")
                 .total_requests,
             1,
             "Peak should aggregate all peak requests"

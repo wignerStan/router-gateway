@@ -142,7 +142,7 @@ mod tests {
         assert!(span.end_time.is_some());
         assert_eq!(span.status_code, Some(200));
         assert!(span.latency_ms.is_some());
-        assert!(span.latency_ms.unwrap() >= 9);
+        assert!(span.latency_ms.expect("value must be present") >= 9);
         assert!(span.is_success());
     }
 
@@ -209,7 +209,10 @@ mod tests {
         span.complete(500);
         // Should update status but end_time and latency should reflect second call
         assert_eq!(span.status_code, Some(500));
-        assert!(span.latency_ms.unwrap() >= first_latency.unwrap());
+        assert!(
+            span.latency_ms.expect("value must be present")
+                >= first_latency.expect("value must be present")
+        );
     }
 
     #[test]

@@ -323,7 +323,7 @@ mod tests {
 
         let result = info.validate();
         assert!(result.is_err());
-        let err = result.unwrap_err();
+        let err = result.expect_err("expected error should be present");
         assert!(matches!(err, ModelInfoError::InvalidContextWindow(_, 0)));
     }
 
@@ -352,7 +352,7 @@ mod tests {
 
         let result = info.validate();
         assert!(result.is_err());
-        let err = result.unwrap_err();
+        let err = result.expect_err("expected error should be present");
         // Check it's the right error type with the correct price
         if let ModelInfoError::InvalidInputPrice(model, price) = err {
             assert_eq!(model, "test-model");
@@ -387,7 +387,7 @@ mod tests {
 
         let result = info.validate();
         assert!(result.is_err());
-        let err = result.unwrap_err();
+        let err = result.expect_err("expected error should be present");
         // Check it's the right error type with the correct price
         if let ModelInfoError::InvalidOutputPrice(model, price) = err {
             assert_eq!(model, "test-model");

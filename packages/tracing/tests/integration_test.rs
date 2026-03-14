@@ -68,10 +68,10 @@ async fn test_end_to_end_http_request_tracing() {
                 .header("x-llm-provider", "test-provider")
                 .header("x-llm-model", "test-model")
                 .body(Body::empty())
-                .unwrap(),
+                .expect("value must be present"),
         )
         .await
-        .unwrap();
+        .expect("value must be present");
 
     // Verify response
     assert_eq!(response.status(), StatusCode::OK);
@@ -110,10 +110,10 @@ async fn test_end_to_end_failed_request() {
                 .uri("/error")
                 .header("x-request-id", "error-req")
                 .body(Body::empty())
-                .unwrap(),
+                .expect("value must be present"),
         )
         .await
-        .unwrap();
+        .expect("value must be present");
 
     assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 
@@ -242,7 +242,10 @@ async fn test_error_trace_to_metrics() {
     assert_eq!(metrics.successful_requests, 0);
 
     // Provider metrics should also reflect the error
-    let provider = metrics.provider_metrics.get("openai").unwrap();
+    let provider = metrics
+        .provider_metrics
+        .get("openai")
+        .expect("value must be present");
     assert_eq!(provider.successful_requests, 0);
     assert_eq!(provider.total_requests, 1);
 }
@@ -328,15 +331,24 @@ async fn test_collector_to_metrics_integration() {
     // Verify provider breakdown
     assert_eq!(metrics.provider_metrics.len(), 3);
 
-    let openai = metrics.provider_metrics.get("openai").unwrap();
+    let openai = metrics
+        .provider_metrics
+        .get("openai")
+        .expect("value must be present");
     assert_eq!(openai.total_requests, 3);
     assert_eq!(openai.successful_requests, 3);
 
-    let anthropic = metrics.provider_metrics.get("anthropic").unwrap();
+    let anthropic = metrics
+        .provider_metrics
+        .get("anthropic")
+        .expect("value must be present");
     assert_eq!(anthropic.total_requests, 2);
     assert_eq!(anthropic.successful_requests, 1);
 
-    let google = metrics.provider_metrics.get("google").unwrap();
+    let google = metrics
+        .provider_metrics
+        .get("google")
+        .expect("value must be present");
     assert_eq!(google.total_requests, 1);
     assert_eq!(google.successful_requests, 0);
 
@@ -370,10 +382,10 @@ async fn test_middleware_builder_integration() {
                 .method("GET")
                 .uri("/test")
                 .body(Body::empty())
-                .unwrap(),
+                .expect("value must be present"),
         )
         .await
-        .unwrap();
+        .expect("value must be present");
 
     // Verify collector received the trace
     assert_eq!(collector.trace_count().await, 1);

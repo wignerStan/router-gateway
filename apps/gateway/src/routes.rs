@@ -428,7 +428,7 @@ pub(crate) async fn chat_completions(
         "object": "chat.completion",
         "created": std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("system clock should be later than UNIX epoch")
             .as_secs(),
         "model": model_id,
         "choices": [{
@@ -549,10 +549,10 @@ mod integration_tests {
                 Request::builder()
                     .uri("/api/models")
                     .body(Body::empty())
-                    .unwrap(),
+                    .expect("value must be present"),
             )
             .await
-            .unwrap();
+            .expect("value must be present");
 
         assert_eq!(response.status(), StatusCode::OK);
         let list: serde_json::Value = read_json_body(response).await;
@@ -572,10 +572,10 @@ mod integration_tests {
                 Request::builder()
                     .uri("/health")
                     .body(Body::empty())
-                    .unwrap(),
+                    .expect("value must be present"),
             )
             .await
-            .unwrap();
+            .expect("value must be present");
 
         assert_eq!(response.status(), StatusCode::OK);
 
@@ -590,9 +590,14 @@ mod integration_tests {
         let app = Router::new().route("/", get(root));
 
         let response = app
-            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .body(Body::empty())
+                    .expect("value must be present"),
+            )
             .await
-            .unwrap();
+            .expect("value must be present");
 
         assert_eq!(response.status(), StatusCode::OK);
     }
@@ -609,10 +614,10 @@ mod integration_tests {
                 Request::builder()
                     .uri("/api/models")
                     .body(Body::empty())
-                    .unwrap(),
+                    .expect("value must be present"),
             )
             .await
-            .unwrap();
+            .expect("value must be present");
 
         assert_eq!(response.status(), StatusCode::OK);
     }
@@ -668,10 +673,10 @@ mod integration_tests {
                 Request::builder()
                     .uri("/api/route")
                     .body(Body::empty())
-                    .unwrap(),
+                    .expect("value must be present"),
             )
             .await
-            .unwrap();
+            .expect("value must be present");
 
         assert_eq!(response.status(), StatusCode::OK);
     }
@@ -689,21 +694,35 @@ mod integration_tests {
                 Request::builder()
                     .uri("/health")
                     .body(Body::empty())
-                    .unwrap(),
+                    .expect("value must be present"),
             )
             .await
-            .unwrap();
+            .expect("value must be present");
 
         let headers = response.headers();
 
-        assert_eq!(headers.get("X-Content-Type-Options").unwrap(), "nosniff");
-        assert_eq!(headers.get("X-Frame-Options").unwrap(), "DENY");
         assert_eq!(
-            headers.get("Referrer-Policy").unwrap(),
+            headers
+                .get("X-Content-Type-Options")
+                .expect("value must be present"),
+            "nosniff"
+        );
+        assert_eq!(
+            headers
+                .get("X-Frame-Options")
+                .expect("value must be present"),
+            "DENY"
+        );
+        assert_eq!(
+            headers
+                .get("Referrer-Policy")
+                .expect("value must be present"),
             "strict-origin-when-cross-origin"
         );
         assert_eq!(
-            headers.get("Content-Security-Policy").unwrap(),
+            headers
+                .get("Content-Security-Policy")
+                .expect("value must be present"),
             "default-src 'none'; frame-ancestors 'none'"
         );
     }
@@ -727,11 +746,15 @@ mod integration_tests {
             let mut request = Request::builder()
                 .uri("/health")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
-            let response = app.clone().oneshot(request).await.unwrap();
+            let response = app
+                .clone()
+                .oneshot(request)
+                .await
+                .expect("value must be present");
             assert_eq!(response.status(), StatusCode::OK);
         }
 
@@ -739,11 +762,11 @@ mod integration_tests {
         let mut request = Request::builder()
             .uri("/health")
             .body(Body::empty())
-            .unwrap();
+            .expect("value must be present");
         request
             .extensions_mut()
             .insert(axum::extract::ConnectInfo(test_addr));
-        let response = app.oneshot(request).await.unwrap();
+        let response = app.oneshot(request).await.expect("value must be present");
 
         assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
     }
@@ -830,12 +853,15 @@ mod integration_tests {
             let app = build_full_app(state);
             let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-            let mut request = Request::builder().uri("/").body(Body::empty()).unwrap();
+            let mut request = Request::builder()
+                .uri("/")
+                .body(Body::empty())
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
 
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::OK);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -858,12 +884,12 @@ mod integration_tests {
             let mut request = Request::builder()
                 .uri("/health")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
 
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::OK);
 
             let health: HealthStatus = read_json_body(response).await;
@@ -901,12 +927,12 @@ mod integration_tests {
             let mut request = Request::builder()
                 .uri("/health")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
 
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
             let health: HealthStatus = read_json_body(response).await;
 
             assert_eq!(health.credential_count, 2);
@@ -944,12 +970,12 @@ mod integration_tests {
             let mut request = Request::builder()
                 .uri("/health")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
 
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
             let health: HealthStatus = read_json_body(response).await;
 
             assert_eq!(health.credential_count, 3);
@@ -964,21 +990,28 @@ mod integration_tests {
             let app = build_full_app(state);
             let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-            let mut request = Request::builder().uri("/").body(Body::empty()).unwrap();
+            let mut request = Request::builder()
+                .uri("/")
+                .body(Body::empty())
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
-            let response = app.clone().oneshot(request).await.unwrap();
+            let response = app
+                .clone()
+                .oneshot(request)
+                .await
+                .expect("value must be present");
             assert_eq!(response.status(), StatusCode::OK);
 
             let mut request = Request::builder()
                 .uri("/health")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::OK);
         }
     }
@@ -999,12 +1032,12 @@ mod integration_tests {
                 .uri("/api/models")
                 .header("authorization", "Bearer test-token")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
 
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::OK);
         }
 
@@ -1018,12 +1051,12 @@ mod integration_tests {
                 .uri("/api/models")
                 .header("authorization", "Bearer wrong-token")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
 
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -1043,18 +1076,18 @@ mod integration_tests {
             let mut request = Request::builder()
                 .uri("/api/models")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
 
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
             let value = read_json_body::<serde_json::Value>(response).await;
             assert!(value["error"]["message"]
                 .as_str()
-                .unwrap()
+                .expect("value must be present")
                 .contains("Missing Authorization header"));
         }
 
@@ -1068,18 +1101,18 @@ mod integration_tests {
                 .uri("/api/models")
                 .header("authorization", "Basic dXNlcjpwYXNz")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
 
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
             let value = read_json_body::<serde_json::Value>(response).await;
             assert!(value["error"]["message"]
                 .as_str()
-                .unwrap()
+                .expect("value must be present")
                 .contains("Invalid or expired API token"));
         }
 
@@ -1096,12 +1129,12 @@ mod integration_tests {
                 .uri("/api/models")
                 .header("authorization", "Bearer any-token")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
 
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -1121,12 +1154,12 @@ mod integration_tests {
                 .uri("/api/models")
                 .header("authorization", "Bearer second-token")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
 
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::OK);
         }
     }
@@ -1142,11 +1175,15 @@ mod integration_tests {
                 let mut request = Request::builder()
                     .uri("/health")
                     .body(Body::empty())
-                    .unwrap();
+                    .expect("value must be present");
                 request
                     .extensions_mut()
                     .insert(axum::extract::ConnectInfo(test_addr));
-                let response = app.clone().oneshot(request).await.unwrap();
+                let response = app
+                    .clone()
+                    .oneshot(request)
+                    .await
+                    .expect("value must be present");
                 assert_eq!(response.status(), StatusCode::OK);
             }
         }
@@ -1177,11 +1214,11 @@ mod integration_tests {
             let mut request = Request::builder()
                 .uri("/health")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -1201,31 +1238,39 @@ mod integration_tests {
             let mut request = Request::builder()
                 .uri("/health")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(addr_a));
-            let response = app.clone().oneshot(request).await.unwrap();
+            let response = app
+                .clone()
+                .oneshot(request)
+                .await
+                .expect("value must be present");
             assert_eq!(response.status(), StatusCode::OK);
 
             let mut request = Request::builder()
                 .uri("/health")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(addr_a));
-            let response = app.clone().oneshot(request).await.unwrap();
+            let response = app
+                .clone()
+                .oneshot(request)
+                .await
+                .expect("value must be present");
             assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 
             let mut request = Request::builder()
                 .uri("/health")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(addr_b));
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::OK);
         }
 
@@ -1243,11 +1288,11 @@ mod integration_tests {
             let mut request = Request::builder()
                 .uri("/health")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -1255,7 +1300,7 @@ mod integration_tests {
             assert_eq!(value["error"]["type"], ERR_RATE_LIMIT);
             assert!(value["error"]["message"]
                 .as_str()
-                .unwrap()
+                .expect("value must be present")
                 .contains("Too many requests"));
         }
 
@@ -1273,18 +1318,25 @@ mod integration_tests {
             let mut request = Request::builder()
                 .uri("/health")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
-            let response = app.clone().oneshot(request).await.unwrap();
+            let response = app
+                .clone()
+                .oneshot(request)
+                .await
+                .expect("value must be present");
             assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 
-            let mut request = Request::builder().uri("/").body(Body::empty()).unwrap();
+            let mut request = Request::builder()
+                .uri("/")
+                .body(Body::empty())
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
         }
     }
@@ -1305,12 +1357,12 @@ mod integration_tests {
             let mut request = Request::builder()
                 .uri("/api/models")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
 
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         }
 
@@ -1323,12 +1375,12 @@ mod integration_tests {
             let mut request = Request::builder()
                 .uri("/api/route")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
 
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         }
 
@@ -1343,19 +1395,19 @@ mod integration_tests {
                     "model": "gpt-4",
                     "messages": [{"role": "user", "content": "hello"}]
                 }))
-                .unwrap(),
+                .expect("value must be present"),
             );
             let mut request = Request::builder()
                 .method("POST")
                 .uri("/v1/chat/completions")
                 .header("content-type", "application/json")
                 .body(body)
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
 
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         }
 
@@ -1377,18 +1429,21 @@ mod integration_tests {
                 .uri("/api/models")
                 .header("authorization", "Bearer test-token")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
 
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::OK);
 
             let value = read_json_body::<serde_json::Value>(response).await;
 
             assert!(value["models"].is_array());
-            assert!(!value["models"].as_array().unwrap().is_empty());
+            assert!(!value["models"]
+                .as_array()
+                .expect("value must be present")
+                .is_empty());
             assert_eq!(value["count"], 1);
         }
     }
@@ -1406,7 +1461,7 @@ mod integration_tests {
                     "model": "gpt-4",
                     "messages": [{"role": "user", "content": "Hello"}]
                 }))
-                .unwrap(),
+                .expect("value must be present"),
             )
         }
 
@@ -1417,7 +1472,7 @@ mod integration_tests {
                 .header("content-type", "application/json")
                 .header("authorization", "Bearer test-token")
                 .body(chat_request_body())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(addr));
@@ -1444,14 +1499,17 @@ mod integration_tests {
             let app = build_full_app(state);
             let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-            let response = app.oneshot(make_chat_request(test_addr)).await.unwrap();
+            let response = app
+                .oneshot(make_chat_request(test_addr))
+                .await
+                .expect("value must be present");
             assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
             let value = read_json_body::<serde_json::Value>(response).await;
             assert_eq!(value["error"]["type"], ERR_NO_ROUTE);
             assert!(value["error"]["message"]
                 .as_str()
-                .unwrap()
+                .expect("value must be present")
                 .contains("No suitable routes"));
         }
 
@@ -1464,7 +1522,10 @@ mod integration_tests {
             let app = build_full_app(state);
             let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-            let response = app.oneshot(make_chat_request(test_addr)).await.unwrap();
+            let response = app
+                .oneshot(make_chat_request(test_addr))
+                .await
+                .expect("value must be present");
             assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -1488,7 +1549,10 @@ mod integration_tests {
             let app = build_full_app(state);
             let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-            let response = app.oneshot(make_chat_request(test_addr)).await.unwrap();
+            let response = app
+                .oneshot(make_chat_request(test_addr))
+                .await
+                .expect("value must be present");
             assert_eq!(response.status(), StatusCode::OK);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -1524,7 +1588,10 @@ mod integration_tests {
             let app = build_full_app(state);
             let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-            let response = app.oneshot(make_chat_request(test_addr)).await.unwrap();
+            let response = app
+                .oneshot(make_chat_request(test_addr))
+                .await
+                .expect("value must be present");
             assert_eq!(response.status(), StatusCode::OK);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -1545,14 +1612,28 @@ mod integration_tests {
         use tower::ServiceExt;
 
         fn check_security_headers(headers: &axum::http::HeaderMap) {
-            assert_eq!(headers.get("X-Content-Type-Options").unwrap(), "nosniff");
-            assert_eq!(headers.get("X-Frame-Options").unwrap(), "DENY");
             assert_eq!(
-                headers.get("Referrer-Policy").unwrap(),
+                headers
+                    .get("X-Content-Type-Options")
+                    .expect("value must be present"),
+                "nosniff"
+            );
+            assert_eq!(
+                headers
+                    .get("X-Frame-Options")
+                    .expect("value must be present"),
+                "DENY"
+            );
+            assert_eq!(
+                headers
+                    .get("Referrer-Policy")
+                    .expect("value must be present"),
                 "strict-origin-when-cross-origin"
             );
             assert_eq!(
-                headers.get("Content-Security-Policy").unwrap(),
+                headers
+                    .get("Content-Security-Policy")
+                    .expect("value must be present"),
                 "default-src 'none'; frame-ancestors 'none'"
             );
         }
@@ -1566,22 +1647,26 @@ mod integration_tests {
             let mut request = Request::builder()
                 .uri("/health")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
-            let response = app.clone().oneshot(request).await.unwrap();
+            let response = app
+                .clone()
+                .oneshot(request)
+                .await
+                .expect("value must be present");
             check_security_headers(response.headers());
 
             let mut request = Request::builder()
                 .uri("/api/models")
                 .header("authorization", "Bearer test-token")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
             check_security_headers(response.headers());
         }
 
@@ -1594,11 +1679,11 @@ mod integration_tests {
             let mut request = Request::builder()
                 .uri("/api/models")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
             check_security_headers(response.headers());
         }
@@ -1613,11 +1698,11 @@ mod integration_tests {
                 .uri("/api/models")
                 .header("authorization", "Bearer invalid-token")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
 
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
             assert_ne!(response.status(), StatusCode::NOT_FOUND);
@@ -1636,11 +1721,15 @@ mod integration_tests {
             let mut request = Request::builder()
                 .uri("/health")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
-            let response = app.clone().oneshot(request).await.unwrap();
+            let response = app
+                .clone()
+                .oneshot(request)
+                .await
+                .expect("value must be present");
             assert_eq!(response.status(), StatusCode::OK);
 
             // No auth header — if auth ran before rate-limit, this would
@@ -1648,11 +1737,11 @@ mod integration_tests {
             let mut request = Request::builder()
                 .uri("/api/models")
                 .body(Body::empty())
-                .unwrap();
+                .expect("value must be present");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
-            let response = app.oneshot(request).await.unwrap();
+            let response = app.oneshot(request).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -1682,14 +1771,14 @@ mod integration_tests {
         }
 
         fn make_chat_request(auth_token: &str, body: serde_json::Value) -> Request<Body> {
-            let body_bytes = serde_json::to_vec(&body).unwrap();
+            let body_bytes = serde_json::to_vec(&body).expect("value must be present");
             let mut req = Request::builder()
                 .method("POST")
                 .uri("/v1/chat/completions")
                 .header("Authorization", format!("Bearer {auth_token}"))
                 .header("Content-Type", "application/json")
                 .body(Body::from(body_bytes))
-                .unwrap();
+                .expect("value must be present");
             let test_addr = SocketAddr::from(([127, 0, 0, 1], 12345));
             req.extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
@@ -1722,7 +1811,7 @@ mod integration_tests {
                 }),
             );
 
-            let response = app.oneshot(req).await.unwrap();
+            let response = app.oneshot(req).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::OK);
 
             let json_body = read_json_body::<serde_json::Value>(response).await;
@@ -1743,7 +1832,7 @@ mod integration_tests {
                 }),
             );
 
-            let response = app.oneshot(req).await.unwrap();
+            let response = app.oneshot(req).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::OK);
 
             let json_body = read_json_body::<serde_json::Value>(response).await;
@@ -1768,7 +1857,7 @@ mod integration_tests {
                 }),
             );
 
-            let response = app.oneshot(req).await.unwrap();
+            let response = app.oneshot(req).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::OK);
 
             let json_body = read_json_body::<serde_json::Value>(response).await;
@@ -1794,7 +1883,7 @@ mod integration_tests {
                 }),
             );
 
-            let response = app.oneshot(req).await.unwrap();
+            let response = app.oneshot(req).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::OK);
 
             let json_body = read_json_body::<serde_json::Value>(response).await;
@@ -1820,7 +1909,7 @@ mod integration_tests {
                 }),
             );
 
-            let response = app.oneshot(req).await.unwrap();
+            let response = app.oneshot(req).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::OK);
 
             let json_body = read_json_body::<serde_json::Value>(response).await;
@@ -1845,7 +1934,7 @@ mod integration_tests {
                 }),
             );
 
-            let response = app.oneshot(req).await.unwrap();
+            let response = app.oneshot(req).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::OK);
 
             let json_body = read_json_body::<serde_json::Value>(response).await;
@@ -1870,7 +1959,7 @@ mod integration_tests {
                 }),
             );
 
-            let response = app.oneshot(req).await.unwrap();
+            let response = app.oneshot(req).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::OK);
 
             let json_body = read_json_body::<serde_json::Value>(response).await;
@@ -1895,7 +1984,7 @@ mod integration_tests {
                 }),
             );
 
-            let response = app.oneshot(req).await.unwrap();
+            let response = app.oneshot(req).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::OK);
 
             let json_body = read_json_body::<serde_json::Value>(response).await;
@@ -1928,7 +2017,7 @@ mod integration_tests {
                 }),
             );
 
-            let response = app.oneshot(req).await.unwrap();
+            let response = app.oneshot(req).await.expect("value must be present");
             assert_eq!(response.status(), StatusCode::OK);
 
             let json_body = read_json_body::<serde_json::Value>(response).await;

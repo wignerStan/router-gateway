@@ -79,7 +79,7 @@ credentials:
         .arg("json")
         .assert()
         .success()
-        .stdout(predicates::str::is_match(r#""valid"\s*:\s*true"#).unwrap());
+        .stdout(predicates::str::is_match(r#""valid"\s*:\s*true"#).expect("value must be present"));
 }
 
 #[test]

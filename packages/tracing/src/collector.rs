@@ -183,7 +183,7 @@ mod tests {
 
         // Wait for all tasks
         for handle in handles {
-            handle.await.unwrap();
+            handle.await.expect("value must be present");
         }
 
         assert_eq!(collector.trace_count().await, 10);
@@ -275,7 +275,7 @@ mod tests {
 
         // Wait for all tasks
         for handle in handles {
-            handle.await.unwrap();
+            handle.await.expect("value must be present");
         }
 
         // Should have 1000 traces (or capped at max_size)

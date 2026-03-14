@@ -258,15 +258,24 @@ mod tests {
     #[tokio::test]
     async fn test_static_fetcher_fetch() {
         let fetcher = StaticFetcher::new();
-        let model = fetcher.fetch("claude-sonnet-4-20250514").await.unwrap();
+        let model = fetcher
+            .fetch("claude-sonnet-4-20250514")
+            .await
+            .expect("value must be present");
         assert!(model.is_some());
-        assert_eq!(model.unwrap().name, "Claude Sonnet 4");
+        assert_eq!(
+            model.expect("value must be present").name,
+            "Claude Sonnet 4"
+        );
     }
 
     #[tokio::test]
     async fn test_static_fetcher_fetch_not_found() {
         let fetcher = StaticFetcher::new();
-        let model = fetcher.fetch("unknown-model").await.unwrap();
+        let model = fetcher
+            .fetch("unknown-model")
+            .await
+            .expect("value must be present");
         assert!(model.is_none());
     }
 
@@ -280,7 +289,7 @@ mod tests {
                 "unknown".to_string(),
             ])
             .await
-            .unwrap();
+            .expect("value must be present");
 
         assert_eq!(models.len(), 2);
         assert!(models.contains_key("claude-sonnet-4-20250514"));
@@ -290,14 +299,14 @@ mod tests {
     #[tokio::test]
     async fn test_static_fetcher_list_all() {
         let fetcher = StaticFetcher::new();
-        let models = fetcher.list_all().await.unwrap();
+        let models = fetcher.list_all().await.expect("value must be present");
         assert!(models.len() >= 6); // At least the 6 models we initialized
     }
     use std::panic::{self, AssertUnwindSafe};
 
     fn poison_lock(fetcher: &StaticFetcher) {
         let _ = panic::catch_unwind(AssertUnwindSafe(|| {
-            let _guard = fetcher.models.write().unwrap();
+            let _guard = fetcher.models.write().expect("value must be present");
             panic!("intentional poison for testing");
         }));
     }

@@ -587,7 +587,9 @@ mod tests {
             history.record(attempt);
         }
 
-        let success_rate = history.get_success_rate_for_route("route-1").unwrap();
+        let success_rate = history
+            .get_success_rate_for_route("route-1")
+            .expect("value must be present");
         assert_eq!(success_rate, 0.6); // 3 out of 5
     }
 
@@ -615,7 +617,9 @@ mod tests {
             history.record(attempt);
         }
 
-        let avg_latency = history.get_avg_latency_for_route("route-1").unwrap();
+        let avg_latency = history
+            .get_avg_latency_for_route("route-1")
+            .expect("value must be present");
         assert_eq!(avg_latency, 150.0); // (100 + 150 + 200) / 3
     }
 

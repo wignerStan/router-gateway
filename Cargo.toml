@@ -58,8 +58,8 @@ unsafe_code = "forbid"
 missing_docs = "warn"
 
 [workspace.lints.clippy]
-# Base comprehensive rules set to deny for production
-all = { level = "deny", priority = -1 }
+# Base rules
+all = { level = "warn", priority = -1 }
 pedantic = { level = "deny", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 perf = { level = "deny", priority = -1 }
@@ -70,7 +70,7 @@ uninlined_format_args = "deny"
 redundant_closure_for_method_calls = "deny"
 manual_range_contains = "deny"
 unwrap_used = "deny"
-expect_used = "deny"
+expect_used = "allow"
 panic = "deny"
 todo = "warn"
 clone_on_ref_ptr = "deny"

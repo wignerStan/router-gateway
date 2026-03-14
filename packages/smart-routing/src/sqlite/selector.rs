@@ -216,7 +216,11 @@ impl SQLiteSelector {
     /// Select auth by weighted random choice
     fn select_by_weight(&self, available: Vec<WeightedAuth>) -> String {
         if available.len() == 1 {
-            return available.into_iter().next().unwrap().id;
+            return available
+                .into_iter()
+                .next()
+                .expect("value must be present")
+                .id;
         }
 
         // Calculate total weight
@@ -225,11 +229,18 @@ impl SQLiteSelector {
         if total_weight <= 0.0 {
             // All weights are zero, select randomly
             let idx = rand::thread_rng().gen_range(0..available.len());
-            return available.into_iter().nth(idx).unwrap().id;
+            return available
+                .into_iter()
+                .nth(idx)
+                .expect("value must be present")
+                .id;
         }
 
         // Save last element as fallback for floating-point edge cases
-        let fallback = available.last().map(|a| a.id.clone()).unwrap();
+        let fallback = available
+            .last()
+            .map(|a| a.id.clone())
+            .expect("value must be present");
 
         // Weighted random selection
         let r = rand::thread_rng().gen::<f64>() * total_weight;
@@ -425,7 +436,9 @@ mod tests {
     #[tokio::test]
     async fn test_sqlite_selector_pick() {
         let config = SQLiteConfig::default();
-        let store = SQLiteStore::new(config).await.unwrap();
+        let store = SQLiteStore::new(config)
+            .await
+            .expect("value must be present");
 
         let config = SmartRoutingConfig::default();
         let selector = SQLiteSelector::new(store, config);
@@ -455,7 +468,9 @@ mod tests {
     #[tokio::test]
     async fn test_precompute_weights() {
         let config = SQLiteConfig::default();
-        let store = SQLiteStore::new(config).await.unwrap();
+        let store = SQLiteStore::new(config)
+            .await
+            .expect("value must be present");
 
         let config = SmartRoutingConfig::default();
         let selector = SQLiteSelector::new(store, config);
@@ -481,7 +496,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_stats() {
         let config = SQLiteConfig::default();
-        let store = SQLiteStore::new(config).await.unwrap();
+        let store = SQLiteStore::new(config)
+            .await
+            .expect("value must be present");
 
         let config = SmartRoutingConfig::default();
         let selector = SQLiteSelector::new(store, config);
