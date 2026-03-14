@@ -13,18 +13,18 @@ This project is part of the workspace. Please refer to the root [AGENTS.md](../.
 ## Key Facts
 
 - HTTP API server built with Axum, Tokio
-- Five endpoints: `GET /`, `GET /health`, `GET /api/models`, `GET /api/route`, `POST /v1/chat/completions`
+- Five endpoints: `GET /`, `GET /health`, `GET /api/models`, `GET /api/route` (demo), `POST /v1/chat/completions`
 - Protected routes require `Authorization: Bearer <token>` (fail-closed by default)
 - Auth bypassed in development mode when no tokens configured (`GATEWAY_ENV=development`)
 - Rate limiting: 60 req/min per IP (configurable)
 - Three provider adapters: OpenAI, Google, Anthropic (in `src/providers/`)
-- Configuration loaded from `gateway.yaml`, `config/gateway.yaml`, or `GATEWAY_CONFIG` env var (see `config/gateway.example.yaml` for template)
+- Configuration loaded from `gateway.yaml`, `gateway.yml`, `config/gateway.yaml`, or `GATEWAY_CONFIG` env var (see `config/gateway.example.yaml` for template)
 - Uses `constant_time_token_eq()` for all auth token comparisons (timing safety)
 
 ## Known Pitfalls
 
 - `constant_time_token_eq()` must be used for all auth token comparisons to prevent timing attacks
-- Config env var expansion: Secret fields support `${VAR}` and `${VAR:-default}` interpolation
+- Config env var expansion: `${VAR}` and `${VAR:-default}` interpolation applies to credential `api_key`, `base_url`, and provider `headers` — but NOT to `auth_tokens`
 - Test temp files: Use `tempfile::NamedTempFile` for RAII cleanup — never manually write to `std::env::temp_dir()` with manual deletion. Extract repeated file-write-parse patterns into shared test helpers.
 - Test API keys: Never use `sk-` prefixed strings in tests — use clearly non-production values like `test-key-123` to avoid triggering security scanners.
 - Prefer `assert_eq!` for boolean JSON assertions over `assert!(expr.as_bool().unwrap_or(false), ...)` — it's more concise and provides clearer failure messages.
