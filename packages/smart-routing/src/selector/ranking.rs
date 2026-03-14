@@ -154,7 +154,7 @@ impl SmartSelector {
             return available
                 .into_iter()
                 .next()
-                .expect("value must be present")
+                .expect("valid result should be retrieved")
                 .id;
         }
 
@@ -165,14 +165,14 @@ impl SmartSelector {
             return available
                 .into_iter()
                 .nth(idx)
-                .expect("value must be present")
+                .expect("valid result should be retrieved")
                 .id;
         }
 
         let fallback = available
             .last()
             .map(|a| a.id.clone())
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
 
         let r = rand::thread_rng().gen::<f64>() * total_weight;
         let mut cumulative = 0.0;

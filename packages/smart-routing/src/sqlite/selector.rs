@@ -225,7 +225,7 @@ impl SQLiteSelector {
             return available
                 .into_iter()
                 .next()
-                .expect("value must be present")
+                .expect("valid result should be retrieved")
                 .id;
         }
 
@@ -238,7 +238,7 @@ impl SQLiteSelector {
             return available
                 .into_iter()
                 .nth(idx)
-                .expect("value must be present")
+                .expect("valid result should be retrieved")
                 .id;
         }
 
@@ -246,7 +246,7 @@ impl SQLiteSelector {
         let fallback = available
             .last()
             .map(|a| a.id.clone())
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
 
         // Weighted random selection
         let r = rand::thread_rng().gen::<f64>() * total_weight;
@@ -443,7 +443,7 @@ mod tests {
         let config = SQLiteConfig::default();
         let store = SQLiteStore::new(config)
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
 
         let config = SmartRoutingConfig::default();
         let selector = SQLiteSelector::new(store, config);
@@ -475,7 +475,7 @@ mod tests {
         let config = SQLiteConfig::default();
         let store = SQLiteStore::new(config)
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
 
         let config = SmartRoutingConfig::default();
         let selector = SQLiteSelector::new(store, config);
@@ -502,7 +502,7 @@ mod tests {
         let config = SQLiteConfig::default();
         let store = SQLiteStore::new(config)
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
 
         let config = SmartRoutingConfig::default();
         let selector = SQLiteSelector::new(store, config);

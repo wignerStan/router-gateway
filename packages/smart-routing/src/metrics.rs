@@ -294,7 +294,7 @@ mod tests {
         let metrics = collector
             .get_metrics("test-auth")
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
         assert_eq!(metrics.total_requests, 3);
         assert_eq!(metrics.success_count, 2);
         assert_eq!(metrics.failure_count, 1);
@@ -315,7 +315,7 @@ mod tests {
         let metrics = collector
             .get_metrics("test-auth")
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
         // EWMA should smooth the values
         assert!(metrics.avg_latency_ms > 100.0 && metrics.avg_latency_ms < 300.0);
     }
@@ -334,7 +334,7 @@ mod tests {
         let metrics = collector
             .get_metrics("test-auth")
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
         assert_eq!(metrics.consecutive_failures, 1);
         assert_eq!(metrics.consecutive_successes, 0);
 
@@ -342,7 +342,7 @@ mod tests {
         let metrics = collector
             .get_metrics("test-auth")
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
         assert_eq!(metrics.consecutive_failures, 0);
         assert_eq!(metrics.consecutive_successes, 1);
     }
@@ -374,7 +374,7 @@ mod tests {
         let metrics = collector
             .get_metrics("test-auth")
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
         // Zero latency should not affect min/max/avg
         assert_eq!(metrics.avg_latency_ms, 0.0);
         assert_eq!(metrics.min_latency_ms, f64::MAX);
@@ -415,7 +415,7 @@ mod tests {
 
         // Wait for all tasks to complete
         for handle in handles {
-            handle.await.expect("value must be present");
+            handle.await.expect("valid result should be retrieved");
         }
 
         // Verify all metrics were recorded
@@ -426,7 +426,7 @@ mod tests {
             let metrics = collector
                 .get_metrics(&format!("auth-{i}"))
                 .await
-                .expect("value must be present");
+                .expect("valid result should be retrieved");
             assert_eq!(metrics.total_requests, 10);
             assert_eq!(metrics.success_count, 10);
         }
@@ -445,7 +445,7 @@ mod tests {
         let metrics = collector
             .get_metrics("test-auth")
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
         assert_eq!(metrics.total_requests, 2);
 
         // Reset metrics
@@ -455,7 +455,7 @@ mod tests {
         let metrics = collector
             .get_metrics("test-auth")
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
         assert_eq!(metrics.total_requests, 0);
         assert_eq!(metrics.success_count, 0);
         assert_eq!(metrics.failure_count, 0);
@@ -497,7 +497,7 @@ mod tests {
         let metrics = collector
             .get_metrics("test-auth")
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
         assert_eq!(metrics.min_latency_ms, 50.0);
         assert_eq!(metrics.max_latency_ms, 150.0);
     }
@@ -539,7 +539,7 @@ mod tests {
         let metrics = collector
             .get_metrics("auto-auth")
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
         assert_eq!(metrics.total_requests, 1);
         assert_eq!(metrics.success_count, 1);
     }
@@ -556,7 +556,7 @@ mod tests {
         let metrics = collector
             .get_metrics("test-auth")
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
 
         assert_eq!(metrics.total_requests, 0);
         assert_eq!(metrics.success_count, 0);
@@ -579,7 +579,7 @@ mod tests {
         let metrics = collector
             .get_metrics("test-auth")
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
 
         // With single request, avg should equal that request's latency
         assert_eq!(metrics.avg_latency_ms, 150.0);
@@ -602,7 +602,7 @@ mod tests {
         let metrics = collector
             .get_metrics("test-auth")
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
 
         assert_eq!(metrics.total_requests, 50);
         assert_eq!(metrics.failure_count, 50);
@@ -644,14 +644,14 @@ mod tests {
 
         // Wait for all tasks
         for handle in handles {
-            handle.await.expect("value must be present");
+            handle.await.expect("valid result should be retrieved");
         }
 
         // Verify all metrics were recorded
         let metrics = collector
             .get_metrics("shared-auth")
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
         assert_eq!(
             metrics.total_requests, 1000,
             "All 1000 requests should be recorded"
@@ -679,7 +679,7 @@ mod tests {
         let before = collector
             .get_metrics("test-auth")
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
         assert_eq!(before.total_requests, 60);
 
         // Reset
@@ -689,7 +689,7 @@ mod tests {
         let after = collector
             .get_metrics("test-auth")
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
         assert_eq!(after.total_requests, 0);
         assert_eq!(after.success_count, 0);
         assert_eq!(after.failure_count, 0);
@@ -715,7 +715,7 @@ mod tests {
         let m2 = collector
             .get_metrics("test-auth")
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
 
         // EWMA should smooth the jump (not immediately jump to 1000)
         // EWMA = 0.3 * new + 0.7 * old
@@ -742,7 +742,7 @@ mod tests {
         let m1 = collector
             .get_metrics("test-auth")
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
 
         // Now record failure
         collector
@@ -751,7 +751,7 @@ mod tests {
         let m2 = collector
             .get_metrics("test-auth")
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
 
         // Success rate should decrease smoothly
         // EWMA = 0.3 * 0 + 0.7 * previous
@@ -774,7 +774,7 @@ mod tests {
         let m1 = collector
             .get_metrics("test-auth")
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
         assert!(m1.avg_latency_ms > 0.0);
 
         // Very large latency
@@ -784,7 +784,7 @@ mod tests {
         let m2 = collector
             .get_metrics("test-auth")
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
         assert!(m2.max_latency_ms == 1_000_000.0);
         assert!(m2.min_latency_ms == f64::MIN_POSITIVE);
     }
@@ -803,7 +803,7 @@ mod tests {
         let metrics = collector
             .get_metrics("test-auth")
             .await
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
 
         // Total requests still increments
         assert_eq!(metrics.total_requests, 2);

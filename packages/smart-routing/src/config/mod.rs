@@ -328,7 +328,7 @@ mod tests {
             ..Default::default()
         };
         let mut config = config;
-        config.validate().expect("value must be present");
+        config.validate().expect("valid result should be retrieved");
         assert_eq!(config.strategy, "weighted");
     }
 
@@ -568,7 +568,7 @@ mod tests {
             },
             ..Default::default()
         };
-        config.validate().expect("value must be present");
+        config.validate().expect("valid result should be retrieved");
         assert!(
             (config.time_aware.off_peak_factor - 1.2).abs() < 0.01,
             "Invalid off_peak_factor should be reset to default 1.2"
@@ -590,7 +590,7 @@ mod tests {
             },
             ..Default::default()
         };
-        config.validate().expect("value must be present");
+        config.validate().expect("valid result should be retrieved");
         let slot = &config.time_aware.peak_hours[0];
         assert_eq!(slot.start_hour, 0);
         assert_eq!(slot.end_hour, 23);
@@ -620,7 +620,7 @@ mod tests {
             },
             ..Default::default()
         };
-        config.validate().expect("value must be present");
+        config.validate().expect("valid result should be retrieved");
         assert_eq!(config.quota_aware.quota_balance_strategy, "least_used");
     }
 
@@ -634,7 +634,7 @@ mod tests {
             },
             ..Default::default()
         };
-        config.validate().expect("value must be present");
+        config.validate().expect("valid result should be retrieved");
         assert_eq!(config.quota_aware.quota_balance_strategy, "round_robin");
     }
 
@@ -648,7 +648,7 @@ mod tests {
             },
             ..Default::default()
         };
-        config.validate().expect("value must be present");
+        config.validate().expect("valid result should be retrieved");
         assert_eq!(config.quota_aware.quota_balance_strategy, "adaptive");
     }
 
@@ -662,7 +662,7 @@ mod tests {
             },
             ..Default::default()
         };
-        config.validate().expect("value must be present");
+        config.validate().expect("valid result should be retrieved");
         assert_eq!(
             config.quota_aware.quota_balance_strategy, "adaptive",
             "Invalid strategy should reset to adaptive"
@@ -763,7 +763,7 @@ mod tests {
                 strategy: strategy.to_string(),
                 ..Default::default()
             };
-            config.validate().expect("value must be present");
+            config.validate().expect("valid result should be retrieved");
             assert_eq!(
                 config.strategy, strategy,
                 "Strategy '{strategy}' should be preserved after validation"
@@ -777,7 +777,7 @@ mod tests {
             strategy: "unknown_strategy".to_string(),
             ..Default::default()
         };
-        config.validate().expect("value must be present");
+        config.validate().expect("valid result should be retrieved");
         assert_eq!(config.strategy, "weighted");
     }
 
@@ -796,7 +796,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let warnings = config.validate().expect("value must be present");
+        let warnings = config.validate().expect("valid result should be retrieved");
         assert!(
             !warnings.is_empty(),
             "validate() should return warnings for corrected values"
@@ -820,7 +820,7 @@ mod tests {
     #[test]
     fn test_validate_no_warnings_for_valid_config() {
         let mut config = SmartRoutingConfig::default();
-        let warnings = config.validate().expect("value must be present");
+        let warnings = config.validate().expect("valid result should be retrieved");
         assert!(
             warnings.is_empty(),
             "Valid config should produce no warnings, got: {warnings:?}"

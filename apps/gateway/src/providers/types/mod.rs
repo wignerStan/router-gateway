@@ -236,7 +236,7 @@ mod tests {
             .temperature(0.7)
             .max_tokens(1024)
             .build()
-            .expect("value must be present");
+            .expect("valid result should be retrieved");
 
         assert_eq!(request.model, "gpt-4");
         assert_eq!(request.temperature, Some(0.7));

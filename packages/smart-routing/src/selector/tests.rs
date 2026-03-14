@@ -66,7 +66,7 @@ mod tests {
 
             let selected = selector.pick(auths).await;
             assert!(selected.is_some());
-            let selected_id = selected.expect("value must be present");
+            let selected_id = selected.expect("valid result should be retrieved");
             assert!(["auth1", "auth2", "auth3"].contains(&selected_id.as_str()));
         }
 
@@ -106,7 +106,7 @@ mod tests {
             for _ in 0..10 {
                 let selected = selector.pick(auths.clone()).await;
                 assert!(selected.is_some());
-                let selected_id = selected.expect("value must be present");
+                let selected_id = selected.expect("valid result should be retrieved");
                 assert_ne!(selected_id, "auth2");
             }
         }
@@ -146,7 +146,7 @@ mod tests {
 
             let selected = selector.pick_with_policy(auths, &model, &context).await;
             assert!(selected.is_some());
-            let selected_id = selected.expect("value must be present");
+            let selected_id = selected.expect("valid result should be retrieved");
             assert!(["auth1", "auth2"].contains(&selected_id.as_str()));
         }
 
@@ -265,7 +265,12 @@ mod tests {
 
             let metrics = selector.metrics().get_metrics("auth1").await;
             assert!(metrics.is_some());
-            assert_eq!(metrics.expect("value must be present").total_requests, 1);
+            assert_eq!(
+                metrics
+                    .expect("valid result should be retrieved")
+                    .total_requests,
+                1
+            );
         }
 
         #[tokio::test]
@@ -548,7 +553,7 @@ mod tests {
                 let selected = selector
                     .pick(auths.clone())
                     .await
-                    .expect("value must be present");
+                    .expect("valid result should be retrieved");
                 if selected == "normal-auth" {
                     normal_count += 1;
                 } else {
@@ -606,7 +611,7 @@ mod tests {
                 let selected = selector
                     .pick(auths.clone())
                     .await
-                    .expect("value must be present");
+                    .expect("valid result should be retrieved");
                 if selected == "auth1" {
                     auth1_count += 1;
                 } else {
@@ -662,7 +667,7 @@ mod tests {
                 match selector
                     .pick(auths.clone())
                     .await
-                    .expect("value must be present")
+                    .expect("valid result should be retrieved")
                     .as_str()
                 {
                     "high-perf" => high_count += 1,
@@ -739,9 +744,9 @@ mod tests {
             let all_results: Vec<_> = futures::future::join_all(handles).await;
 
             for results in all_results {
-                for selected in results.expect("value must be present") {
+                for selected in results.expect("valid result should be retrieved") {
                     assert!(selected.is_some());
-                    let id = selected.expect("value must be present");
+                    let id = selected.expect("valid result should be retrieved");
                     assert!(
                         ["auth1", "auth2", "auth3"].contains(&id.as_str()),
                         "Selected invalid auth: {id}"

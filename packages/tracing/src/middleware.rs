@@ -267,7 +267,9 @@ mod tests {
 
         let span = middleware.trace_request(
             axum::http::Method::POST,
-            "/v1/messages".parse().expect("value must be present"),
+            "/v1/messages"
+                .parse()
+                .expect("valid result should be retrieved"),
             headers,
             vec![],
         );
@@ -305,7 +307,7 @@ mod tests {
         // but test that we fall back to UUID generation when header value is not valid string
         headers.insert(
             "x-request-id",
-            HeaderValue::from_bytes(b"valid-id").expect("value must be present"),
+            HeaderValue::from_bytes(b"valid-id").expect("valid result should be retrieved"),
         );
         assert_eq!(middleware.extract_request_id(&headers), "valid-id");
 
@@ -379,7 +381,9 @@ mod tests {
         let headers = HeaderMap::new();
         let span = middleware.trace_request(
             axum::http::Method::POST,
-            "/v1/messages".parse().expect("value must be present"),
+            "/v1/messages"
+                .parse()
+                .expect("valid result should be retrieved"),
             headers,
             vec![],
         );
@@ -409,7 +413,7 @@ mod tests {
             axum::http::Method::POST,
             "/v1/chat/completions"
                 .parse()
-                .expect("value must be present"),
+                .expect("valid result should be retrieved"),
             headers,
             large_body,
         );
@@ -454,7 +458,9 @@ mod tests {
 
         let span = middleware.trace_request(
             axum::http::Method::POST,
-            "/v1/messages".parse().expect("value must be present"),
+            "/v1/messages"
+                .parse()
+                .expect("valid result should be retrieved"),
             headers,
             vec![],
         );
@@ -473,7 +479,9 @@ mod tests {
         headers1.insert("x-streaming", HeaderValue::from_static("true"));
         let span1 = middleware.trace_request(
             axum::http::Method::POST,
-            "/v1/messages".parse().expect("value must be present"),
+            "/v1/messages"
+                .parse()
+                .expect("valid result should be retrieved"),
             headers1,
             vec![],
         );
@@ -484,7 +492,9 @@ mod tests {
         headers2.insert("x-streaming", HeaderValue::from_static("1"));
         let span2 = middleware.trace_request(
             axum::http::Method::POST,
-            "/v1/messages".parse().expect("value must be present"),
+            "/v1/messages"
+                .parse()
+                .expect("valid result should be retrieved"),
             headers2,
             vec![],
         );
@@ -495,7 +505,9 @@ mod tests {
         headers3.insert("x-streaming", HeaderValue::from_static("false"));
         let span3 = middleware.trace_request(
             axum::http::Method::POST,
-            "/v1/messages".parse().expect("value must be present"),
+            "/v1/messages"
+                .parse()
+                .expect("valid result should be retrieved"),
             headers3,
             vec![],
         );
@@ -505,7 +517,9 @@ mod tests {
         let headers4 = HeaderMap::new();
         let span4 = middleware.trace_request(
             axum::http::Method::POST,
-            "/v1/messages".parse().expect("value must be present"),
+            "/v1/messages"
+                .parse()
+                .expect("valid result should be retrieved"),
             headers4,
             vec![],
         );

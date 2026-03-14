@@ -91,10 +91,11 @@ fn test_policy_serialization() {
         .with_priority(10)
         .with_capability(CapabilityCategory::Vision, "require");
 
-    let json = serde_json::to_string(&policy).expect("value must be present");
+    let json = serde_json::to_string(&policy).expect("valid result should be retrieved");
     assert!(json.contains("\"id\":\"test\""));
 
-    let deserialized: RoutingPolicy = serde_json::from_str(&json).expect("value must be present");
+    let deserialized: RoutingPolicy =
+        serde_json::from_str(&json).expect("valid result should be retrieved");
     assert_eq!(deserialized.id, policy.id);
 }
 
@@ -199,9 +200,9 @@ fn test_from_file_loads_and_validates_policies_json() {
     let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let policies_path = manifest_dir
         .parent()
-        .expect("value must be present")
+        .expect("valid result should be retrieved")
         .parent()
-        .expect("value must be present")
+        .expect("valid result should be retrieved")
         .join("config")
         .join("policies.json");
 
@@ -210,7 +211,7 @@ fn test_from_file_loads_and_validates_policies_json() {
         registry.is_ok(),
         "config/policies.json should load successfully: {registry:?}"
     );
-    let registry = registry.expect("value must be present");
+    let registry = registry.expect("valid result should be retrieved");
     assert_eq!(
         registry.all().len(),
         10,
@@ -220,9 +221,9 @@ fn test_from_file_loads_and_validates_policies_json() {
 
 #[test]
 fn test_from_file_rejects_invalid_json() {
-    let tmp = tempfile::NamedTempFile::new().expect("value must be present");
+    let tmp = tempfile::NamedTempFile::new().expect("valid result should be retrieved");
     std::fs::write(tmp.path(), r#"{"policies": [{"id": 1, "name": "Bad"}]}"#)
-        .expect("value must be present");
+        .expect("valid result should be retrieved");
 
     let result = PolicyRegistry::from_file(tmp.path());
     assert!(
@@ -233,12 +234,12 @@ fn test_from_file_rejects_invalid_json() {
 
 #[test]
 fn test_from_file_rejects_missing_schema_elements() {
-    let tmp = tempfile::NamedTempFile::new().expect("value must be present");
+    let tmp = tempfile::NamedTempFile::new().expect("valid result should be retrieved");
     std::fs::write(
         tmp.path(),
         r#"{"policies": [{"priority": 5, "enabled": true, "filters": {}, "action": {"action_type": "prefer"}}]}"#,
     )
-    .expect("value must be present");
+    .expect("valid result should be retrieved");
 
     let result = PolicyRegistry::from_file(tmp.path());
     assert!(
