@@ -25,7 +25,7 @@ This project is part of the workspace. Please refer to the root [AGENTS.md](../.
 
 - Test temp files: Use `tempfile::NamedTempFile` for RAII cleanup — never manually write to `std::env::temp_dir()` with manual deletion. Extract repeated file-write-parse patterns into shared test helpers.
 - Test API keys: Never use `sk-` prefixed strings in tests — use clearly non-production values like `test-key-123` to avoid triggering security scanners.
-- `assert_eq!` over `assert!(expr.as_bool().unwrap_or(false), ...)`: Prefer `assert_eq!` for boolean JSON assertions — it's more concise and fails with clearer messages.
+- Prefer `assert_eq!` for boolean JSON assertions over `assert!(expr.as_bool().unwrap_or(false), ...)` — it's more concise and provides clearer failure messages.
 - Middleware ordering tests: Remove auth headers when testing rate-limit-before-auth — a valid token masks the regression (429 would fire regardless of middleware order).
 - Integration test helpers: Extract repeated request setup (app build + request construction) into shared helper functions to reduce boilerplate and improve test maintenance.
-- `_gateway.classification.capabilities.thinking` is currently omitted by the `chat_completions` handler (returns `null`), inconsistent with the `RequiredCapabilities` struct — document this in tests with explicit null assertions.
+- The `chat_completions` handler currently omits `_gateway.classification.capabilities.thinking` (returns `null`), which is inconsistent with the `RequiredCapabilities` struct — document this in tests with explicit null assertions
