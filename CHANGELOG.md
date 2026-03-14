@@ -9,31 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Initial template structure
-- Workspace configuration for Bun package manager
-- TypeScript project references support
-- Pre-commit hooks with gitleaks integration
-- GitHub Actions CI/CD workflows
-
-### Changed
-
-- Removed detect-secrets in favor of gitleaks
-- Enhanced TypeScript configuration with strict mode options
-
-### Security
-
-- gitleaks for secret scanning
-- Dependency audit workflow
-
----
-
-## [1.0.0] - YYYY-MM-DD
-
-### Initial Release
-
-- Workspace architecture with packages/core, packages/api, packages/bin
-- Comprehensive documentation (AGENTS.md, README-WORKSPACE.md, ROADMAP.md)
-- Production-ready CI/CD pipeline
-- Docker support with multi-stage builds
-- Just task runner with comprehensive commands
-- Security-first configuration (gitleaks, audit)
+- Local LLM gateway with smart request routing
+- Five routing strategies: weighted, time_aware, quota_aware, adaptive, policy_aware
+- OpenAI-compatible API at `POST /v1/chat/completions`
+- Three provider adapters: OpenAI, Google, Anthropic
+- Model registry with 5-dimension classification
+- LLM request tracing and observability
+- Management CLI (`my-cli`)
+- SQLite-backed metrics and health persistence
+- SSRF protection for credential base URLs
+- Constant-time token comparison (timing attack prevention)
+- BDD integration test suite

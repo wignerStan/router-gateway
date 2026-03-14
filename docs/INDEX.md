@@ -36,9 +36,12 @@ Welcome to the Gateway project documentation. This directory follows the [Diáta
 
 ## Additional Resources
 
-- [Model Classification System](./MODEL_CLASSIFICATION.md) - 5-dimension model categorization
-- [API Transformation](./API_TRANSFORMATION.md) - Request/response transformation
+- [Model Classification System](./archive/reviews/MODEL_CLASSIFICATION.md) - 5-dimension model categorization
+- [API Transformation](./archive/reviews/API_TRANSFORMATION.md) - Request/response transformation
 
 ## Archive
 
-Historical documents and reviews are available in the [archive/](./archive/) directory.
+Historical documents, reviews, and design analyses are available in the [archive/](./archive/) directory:
+
+- [archive/reviews/](./archive/reviews/) - Code reviews, quality assessments, and design documents
+- [archive/bdd-formulation-output.md](./archive/bdd-formulation-output.md) - BDD feature formulation output

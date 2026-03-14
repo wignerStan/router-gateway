@@ -16,3 +16,16 @@ This project is part of the workspace. Please refer to the root [AGENTS.md](../.
 - MemoryTraceCollector for in-memory trace storage
 - TracingMiddleware for Axum integration
 - Leaf package — no internal workspace dependencies
+
+## Known Pitfalls
+
+- Trace collectors are not shared across clones — each clone gets independent storage
+- `MemoryTraceCollector` is in-memory only; traces are lost on process exit
+
+## Error Types
+
+```rust
+pub enum Error {
+    Collection(String),  // Trace collection or retrieval failure
+}
+```
