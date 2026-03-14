@@ -106,7 +106,7 @@ impl SQLiteSelector {
         let json_array = serde_json::to_string(&auth_ids).ok()?;
 
         // Get database connection
-        let db = self.store.get_db().await;
+        let db = self.store.get_db();
         let db = db.lock().await;
 
         // Execute SQL query with weight calculation
@@ -273,7 +273,7 @@ impl SQLiteSelector {
             .map_err(|e| SqliteError::Serialization(e.to_string()))?;
 
         // Get database connection
-        let db = self.store.get_db().await;
+        let db = self.store.get_db();
         let db = db.lock().await;
 
         // Execute SQL query
@@ -352,7 +352,7 @@ impl SQLiteSelector {
 
     /// Update weights in database
     async fn update_weights(&self, weights: HashMap<String, f64>) -> Result<()> {
-        let db = self.store.get_db().await;
+        let db = self.store.get_db();
         let db = db.lock().await;
 
         // Begin transaction
@@ -388,7 +388,7 @@ impl SQLiteSelector {
 
     /// Get top N auths by weight
     pub async fn get_top_auths(&self, limit: usize) -> Result<Vec<String>> {
-        let db = self.store.get_db().await;
+        let db = self.store.get_db();
         let db = db.lock().await;
 
         let query = format!(

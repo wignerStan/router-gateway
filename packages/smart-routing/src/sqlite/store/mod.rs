@@ -231,7 +231,7 @@ impl SQLiteStore {
     }
 
     /// Get database connection (for internal use)
-    pub async fn get_db(&self) -> Arc<AsyncMutex<Connection>> {
+    pub fn get_db(&self) -> Arc<AsyncMutex<Connection>> {
         Arc::clone(&self.db)
     }
 }

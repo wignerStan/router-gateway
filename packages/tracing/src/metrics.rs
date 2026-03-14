@@ -257,7 +257,7 @@ mod tests {
         let openai_metrics = metrics
             .provider_metrics
             .get("openai")
-            .expect("value must be present");
+            .expect("openai metrics should be present");
         assert_eq!(openai_metrics.total_requests, 2);
         assert_eq!(openai_metrics.successful_requests, 2);
         assert!((openai_metrics.avg_latency_ms - 150.0).abs() < 0.1);
@@ -266,7 +266,7 @@ mod tests {
         let anthropic_metrics = metrics
             .provider_metrics
             .get("anthropic")
-            .expect("value must be present");
+            .expect("anthropic metrics should be present");
         assert_eq!(anthropic_metrics.total_requests, 1);
         assert_eq!(anthropic_metrics.successful_requests, 0);
     }
@@ -286,7 +286,7 @@ mod tests {
         let gpt4_metrics = metrics
             .model_metrics
             .get("gpt-4")
-            .expect("value must be present");
+            .expect("gpt-4 metrics should be present");
         assert_eq!(gpt4_metrics.total_requests, 2);
         assert_eq!(gpt4_metrics.total_input_tokens, 300);
         assert_eq!(gpt4_metrics.total_output_tokens, 150);

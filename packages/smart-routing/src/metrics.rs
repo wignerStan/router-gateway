@@ -109,7 +109,7 @@ impl MetricsCollector {
 
         // Cleanup old entries periodically
         if metrics.len() > self.max_entries {
-            self.cleanup_old_entries(&mut metrics).await;
+            self.cleanup_old_entries(&mut metrics);
         }
     }
 
@@ -132,7 +132,7 @@ impl MetricsCollector {
         if op_count % self.cleanup_interval == 0 {
             let mut metrics = self.metrics.write().await;
             if metrics.len() > self.max_entries {
-                self.cleanup_old_entries(&mut metrics).await;
+                self.cleanup_old_entries(&mut metrics);
             }
         }
 
@@ -245,10 +245,7 @@ impl MetricsCollector {
     }
 
     /// Cleanup old entries to control memory growth
-    async fn cleanup_old_entries(
-        &self,
-        metrics: &mut std::collections::HashMap<String, AuthMetrics>,
-    ) {
+    fn cleanup_old_entries(&self, metrics: &mut std::collections::HashMap<String, AuthMetrics>) {
         if self.max_entries == 0 {
             return;
         }

@@ -331,4 +331,5 @@ jobs:
           echo "| Type Check | ✅ |" >> $GITHUB_STEP_SUMMARY
           echo "| Tests | ✅ |" >> $GITHUB_STEP_SUMMARY
           echo "| Coverage | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security | ✅ |" >> $GITHUB_STEP_SUMMARY
           echo "| Build | ✅ |" >> $GITHUB_STEP_SUMMARY
