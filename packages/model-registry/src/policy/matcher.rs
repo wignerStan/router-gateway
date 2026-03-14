@@ -11,6 +11,7 @@ use super::types::{
 use crate::categories::ModelCategorization;
 use crate::info::ModelInfo;
 
+/// Evaluates routing policies against model metadata.
 pub struct PolicyMatcher {
     registry: PolicyRegistry,
 }

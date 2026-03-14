@@ -191,9 +191,11 @@ impl SQLiteMetricsCollector {
     pub async fn load_from_db(&self) -> Result<()> {
         let all_metrics = self.store.load_all_metrics().await?;
 
-        let mut cache = self.cache.write().await;
-        for (auth_id, metrics) in all_metrics {
-            cache.insert(auth_id, metrics);
+        {
+            let mut cache = self.cache.write().await;
+            for (auth_id, metrics) in all_metrics {
+                cache.insert(auth_id, metrics);
+            }
         }
 
         Ok(())
@@ -363,6 +365,7 @@ impl SQLiteHealthManager {
     }
 
     /// Check if auth is available
+    #[allow(clippy::significant_drop_tightening)]
     pub async fn is_available(&self, auth_id: &str) -> bool {
         if auth_id.is_empty() {
             return true;
@@ -451,9 +454,11 @@ impl SQLiteHealthManager {
     pub async fn load_from_db(&self) -> Result<()> {
         let all_health = self.store.load_all_health().await?;
 
-        let mut cache = self.cache.write().await;
-        for (auth_id, health) in all_health {
-            cache.insert(auth_id, health);
+        {
+            let mut cache = self.cache.write().await;
+            for (auth_id, health) in all_health {
+                cache.insert(auth_id, health);
+            }
         }
 
         Ok(())

@@ -158,15 +158,22 @@ impl Default for TracingMiddlewareBuilder {
 }
 
 impl TracingMiddlewareBuilder {
+    /// Create a new builder with no collector set.
     pub fn new() -> Self {
         Self { collector: None }
     }
 
+    /// Set the trace collector for this middleware.
     pub fn with_collector(mut self, collector: Arc<dyn TraceCollector>) -> Self {
         self.collector = Some(collector);
         self
     }
 
+    /// Build the `TracingMiddleware`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no collector has been set.
     pub fn build(self) -> TracingMiddleware {
         TracingMiddleware {
             collector: self

@@ -14,7 +14,10 @@ pub enum FilterResult {
     /// Candidate passed all filters
     Accepted,
     /// Candidate was rejected
-    Rejected { reason: String },
+    Rejected {
+        /// Human-readable reason for rejection.
+        reason: String,
+    },
 }
 
 impl fmt::Display for FilterResult {

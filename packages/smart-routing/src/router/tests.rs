@@ -141,8 +141,12 @@ mod credential_management {
         let router2 = router1.clone();
 
         // Bandit state is shared via Arc - both see the same recorded result
-        let bandit = router2.bandit_policy().lock().await;
-        let stats = bandit.get_stats("cred-1");
+        let stats = router2
+            .bandit_policy()
+            .lock()
+            .await
+            .get_stats("cred-1")
+            .cloned();
         assert!(stats.is_some(), "Clone should preserve bandit policy state");
         let s = stats.expect("value must be present");
         assert_eq!(s.pulls, 1);
@@ -157,8 +161,12 @@ mod credential_management {
         router.record_result("cred-1", true, 100.0, 200, 0.8).await;
 
         // Verify bandit policy recorded it
-        let bandit = router.bandit_policy().lock().await;
-        let stats = bandit.get_stats("cred-1");
+        let stats = router
+            .bandit_policy()
+            .lock()
+            .await
+            .get_stats("cred-1")
+            .cloned();
         assert!(stats.is_some());
     }
 
@@ -508,8 +516,12 @@ mod edge_cases {
         );
 
         // Verify bandit policy was updated
-        let bandit = router.bandit_policy().lock().await;
-        let stats = bandit.get_stats("cred-1");
+        let stats = router
+            .bandit_policy()
+            .lock()
+            .await
+            .get_stats("cred-1")
+            .cloned();
         assert!(stats.is_some(), "Bandit stats should be recorded");
         let s = stats.expect("value must be present");
         assert_eq!(s.pulls, 1);

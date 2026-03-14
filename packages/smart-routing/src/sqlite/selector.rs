@@ -18,8 +18,11 @@ struct WeightedAuth {
 /// Selector statistics
 #[derive(Debug, Clone)]
 pub struct SelectorStats {
+    /// Total number of selection operations performed.
     pub select_count: i64,
+    /// Number of cache hits during selection.
     pub cache_hits: i64,
+    /// Number of database queries executed.
     pub db_queries: i64,
 }
 
@@ -83,6 +86,7 @@ impl SQLiteSelector {
     }
 
     /// Query available auths and their weights using SQL
+    #[allow(clippy::significant_drop_tightening)]
     async fn query_available_auths(&self, auths: Vec<AuthInfo>) -> Option<Vec<WeightedAuth>> {
         self.stats.db_queries.fetch_add(1, Ordering::Relaxed);
 
@@ -105,63 +109,67 @@ impl SQLiteSelector {
         // Convert auth_ids to JSON array for SQL query
         let json_array = serde_json::to_string(&auth_ids).ok()?;
 
-        // Get database connection
-        let db = self.store.get_db().await;
-        let db = db.lock().await;
+        let available = {
+            // Get database connection
+            let db = self.store.get_db().await;
+            let db = db.lock().await;
 
-        // Execute SQL query with weight calculation
-        let query = r"
-            SELECT
-                ids.auth_id,
-                COALESCE(m.success_rate, 1.0) as success_rate,
-                COALESCE(m.avg_latency_ms, 0) as latency,
-                CASE
-                    WHEN h.status = 'Healthy' THEN 1.0
-                    WHEN h.status = 'Degraded' THEN 0.5
-                    ELSE 0.01
-                END as health_factor,
-                CASE
-                    WHEN h.unavailable_until IS NOT NULL AND datetime(h.unavailable_until) > datetime('now') THEN 0
-                    ELSE 1
-                END as available
-            FROM (SELECT value as auth_id FROM json_each(?1)) as ids
-            LEFT JOIN auth_metrics m ON m.auth_id = ids.auth_id
-            LEFT JOIN auth_health h ON h.auth_id = ids.auth_id
-        ";
+            // Execute SQL query with weight calculation
+            let query = r"
+                SELECT
+                    ids.auth_id,
+                    COALESCE(m.success_rate, 1.0) as success_rate,
+                    COALESCE(m.avg_latency_ms, 0) as latency,
+                    CASE
+                        WHEN h.status = 'Healthy' THEN 1.0
+                        WHEN h.status = 'Degraded' THEN 0.5
+                        ELSE 0.01
+                    END as health_factor,
+                    CASE
+                        WHEN h.unavailable_until IS NOT NULL AND datetime(h.unavailable_until) > datetime('now') THEN 0
+                        ELSE 1
+                    END as available
+                FROM (SELECT value as auth_id FROM json_each(?1)) as ids
+                LEFT JOIN auth_metrics m ON m.auth_id = ids.auth_id
+                LEFT JOIN auth_health h ON h.auth_id = ids.auth_id
+            ";
 
-        let mut stmt = db.prepare(query).ok()?;
+            let mut stmt = db.prepare(query).ok()?;
 
-        let mut rows = stmt.query([&json_array]).ok()?;
+            let mut rows = stmt.query([&json_array]).ok()?;
 
-        let mut available = Vec::new();
+            let mut result = Vec::new();
 
-        while let Some(row) = rows.next().ok()? {
-            let auth_id: String = row.get(0).ok()?;
-            let success_rate: f64 = row.get(1).ok()?;
-            let latency: f64 = row.get(2).ok()?;
-            let health_factor: f64 = row.get(3).ok()?;
-            let available_flag: i32 = row.get(4).ok()?;
+            while let Some(row) = rows.next().ok()? {
+                let auth_id: String = row.get(0).ok()?;
+                let success_rate: f64 = row.get(1).ok()?;
+                let latency: f64 = row.get(2).ok()?;
+                let health_factor: f64 = row.get(3).ok()?;
+                let available_flag: i32 = row.get(4).ok()?;
 
-            // Skip unavailable auths
-            if available_flag == 0 {
-                continue;
+                // Skip unavailable auths
+                if available_flag == 0 {
+                    continue;
+                }
+
+                // Get auth info
+                let auth = auth_map.get(&auth_id)?;
+
+                // Calculate weight
+                let weight = self.calculate_weight(success_rate, latency, health_factor, auth);
+
+                if weight > 0.0 {
+                    result.push(WeightedAuth {
+                        id: auth_id,
+                        weight,
+                    });
+                }
             }
 
-            // Get auth info
-            let auth = auth_map.get(&auth_id)?;
+            Some(result)
+        };
 
-            // Calculate weight
-            let weight = self.calculate_weight(success_rate, latency, health_factor, auth);
-
-            if weight > 0.0 {
-                available.push(WeightedAuth {
-                    id: auth_id,
-                    weight,
-                });
-            }
-        }
-
-        Some(available)
+        available
     }
 
     /// Calculate weight from SQL query results
@@ -263,6 +271,7 @@ impl SQLiteSelector {
     }
 
     /// Precompute weights for batch operations
+    #[allow(clippy::significant_drop_tightening)]
     pub async fn precompute_weights(&self, auth_ids: Vec<String>) -> Result<()> {
         if auth_ids.is_empty() {
             return Ok(());
@@ -272,153 +281,165 @@ impl SQLiteSelector {
         let json_array = serde_json::to_string(&auth_ids)
             .map_err(|e| SqliteError::Serialization(e.to_string()))?;
 
-        // Get database connection
-        let db = self.store.get_db().await;
-        let db = db.lock().await;
+        let weights = {
+            // Get database connection
+            let db = self.store.get_db().await;
+            let db = db.lock().await;
 
-        // Execute SQL query
-        let query = r"
-            SELECT
-                ids.auth_id,
-                COALESCE(m.success_rate, 1.0),
-                COALESCE(m.avg_latency_ms, 0),
-                CASE
-                    WHEN h.status = 'Healthy' THEN 1.0
-                    WHEN h.status = 'Degraded' THEN 0.5
-                    ELSE 0.01
-                END,
-                CASE
-                    WHEN h.unavailable_until IS NOT NULL AND datetime(h.unavailable_until) > datetime('now') THEN 0
-                    ELSE 1
-                END
-            FROM (SELECT value as auth_id FROM json_each(?1)) as ids
-            LEFT JOIN auth_metrics m ON m.auth_id = ids.auth_id
-            LEFT JOIN auth_health h ON h.auth_id = ids.auth_id
-        ";
+            // Execute SQL query
+            let query = r"
+                SELECT
+                    ids.auth_id,
+                    COALESCE(m.success_rate, 1.0),
+                    COALESCE(m.avg_latency_ms, 0),
+                    CASE
+                        WHEN h.status = 'Healthy' THEN 1.0
+                        WHEN h.status = 'Degraded' THEN 0.5
+                        ELSE 0.01
+                    END,
+                    CASE
+                        WHEN h.unavailable_until IS NOT NULL AND datetime(h.unavailable_until) > datetime('now') THEN 0
+                        ELSE 1
+                    END
+                FROM (SELECT value as auth_id FROM json_each(?1)) as ids
+                LEFT JOIN auth_metrics m ON m.auth_id = ids.auth_id
+                LEFT JOIN auth_health h ON h.auth_id = ids.auth_id
+            ";
 
-        let mut stmt = db
-            .prepare(query)
-            .map_err(|e| SqliteError::query("prepare_weight_query", e))?;
+            let mut stmt = db
+                .prepare(query)
+                .map_err(|e| SqliteError::query("prepare_weight_query", e))?;
 
-        let mut rows = stmt
-            .query([&json_array])
-            .map_err(|e| SqliteError::query("query_weights", e))?;
+            let mut rows = stmt
+                .query([&json_array])
+                .map_err(|e| SqliteError::query("query_weights", e))?;
 
-        let mut weights = HashMap::new();
+            let mut weights = HashMap::new();
 
-        while let Some(row) = rows
-            .next()
-            .map_err(|e| SqliteError::query("read_weight_row", e))?
-        {
-            let auth_id: String = row
-                .get(0)
-                .map_err(|e| SqliteError::query("get_weight_auth_id", e))?;
-            let success_rate: f64 = row
-                .get(1)
-                .map_err(|e| SqliteError::query("get_weight_success_rate", e))?;
-            let latency: f64 = row
-                .get(2)
-                .map_err(|e| SqliteError::query("get_weight_latency", e))?;
-            let health_factor: f64 = row
-                .get(3)
-                .map_err(|e| SqliteError::query("get_weight_health_factor", e))?;
-            let available: i32 = row
-                .get(4)
-                .map_err(|e| SqliteError::query("get_weight_available", e))?;
+            while let Some(row) = rows
+                .next()
+                .map_err(|e| SqliteError::query("read_weight_row", e))?
+            {
+                let auth_id: String = row
+                    .get(0)
+                    .map_err(|e| SqliteError::query("get_weight_auth_id", e))?;
+                let success_rate: f64 = row
+                    .get(1)
+                    .map_err(|e| SqliteError::query("get_weight_success_rate", e))?;
+                let latency: f64 = row
+                    .get(2)
+                    .map_err(|e| SqliteError::query("get_weight_latency", e))?;
+                let health_factor: f64 = row
+                    .get(3)
+                    .map_err(|e| SqliteError::query("get_weight_health_factor", e))?;
+                let available: i32 = row
+                    .get(4)
+                    .map_err(|e| SqliteError::query("get_weight_available", e))?;
 
-            if available == 0 {
-                weights.insert(auth_id.clone(), 0.0);
-                continue;
+                if available == 0 {
+                    weights.insert(auth_id.clone(), 0.0);
+                    continue;
+                }
+
+                // Create dummy auth info for weight calculation
+                let auth = AuthInfo {
+                    id: auth_id.clone(),
+                    priority: None,
+                    quota_exceeded: false,
+                    unavailable: false,
+                    model_states: Vec::new(),
+                };
+
+                let weight = self.calculate_weight(success_rate, latency, health_factor, &auth);
+                weights.insert(auth_id, weight);
             }
 
-            // Create dummy auth info for weight calculation
-            let auth = AuthInfo {
-                id: auth_id.clone(),
-                priority: None,
-                quota_exceeded: false,
-                unavailable: false,
-                model_states: Vec::new(),
-            };
+            weights
+        };
 
-            let weight = self.calculate_weight(success_rate, latency, health_factor, &auth);
-            weights.insert(auth_id, weight);
-        }
-
-        // Update weights table
+        // Update weights table (acquires its own lock)
         self.update_weights(weights).await?;
 
         Ok(())
     }
 
     /// Update weights in database
+    #[allow(clippy::significant_drop_tightening)]
     async fn update_weights(&self, weights: HashMap<String, f64>) -> Result<()> {
-        let db = self.store.get_db().await;
-        let db = db.lock().await;
+        {
+            let db = self.store.get_db().await;
+            let db = db.lock().await;
 
-        // Begin transaction
-        let tx = db
-            .unchecked_transaction()
-            .map_err(|e| SqliteError::query("begin_transaction", e))?;
+            // Begin transaction
+            let tx = db
+                .unchecked_transaction()
+                .map_err(|e| SqliteError::query("begin_transaction", e))?;
 
-        // Prepare insert statement
-        let mut stmt = tx
-            .prepare(
-                r"
-            INSERT INTO auth_weights (auth_id, weight, calculated_at, strategy)
-            VALUES (?1, ?2, datetime('now'), ?3)
-            ON CONFLICT(auth_id) DO UPDATE SET
-                weight = excluded.weight,
-                calculated_at = excluded.calculated_at,
-                strategy = excluded.strategy
-        ",
-            )
-            .map_err(|e| SqliteError::query("prepare_weight_insert", e))?;
+            // Prepare insert statement
+            let mut stmt = tx
+                .prepare(
+                    r"
+                INSERT INTO auth_weights (auth_id, weight, calculated_at, strategy)
+                VALUES (?1, ?2, datetime('now'), ?3)
+                ON CONFLICT(auth_id) DO UPDATE SET
+                    weight = excluded.weight,
+                    calculated_at = excluded.calculated_at,
+                    strategy = excluded.strategy
+            ",
+                )
+                .map_err(|e| SqliteError::query("prepare_weight_insert", e))?;
 
-        for (auth_id, weight) in &weights {
-            stmt.execute((&auth_id, weight, &self.config.strategy))
-                .map_err(|e| SqliteError::query("execute_weight_insert", e))?;
+            for (auth_id, weight) in &weights {
+                stmt.execute((&auth_id, weight, &self.config.strategy))
+                    .map_err(|e| SqliteError::query("execute_weight_insert", e))?;
+            }
+
+            drop(stmt);
+            tx.commit()
+                .map_err(|e| SqliteError::query("commit_weight_transaction", e))?;
         }
-
-        drop(stmt);
-        tx.commit()
-            .map_err(|e| SqliteError::query("commit_weight_transaction", e))?;
 
         Ok(())
     }
 
     /// Get top N auths by weight
+    #[allow(clippy::significant_drop_tightening)]
     pub async fn get_top_auths(&self, limit: usize) -> Result<Vec<String>> {
-        let db = self.store.get_db().await;
-        let db = db.lock().await;
+        let auth_ids = {
+            let db = self.store.get_db().await;
+            let db = db.lock().await;
 
-        let query = format!(
-            r"
-            SELECT auth_id FROM auth_weights
-            WHERE strategy = ?1
-            ORDER BY weight DESC
-            LIMIT {limit}
-        "
-        );
+            let query = format!(
+                r"
+                SELECT auth_id FROM auth_weights
+                WHERE strategy = ?1
+                ORDER BY weight DESC
+                LIMIT {limit}
+            "
+            );
 
-        let mut stmt = db
-            .prepare(&query)
-            .map_err(|e| SqliteError::query("prepare_top_auths_query", e))?;
+            let mut stmt = db
+                .prepare(&query)
+                .map_err(|e| SqliteError::query("prepare_top_auths_query", e))?;
 
-        let mut rows = stmt
-            .query([&self.config.strategy])
-            .map_err(|e| SqliteError::query("query_top_auths", e))?;
+            let mut rows = stmt
+                .query([&self.config.strategy])
+                .map_err(|e| SqliteError::query("query_top_auths", e))?;
 
-        let mut auth_ids = Vec::new();
+            let mut ids = Vec::new();
 
-        while let Some(row) = rows
-            .next()
-            .map_err(|e| SqliteError::query("read_top_auth_row", e))?
-        {
-            let auth_id: String = row
-                .get(0)
-                .map_err(|e| SqliteError::query("get_top_auth_id", e))?;
-            auth_ids.push(auth_id);
-        }
+            while let Some(row) = rows
+                .next()
+                .map_err(|e| SqliteError::query("read_top_auth_row", e))?
+            {
+                let auth_id: String = row
+                    .get(0)
+                    .map_err(|e| SqliteError::query("get_top_auth_id", e))?;
+                ids.push(auth_id);
+            }
+
+            ids
+        };
 
         Ok(auth_ids)
     }

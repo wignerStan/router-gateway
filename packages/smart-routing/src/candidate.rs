@@ -152,9 +152,13 @@ pub enum CapabilitySupport {
     Supported,
     /// Some required capabilities are not supported
     Unsupported {
+        /// Whether vision capability is missing.
         missing_vision: bool,
+        /// Whether tool use capability is missing.
         missing_tools: bool,
+        /// Whether streaming capability is missing.
         missing_streaming: bool,
+        /// Whether extended thinking capability is missing.
         missing_thinking: bool,
     },
 }

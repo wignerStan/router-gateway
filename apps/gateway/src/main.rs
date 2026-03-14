@@ -1,4 +1,7 @@
+//! LLM gateway server.
+
 pub mod config;
+/// Provider adapters for LLM APIs.
 pub mod providers;
 pub mod routes;
 pub mod state;

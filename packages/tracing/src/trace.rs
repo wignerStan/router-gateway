@@ -19,19 +19,24 @@ pub struct TraceSpan {
 
     /// Timestamps
     pub start_time: DateTime<Utc>,
+    /// Timestamp when the request completed.
     pub end_time: Option<DateTime<Utc>>,
 
     /// Request data
     pub input_tokens: Option<u32>,
+    /// The prompt or input text sent to the model.
     pub prompt: Option<String>,
 
     /// Response data
     pub output_tokens: Option<u32>,
+    /// HTTP status code from the response.
     pub status_code: Option<u16>,
+    /// Request latency in milliseconds.
     pub latency_ms: Option<u64>,
 
     /// Metadata
     pub error_message: Option<String>,
+    /// Whether the request used streaming responses.
     pub is_streaming: bool,
 }
 

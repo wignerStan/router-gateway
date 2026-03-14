@@ -114,6 +114,7 @@ impl MetricsCollector {
     }
 
     /// Record execution result
+    #[allow(clippy::significant_drop_tightening)]
     pub async fn record_result(
         &self,
         auth_id: &str,
@@ -136,63 +137,65 @@ impl MetricsCollector {
             }
         }
 
-        let mut metrics = self.metrics.write().await;
-        let entry = metrics
-            .entry(auth_id.to_string())
-            .or_insert_with(|| AuthMetrics {
-                total_requests: 0,
-                success_count: 0,
-                failure_count: 0,
-                avg_latency_ms: 0.0,
-                min_latency_ms: f64::MAX,
-                max_latency_ms: 0.0,
-                success_rate: 1.0,
-                error_rate: 0.0,
-                consecutive_successes: 0,
-                consecutive_failures: 0,
-                last_request_time: Utc::now(),
-                last_success_time: None,
-                last_failure_time: None,
-            });
+        {
+            let mut metrics = self.metrics.write().await;
+            let entry = metrics
+                .entry(auth_id.to_string())
+                .or_insert_with(|| AuthMetrics {
+                    total_requests: 0,
+                    success_count: 0,
+                    failure_count: 0,
+                    avg_latency_ms: 0.0,
+                    min_latency_ms: f64::MAX,
+                    max_latency_ms: 0.0,
+                    success_rate: 1.0,
+                    error_rate: 0.0,
+                    consecutive_successes: 0,
+                    consecutive_failures: 0,
+                    last_request_time: Utc::now(),
+                    last_success_time: None,
+                    last_failure_time: None,
+                });
 
-        // Update request counts
-        entry.total_requests += 1;
-        entry.last_request_time = Utc::now();
+            // Update request counts
+            entry.total_requests += 1;
+            entry.last_request_time = Utc::now();
 
-        if success {
-            entry.success_count += 1;
-            entry.consecutive_successes += 1;
-            entry.consecutive_failures = 0;
-            entry.last_success_time = Some(Utc::now());
-        } else {
-            entry.failure_count += 1;
-            entry.consecutive_failures += 1;
-            entry.consecutive_successes = 0;
-            entry.last_failure_time = Some(Utc::now());
-        }
-
-        // Update latency using EWMA
-        if latency_ms > 0.0 {
-            if entry.avg_latency_ms == 0.0 {
-                entry.avg_latency_ms = latency_ms;
+            if success {
+                entry.success_count += 1;
+                entry.consecutive_successes += 1;
+                entry.consecutive_failures = 0;
+                entry.last_success_time = Some(Utc::now());
             } else {
-                entry.avg_latency_ms =
-                    EWMA_ALPHA.mul_add(latency_ms, (1.0 - EWMA_ALPHA) * entry.avg_latency_ms);
+                entry.failure_count += 1;
+                entry.consecutive_failures += 1;
+                entry.consecutive_successes = 0;
+                entry.last_failure_time = Some(Utc::now());
             }
 
-            if latency_ms < entry.min_latency_ms {
-                entry.min_latency_ms = latency_ms;
+            // Update latency using EWMA
+            if latency_ms > 0.0 {
+                if entry.avg_latency_ms == 0.0 {
+                    entry.avg_latency_ms = latency_ms;
+                } else {
+                    entry.avg_latency_ms =
+                        EWMA_ALPHA.mul_add(latency_ms, (1.0 - EWMA_ALPHA) * entry.avg_latency_ms);
+                }
+
+                if latency_ms < entry.min_latency_ms {
+                    entry.min_latency_ms = latency_ms;
+                }
+                if latency_ms > entry.max_latency_ms {
+                    entry.max_latency_ms = latency_ms;
+                }
             }
-            if latency_ms > entry.max_latency_ms {
-                entry.max_latency_ms = latency_ms;
-            }
+
+            // Update success/error rate using EWMA
+            let current_success = if success { 1.0 } else { 0.0 };
+            entry.success_rate =
+                EWMA_ALPHA.mul_add(current_success, (1.0 - EWMA_ALPHA) * entry.success_rate);
+            entry.error_rate = 1.0 - entry.success_rate;
         }
-
-        // Update success/error rate using EWMA
-        let current_success = if success { 1.0 } else { 0.0 };
-        entry.success_rate =
-            EWMA_ALPHA.mul_add(current_success, (1.0 - EWMA_ALPHA) * entry.success_rate);
-        entry.error_rate = 1.0 - entry.success_rate;
     }
 
     /// Get auth metrics

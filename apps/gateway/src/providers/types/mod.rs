@@ -59,41 +59,49 @@ pub struct ProviderRequestBuilder {
 }
 
 impl ProviderRequestBuilder {
+    /// Set the messages for this request.
     pub fn messages(mut self, messages: Vec<Message>) -> Self {
         self.messages = messages;
         self
     }
 
+    /// Set the model identifier.
     pub fn model(mut self, model: impl Into<String>) -> Self {
         self.model = Some(model.into());
         self
     }
 
+    /// Set the maximum tokens to generate.
     pub const fn max_tokens(mut self, max_tokens: u32) -> Self {
         self.max_tokens = Some(max_tokens);
         self
     }
 
+    /// Set the sampling temperature (0.0 - 2.0).
     pub const fn temperature(mut self, temperature: f32) -> Self {
         self.temperature = Some(temperature);
         self
     }
 
+    /// Enable or disable streaming responses.
     pub const fn stream(mut self, stream: bool) -> Self {
         self.stream = stream;
         self
     }
 
+    /// Set the system prompt override.
     pub fn system(mut self, system: impl Into<String>) -> Self {
         self.system = Some(system.into());
         self
     }
 
+    /// Set the available tools for this request.
     pub fn tools(mut self, tools: Vec<Tool>) -> Self {
         self.tools = Some(tools);
         self
     }
 
+    /// Build the `ProviderRequest`. Returns an error if the model is not set.
     pub fn build(self) -> Result<ProviderRequest, String> {
         let model = self.model.ok_or("model is required")?;
         Ok(ProviderRequest {
