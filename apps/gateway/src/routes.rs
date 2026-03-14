@@ -1110,10 +1110,8 @@ mod integration_tests {
             let json_body = read_json_body(response).await;
 
             // Verify classification includes vision=true
-            assert!(
-                json_body["_gateway"]["classification"]["capabilities"]["vision"]
-                    .as_bool()
-                    .unwrap_or(false),
+            assert_eq!(
+                json_body["_gateway"]["classification"]["capabilities"]["vision"], true,
                 "Expected vision capability to be true"
             );
             assert_eq!(json_body["model"], "gpt-4-vision");
