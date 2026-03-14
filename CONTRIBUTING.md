@@ -28,11 +28,12 @@ Before submitting a PR, ensure all checks pass:
 just qa
 ```
 
-This runs:
+This runs fast checks (under 5s):
 
-- **Linting**: ESLint + Prettier check.
-- **Type-Check**: TypeScript compiler validation.
-- **Testing**: Bun's native test runner.
+- **Format**: `rustfmt` style check
+- **Lint**: `clippy` with all features
+
+For comprehensive checks (including tests, type-check, security audit): `just qa-full`
 
 ## Commit Guidelines
 
