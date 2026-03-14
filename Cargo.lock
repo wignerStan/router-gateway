@@ -667,6 +667,7 @@ dependencies = [
  "serde_yaml",
  "smart-routing",
  "subtle",
+ "tempfile",
  "tokio",
  "tokio-stream",
  "tower",
