@@ -334,7 +334,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::panic)]
     fn test_validate_negative_input_price() {
         let info = ModelInfo {
             id: "test-model".to_string(),
@@ -360,17 +359,17 @@ mod tests {
         let result = info.validate();
         assert!(result.is_err());
         let err = result.expect_err("expected error should be present");
-        // Check it's the right error type with the correct price
+        assert!(
+            matches!(err, ModelInfoError::InvalidInputPrice(_, _)),
+            "expected InvalidInputPrice, got: {err:?}"
+        );
         if let ModelInfoError::InvalidInputPrice(model, price) = err {
             assert_eq!(model, "test-model");
             assert!((price - (-1.0)).abs() < 0.001);
-        } else {
-            panic!("Expected InvalidInputPrice error");
         }
     }
 
     #[test]
-    #[allow(clippy::panic)]
     fn test_validate_negative_output_price() {
         let info = ModelInfo {
             id: "test-model".to_string(),
@@ -396,12 +395,13 @@ mod tests {
         let result = info.validate();
         assert!(result.is_err());
         let err = result.expect_err("expected error should be present");
-        // Check it's the right error type with the correct price
+        assert!(
+            matches!(err, ModelInfoError::InvalidOutputPrice(_, _)),
+            "expected InvalidOutputPrice, got: {err:?}"
+        );
         if let ModelInfoError::InvalidOutputPrice(model, price) = err {
             assert_eq!(model, "test-model");
             assert!((price - (-5.0)).abs() < 0.001);
-        } else {
-            panic!("Expected InvalidOutputPrice error");
         }
     }
 

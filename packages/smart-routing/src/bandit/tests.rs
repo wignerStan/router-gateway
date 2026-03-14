@@ -25,7 +25,11 @@ mod route_selection {
 
         let result = policy.select_route(&routes);
         assert!(result.is_some());
-        assert!(routes.contains(&result.expect("value must be present").as_str()));
+        assert!(routes.contains(
+            &result
+                .expect("Operation should succeed during test")
+                .as_str()
+        ));
     }
 
     #[test]
@@ -49,7 +53,9 @@ mod route_selection {
         // Run many selections and count
         let mut counts = HashMap::new();
         for _ in 0..100 {
-            let selected = policy.select_route(&routes).expect("value must be present");
+            let selected = policy
+                .select_route(&routes)
+                .expect("Operation should succeed during test");
             *counts.entry(selected).or_insert(0) += 1;
         }
 
@@ -71,7 +77,9 @@ mod recording_and_decay {
         policy.record_result("route1", true, 0.9);
         policy.record_result("route1", false, 0.3);
 
-        let stats = policy.get_stats("route1").expect("value must be present");
+        let stats = policy
+            .get_stats("route1")
+            .expect("Operation should succeed during test");
         assert_eq!(stats.successes, 2.0 + 1.0); // 2 successes + prior
         assert_eq!(stats.failures, 1.0 + 1.0); // 1 failure + prior
         assert_eq!(stats.pulls, 3);
@@ -90,7 +98,9 @@ mod recording_and_decay {
         policy.record_result("route1", true, 0.9);
         policy.record_result("route1", true, 0.9);
 
-        let stats1 = policy.get_stats("route1").expect("value must be present");
+        let stats1 = policy
+            .get_stats("route1")
+            .expect("Operation should succeed during test");
         let successes_after_2 = stats1.successes;
 
         // Add more pulls
@@ -98,7 +108,9 @@ mod recording_and_decay {
             policy.record_result("route1", true, 0.9);
         }
 
-        let stats2 = policy.get_stats("route1").expect("value must be present");
+        let stats2 = policy
+            .get_stats("route1")
+            .expect("Operation should succeed during test");
 
         // With decay, successes should not grow linearly
         assert!(stats2.successes < successes_after_2 + 10.0);
@@ -109,7 +121,9 @@ mod recording_and_decay {
         let mut policy = BanditPolicy::new();
 
         policy.record_result("route1", true, 0.0);
-        let stats = policy.get_stats("route1").expect("value must be present");
+        let stats = policy
+            .get_stats("route1")
+            .expect("Operation should succeed during test");
 
         assert_eq!(stats.last_utility, 0.0);
         assert_eq!(stats.successes, 2.0); // 1 + prior
@@ -154,7 +168,11 @@ mod utility_weighting {
         for _ in 0..20 {
             let result = policy.select_route_with_utility(&routes, &utilities);
             assert!(result.is_some());
-            assert!(routes.contains(&result.expect("value must be present").as_str()));
+            assert!(routes.contains(
+                &result
+                    .expect("Operation should succeed during test")
+                    .as_str()
+            ));
         }
     }
 
@@ -227,21 +245,27 @@ mod diversity_and_reset {
 
         // Test clamping to [0, 1]
         policy.set_diversity_penalty("route1", -0.5);
-        let stats = policy.get_stats("route1").expect("value must be present");
+        let stats = policy
+            .get_stats("route1")
+            .expect("Operation should succeed during test");
         assert_eq!(
             stats.diversity_penalty, 0.0,
             "Negative penalty should be clamped to 0"
         );
 
         policy.set_diversity_penalty("route1", 1.5);
-        let stats = policy.get_stats("route1").expect("value must be present");
+        let stats = policy
+            .get_stats("route1")
+            .expect("Operation should succeed during test");
         assert_eq!(
             stats.diversity_penalty, 1.0,
             "Penalty > 1 should be clamped to 1"
         );
 
         policy.set_diversity_penalty("route1", 0.5);
-        let stats = policy.get_stats("route1").expect("value must be present");
+        let stats = policy
+            .get_stats("route1")
+            .expect("Operation should succeed during test");
         assert_eq!(
             stats.diversity_penalty, 0.5,
             "Penalty in [0,1] should be unchanged"

@@ -458,7 +458,7 @@ mod tests {
         assert!(!support.is_supported());
         let missing = support.missing_description();
         assert!(missing.is_some());
-        let desc = missing.expect("value must be present");
+        let desc = missing.expect("Operation should succeed during test");
         assert!(desc.contains("vision"));
         assert!(desc.contains("thinking"));
     }

@@ -60,8 +60,9 @@ impl Registry {
         // 1. Check cache first (read lock)
         {
             let cache = self.cache.read().await;
+            let now = Utc::now();
             if let Some(cached) = cache.get(model_id) {
-                if Utc::now() < cached.expires_at {
+                if now < cached.expires_at {
                     return Ok(Some(cached.info.clone()));
                 }
             }
@@ -106,15 +107,15 @@ impl Registry {
                             Err(e.to_string())
                         } else {
                             // Cache valid result
-                            {
-                                self.cache.write().await.insert(
-                                    model_id.to_string(),
-                                    CachedModelInfo {
-                                        info: info.clone(),
-                                        expires_at: Utc::now() + self.ttl,
-                                    },
-                                );
-                            }
+                            let expires_at = Utc::now() + self.ttl;
+                            let mut cache = self.cache.write().await;
+                            cache.insert(
+                                model_id.to_string(),
+                                CachedModelInfo {
+                                    info: info.clone(),
+                                    expires_at,
+                                },
+                            );
                             Ok(Some(info))
                         }
                     },
@@ -152,10 +153,10 @@ impl Registry {
 
         let mut set = JoinSet::new();
         let mut result = HashMap::new();
-        let now = Utc::now();
 
         // Check cache and identify needed models
         {
+            let now = Utc::now();
             for model_id in model_ids {
                 if model_id.is_empty() {
                     continue;
@@ -195,13 +196,12 @@ impl Registry {
         &self,
         model_ids: &[String],
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let now = Utc::now();
-
         if model_ids.is_empty() {
             // Refresh all models
             let models = self.fetcher.list_all().await?;
 
             let mut cache = self.cache.write().await;
+            let now = Utc::now();
             for (id, info) in models {
                 if info.validate().is_err() {
                     continue;
@@ -472,11 +472,13 @@ impl Registry {
             loop {
                 tokio::select! {
                     _ = interval_timer.tick() => {
+                        let fetch_result = fetcher.list_all().await;
+
                         let mut cache_write = cache.write().await;
                         let now = Utc::now();
 
                         // Refresh all models
-                        if let Ok(models) = fetcher.list_all().await {
+                        if let Ok(models) = fetch_result {
                             for (id, info) in models {
                                 if info.validate().is_ok() {
                                     cache_write.insert(

@@ -111,7 +111,7 @@ impl SQLiteSelector {
 
         let available = {
             // Get database connection
-            let db = self.store.get_db().await;
+            let db = self.store.get_db();
             let db = db.lock().await;
 
             // Execute SQL query with weight calculation
@@ -233,7 +233,7 @@ impl SQLiteSelector {
             return available
                 .into_iter()
                 .next()
-                .expect("value must be present")
+                .expect("Operation should succeed during test")
                 .id;
         }
 
@@ -246,7 +246,7 @@ impl SQLiteSelector {
             return available
                 .into_iter()
                 .nth(idx)
-                .expect("value must be present")
+                .expect("Operation should succeed during test")
                 .id;
         }
 
@@ -254,7 +254,7 @@ impl SQLiteSelector {
         let fallback = available
             .last()
             .map(|a| a.id.clone())
-            .expect("value must be present");
+            .expect("Operation should succeed during test");
 
         // Weighted random selection
         let r = rand::thread_rng().gen::<f64>() * total_weight;
@@ -283,7 +283,7 @@ impl SQLiteSelector {
 
         let weights = {
             // Get database connection
-            let db = self.store.get_db().await;
+            let db = self.store.get_db();
             let db = db.lock().await;
 
             // Execute SQL query
@@ -367,7 +367,7 @@ impl SQLiteSelector {
     #[allow(clippy::significant_drop_tightening)]
     async fn update_weights(&self, weights: HashMap<String, f64>) -> Result<()> {
         {
-            let db = self.store.get_db().await;
+            let db = self.store.get_db();
             let db = db.lock().await;
 
             // Begin transaction
@@ -406,7 +406,7 @@ impl SQLiteSelector {
     #[allow(clippy::significant_drop_tightening)]
     pub async fn get_top_auths(&self, limit: usize) -> Result<Vec<String>> {
         let auth_ids = {
-            let db = self.store.get_db().await;
+            let db = self.store.get_db();
             let db = db.lock().await;
 
             let query = format!(
@@ -464,7 +464,7 @@ mod tests {
         let config = SQLiteConfig::default();
         let store = SQLiteStore::new(config)
             .await
-            .expect("value must be present");
+            .expect("Operation should succeed during test");
 
         let config = SmartRoutingConfig::default();
         let selector = SQLiteSelector::new(store, config);
@@ -492,12 +492,11 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(clippy::panic)]
     async fn test_precompute_weights() {
         let config = SQLiteConfig::default();
         let store = SQLiteStore::new(config)
             .await
-            .expect("value must be present");
+            .expect("Operation should succeed during test");
 
         let config = SmartRoutingConfig::default();
         let selector = SQLiteSelector::new(store, config);
@@ -512,12 +511,11 @@ mod tests {
         .await;
 
         // Either Ok or timeout is acceptable for this test
-        // The important thing is it doesn't panic
-        match result {
-            Ok(Ok(())) => {}, // Success
-            Ok(Err(e)) => panic!("Failed to precompute weights: {e}"),
-            Err(_) => {}, // Timeout - acceptable for empty database
-        }
+        // Inner error indicates a bug
+        assert!(
+            result.as_ref().map_or(true, Result::is_ok),
+            "precompute_weights should not fail: {result:?}"
+        );
     }
 
     #[tokio::test]
@@ -525,7 +523,7 @@ mod tests {
         let config = SQLiteConfig::default();
         let store = SQLiteStore::new(config)
             .await
-            .expect("value must be present");
+            .expect("Operation should succeed during test");
 
         let config = SmartRoutingConfig::default();
         let selector = SQLiteSelector::new(store, config);

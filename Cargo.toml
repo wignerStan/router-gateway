@@ -59,7 +59,7 @@ missing_docs = "deny"
 
 [workspace.lints.clippy]
 # Base rules
-all = { level = "warn", priority = -1 }
+all = { level = "deny", priority = -1 }
 pedantic = { level = "deny", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 perf = { level = "deny", priority = -1 }
@@ -89,7 +89,7 @@ cast_possible_wrap = { level = "allow", priority = 1 }
 cast_precision_loss = { level = "allow", priority = 1 }
 cast_sign_loss = { level = "allow", priority = 1 }
 cast_lossless = { level = "allow", priority = 1 }
-unused_async = { level = "allow", priority = 1 }
+unused_async = { level = "warn", priority = 1 }
 similar_names = { level = "allow", priority = 1 }
 too_many_lines = { level = "allow", priority = 1 }
 # Remaining pedantic lints with pre-existing violations
@@ -111,6 +111,10 @@ map_unwrap_or = { level = "allow", priority = 1 }
 semicolon_if_nothing_returned = { level = "allow", priority = 1 }
 needless_return = { level = "allow", priority = 1 }
 # unused_self requires API changes; address separately
+# significant_drop_tightening (nursery): read-lock-through-iteration is idiomatic for caches
+# future_not_send (nursery): rusqlite's RefCell in rows is not Sync — not our code
+significant_drop_tightening = { level = "allow", priority = 1 }
+future_not_send = { level = "allow", priority = 1 }
 unreadable_literal = { level = "allow", priority = 1 }
 many_single_char_names = { level = "allow", priority = 1 }
 default_trait_access = { level = "allow", priority = 1 }
