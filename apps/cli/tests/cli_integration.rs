@@ -49,11 +49,13 @@ fn validate_with_invalid_yaml_exits_nonzero() {
 
 #[test]
 fn validate_with_nonexistent_file_exits_nonzero() {
+    let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
+    let nonexistent_path = temp_dir.path().join("nonexistent_config.yaml");
     Command::cargo_bin("my-cli")
         .expect("my-cli binary should exist")
         .arg("validate")
         .arg("-c")
-        .arg("/tmp/nonexistent_config_xyz.yaml")
+        .arg(nonexistent_path)
         .assert()
         .failure()
         .stderr(predicates::str::contains("File not found"));
@@ -174,7 +176,7 @@ async fn models_format_json_produces_valid_json() {
         .await;
 
     let url = server.uri();
-    Command::cargo_bin("my-cli")
+    let assert = Command::cargo_bin("my-cli")
         .expect("my-cli binary should exist")
         .arg("models")
         .arg("--url")
@@ -182,9 +184,17 @@ async fn models_format_json_produces_valid_json() {
         .arg("-f")
         .arg("json")
         .assert()
-        .success()
-        .stdout(predicates::str::contains("\"models\""))
-        .stdout(predicates::str::contains("\"count\""));
+        .success();
+
+    let output = assert.get_output();
+    let actual: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("stdout should be valid JSON");
+    let expected = serde_json::json!({
+        "models": [],
+        "count": 0,
+        "message": null
+    });
+    assert_eq!(actual, expected);
 }
 
 // -- connection failure test --
