@@ -491,4 +491,102 @@ mod tests {
         assert_eq!(stats.cache_hits, 0);
         assert_eq!(stats.db_queries, 0);
     }
+    use crate::metrics::AuthMetrics;
+    use crate::health::{AuthHealth, HealthStatus};
+    use chrono::Utc;
+
+    #[tokio::test]
+    async fn test_precompute_and_get_top_auths() {
+        let config = SQLiteConfig::default();
+        let store = SQLiteStore::new(config).await.unwrap();
+        let config = SmartRoutingConfig::default();
+        let selector = SQLiteSelector::new(store.clone(), config);
+
+        // Add health and metrics for auth1 (Healthy, good metrics)
+        let metrics1 = AuthMetrics {
+            total_requests: 100,
+            success_count: 100,
+            failure_count: 0,
+            avg_latency_ms: 10.0,
+            min_latency_ms: 5.0,
+            max_latency_ms: 20.0,
+            success_rate: 1.0,
+            error_rate: 0.0,
+            consecutive_successes: 100,
+            consecutive_failures: 0,
+            last_request_time: Utc::now(),
+            last_success_time: Some(Utc::now()),
+            last_failure_time: None,
+        };
+        store.write_metrics("auth1", &metrics1).await.unwrap();
+
+        let health1 = AuthHealth {
+            status: HealthStatus::Healthy,
+            consecutive_successes: 100,
+            consecutive_failures: 0,
+            last_status_change: Utc::now(),
+            last_check_time: Utc::now(),
+            unavailable_until: None,
+            error_counts: std::collections::HashMap::new(),
+        };
+        store.write_health("auth1", &health1).await.unwrap();
+
+        // Add health and metrics for auth2 (Degraded, bad metrics)
+        let metrics2 = AuthMetrics {
+            total_requests: 100,
+            success_count: 50,
+            failure_count: 50,
+            avg_latency_ms: 200.0,
+            min_latency_ms: 100.0,
+            max_latency_ms: 300.0,
+            success_rate: 0.5,
+            error_rate: 0.5,
+            consecutive_successes: 0,
+            consecutive_failures: 10,
+            last_request_time: Utc::now(),
+            last_success_time: Some(Utc::now()),
+            last_failure_time: Some(Utc::now()),
+        };
+        store.write_metrics("auth2", &metrics2).await.unwrap();
+
+        let health2 = AuthHealth {
+            status: HealthStatus::Degraded,
+            consecutive_successes: 0,
+            consecutive_failures: 10,
+            last_status_change: Utc::now(),
+            last_check_time: Utc::now(),
+            unavailable_until: None,
+            error_counts: std::collections::HashMap::new(),
+        };
+        store.write_health("auth2", &health2).await.unwrap();
+
+        // Precompute weights
+        let auth_ids = vec!["auth1".to_string(), "auth2".to_string()];
+        selector.precompute_weights(auth_ids).await.unwrap();
+
+        // Get top auths
+        let top_auths = selector.get_top_auths(2).await.unwrap();
+
+        assert_eq!(top_auths.len(), 2);
+        // auth1 should have a higher weight because of better metrics and health
+        assert_eq!(top_auths[0], "auth1");
+        assert_eq!(top_auths[1], "auth2");
+    }
+
+    #[tokio::test]
+    async fn test_get_top_auths_limit() {
+        let config = SQLiteConfig::default();
+        let store = SQLiteStore::new(config).await.unwrap();
+        let config = SmartRoutingConfig::default();
+        let selector = SQLiteSelector::new(store.clone(), config);
+
+        // Precompute weights
+        let auth_ids = vec!["auth1".to_string(), "auth2".to_string(), "auth3".to_string()];
+        selector.precompute_weights(auth_ids).await.unwrap();
+
+        // Get top auths with limit 2
+        let top_auths = selector.get_top_auths(2).await.unwrap();
+
+        assert_eq!(top_auths.len(), 2);
+    }
 }
