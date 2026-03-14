@@ -669,7 +669,7 @@ providers:
         let openai = config
             .providers
             .get("openai")
-            .expect("valid result should be retrieved");
+            .expect("openai provider should be present in test config")
         assert_eq!(openai.base_url.as_deref(), Some("https://api.openai.com"));
         assert_eq!(
             openai

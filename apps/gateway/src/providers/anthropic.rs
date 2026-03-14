@@ -914,7 +914,7 @@ mod tests {
         let tool_calls = result
             .tool_calls
             .as_ref()
-            .expect("valid result should be retrieved");
+            .expect("tool_calls should be Some if has_tool_calls() is true");
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].id, "toolu_123");
         assert_eq!(tool_calls[0].function.name, "get_weather");
