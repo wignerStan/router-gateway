@@ -503,7 +503,7 @@ mod integration_tests {
         let body_bytes = axum::body::to_bytes(response.into_body(), MAX_RESPONSE_BYTES)
             .await
             .expect("response body should be readable");
-        serde_json::from_slice(&body_bytes).expect("response body should be valid JSON")
+        serde_json::from_slice(&body_bytes).unwrap_or_else(|e| panic!("Failed to deserialize JSON: {e}. Body: {}", String::from_utf8_lossy(&body_bytes)))
     }
 
     fn create_test_state() -> AppState {
@@ -1025,7 +1025,7 @@ mod integration_tests {
             assert_eq!(value["error"]["type"], ERR_INVALID_REQUEST);
             assert!(value["error"]["message"]
                 .as_str()
-                .unwrap()
+                .expect("The 'message' field should be a string in the error response.")
                 .contains("Invalid or expired API token"));
         }
 
@@ -1496,9 +1496,9 @@ mod integration_tests {
             assert!(gw["classification"]["format"].is_string());
 
             let caps = &gw["classification"]["capabilities"];
-            assert!(caps["vision"].is_boolean());
-            assert!(caps["tools"].is_boolean());
-            assert!(caps["streaming"].is_boolean());
+            assert_eq!(caps["vision"], false);
+            assert_eq!(caps["tools"], false);
+            assert_eq!(caps["streaming"], false);
             // thinking is currently omitted by the chat_completions handler
             assert!(caps["thinking"].is_null());
         }
