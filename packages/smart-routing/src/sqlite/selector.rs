@@ -482,20 +482,10 @@ mod tests {
 
         let auth_ids = vec!["auth1".to_string(), "auth2".to_string()];
 
-        // Should not error - use timeout to avoid hanging
-        let result = tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            selector.precompute_weights(auth_ids),
-        )
-        .await;
-
-        // Either Ok or timeout is acceptable for this test
-        // The important thing is it doesn't panic
-        match result {
-            Ok(Ok(_)) => {}, // Success
-            Ok(Err(e)) => panic!("Failed to precompute weights: {}", e),
-            Err(_) => {}, // Timeout - acceptable for empty database
-        }
+        selector
+            .precompute_weights(auth_ids)
+            .await
+            .expect("precompute weights should succeed");
     }
 
     #[tokio::test]
