@@ -58,9 +58,11 @@ This project enforces production-level code style using `rustfmt` and `clippy`. 
 ### Error Handling
 
 - **Result over Panic**: Prefer returning `Result` and avoid `panic!`.
-- **Avoid unwraps**: Do not use `unwrap()` or `expect()` in production code. Handle errors gracefully.
+- **No unwrap in production**: `unwrap()` is denied everywhere by clippy. Use `unwrap_or()` / `unwrap_or_else()` for default values, or `?` for error propagation.
+- **No expect in production**: `expect()` is denied in production code. If truly unavoidable (e.g., compile-time embedded data, type-state builders), use `#[allow(clippy::expect_used)]` with a comment explaining why.
 - **Error Types**: Use `thiserror` for library/crate level errors and reserve `anyhow` strictly for binaries/applications.
 - **Error Bubbling**: Use the `?` operator to bubble errors up.
+- **Test code**: `expect("reason")` is allowed in tests for better failure messages. Prefer `.expect()` over `.unwrap()` in tests.
 
 ### Comments and Documentation
 
@@ -92,7 +94,7 @@ This project enforces production-level code style using `rustfmt` and `clippy`. 
 
 ## Security considerations
 
-- No `unwrap()`/`expect()` in production — prevents DoS via panic.
+- No `unwrap()` in production — denied by clippy. `expect()` only with `#[allow(clippy::expect_used)]` + justification comment.
 - Use `constant_time_token_eq()` for all auth token comparisons (timing side-channel prevention).
 - Use `partial_cmp().unwrap_or(Ordering::Equal)` for all float comparisons (NaN safety).
 - SSRF protection blocks private/reserved IPs and IPv6-mapped/compatible addresses.

@@ -423,13 +423,16 @@ pub(crate) async fn chat_completions(
     tracing::info!("Proxying request to {} at {}", provider, endpoint);
 
     // Return mock response for now
+    // ALLOW: SystemTime before UNIX_EPOCH is impossible in practice.
+    #[allow(clippy::expect_used)]
+    let created = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_secs();
     Ok(Json(json!({
         "id": format!("chatcmpl-{}", uuid::Uuid::new_v4()),
         "object": "chat.completion",
-        "created": std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs(),
+        "created": created,
         "model": model_id,
         "choices": [{
             "index": 0,

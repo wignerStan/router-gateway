@@ -154,6 +154,9 @@ impl RateLimiter {
     /// Remove expired rate-limit entries to bound memory growth.
     /// Called periodically from a background task.
     pub(crate) fn prune(&self) {
+        // ALLOW: Mutex poisoning is an acceptable panic — propagates failure for
+        // inconsistent shared state.
+        #[allow(clippy::expect_used)]
         let mut buckets = self.buckets.lock().expect("Rate limiter mutex poisoned");
         let now = Instant::now();
         buckets.retain(|_, (_, window_start)| now.duration_since(*window_start).as_secs() < 120);

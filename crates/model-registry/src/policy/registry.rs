@@ -101,6 +101,8 @@ impl PolicyRegistry {
 
     /// Load the embedded JSON schema for policy validation.
     pub fn load_schema() -> serde_json::Value {
+        // ALLOW: File is embedded at compile time via `include_str!` — if invalid, it is a build-time bug.
+        #[allow(clippy::expect_used)]
         serde_json::from_str(include_str!("../../../../config/policies.schema.json"))
             .expect("embedded policies.schema.json should be valid JSON")
     }
@@ -121,11 +123,15 @@ impl PolicyRegistry {
         if validator.is_valid(&instance) {
             Ok(instance)
         } else {
-            let mut errors: Vec<String> = validator
-                .validate(&instance)
-                .expect_err("validation should fail since is_valid returned false")
-                .map(|err| format!("  - {err}"))
-                .collect();
+            let validation = match validator.validate(&instance) {
+                Ok(()) => {
+                    return Err(PolicyLoadError::Schema(
+                        "validation failed but no errors produced".to_string(),
+                    ));
+                },
+                Err(errs) => errs,
+            };
+            let mut errors: Vec<String> = validation.map(|err| format!("  - {err}")).collect();
             errors.sort();
             Err(PolicyLoadError::Schema(format!(
                 "Schema validation failed:\n{}",

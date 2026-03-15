@@ -300,39 +300,75 @@ jobs:
           retention-days: 7
 
   # ===========================================
-  # QUALITY GATE: FINAL STATUS
+  # PR CHECKS: CONFIG & LINT HYGIENE
   # ===========================================
 
-  quality-gate:
-    name: Quality Gate
+  config-change-warning:
+    name: Config Change Warning
     runs-on: ubuntu-latest
-    needs: [fmt, lint, msrv, type-check, test, coverage, build]
-    if: always()
+    if: github.event_name == 'pull_request'
     steps:
-      - name: Check all jobs passed
-        run: |
-          if [[ "${{ needs.fmt.result }}" == "failure" ||
-                "${{ needs.lint.result }}" == "failure" ||
-                "${{ needs.msrv.result }}" == "failure" ||
-                "${{ needs.type-check.result }}" == "failure" ||
-                "${{ needs.test.result }}" == "failure" ||
-                "${{ needs.coverage.result }}" == "failure" ||
-                "${{ needs.build.result }}" == "failure" ]]; then
-            echo "::error::Quality gate failed - one or more required jobs did not pass"
-            exit 1
-          fi
-          echo "::notice::All quality gates passed!"
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Summary
+      - name: Detect configuration file changes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "## 🎉 Quality Gate Passed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Format | ✅ |" >> $GITHUB_STEP_SUMMARY
-          echo "| Lint | ✅ |" >> $GITHUB_STEP_SUMMARY
-          echo "| MSRV | ✅ |" >> $GITHUB_STEP_SUMMARY
-          echo "| Type Check | ✅ |" >> $GITHUB_STEP_SUMMARY
-          echo "| Tests | ✅ |" >> $GITHUB_STEP_SUMMARY
-          echo "| Coverage | ✅ |" >> $GITHUB_STEP_SUMMARY
-          echo "| Build | ✅ |" >> $GITHUB_STEP_SUMMARY
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          NUMBER="${{ github.event.pull_request.number }}"
+
+          CONFIG_FILES=$(git diff --name-only "$BASE" "$HEAD" | grep -E '^(clippy\.toml|Cargo\.toml|rustfmt\.toml|justfile|\.pre-commit-config\.yaml|\.github/workflows/)' || true)
+
+          if [ -n "$CONFIG_FILES" ]; then
+            CHANGED=$(echo "$CONFIG_FILES" | sed 's/^/`/;s/$`/' | tr '\n' ', ' | sed 's/,$//')
+            BODY="## ⚠️ Configuration files changed
+
+          This PR modifies: ${CHANGED}
+
+          Please verify these changes are intentional and do not weaken lint rules, change build targets, or alter CI behavior."
+            echo "$BODY" | gh pr comment "$NUMBER" --body-file -
+            echo "::warning::Configuration files changed: ${CONFIG_FILES//$'\n'/, }"
+          else
+            echo "No configuration files changed."
+          fi
+
+  clippy-allow-check:
+    name: Clippy Allow Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect new #[allow(clippy::] without justification
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          NUMBER="${{ github.event.pull_request.number }}"
+
+          # Find added lines with #[allow(clippy:: that lack an ALLOW: justification comment
+          VIOLATIONS=$(git diff "$BASE" "$HEAD" -- '*.rs' | grep '^+' | grep -E '#\[allow\(clippy::' | grep -v 'ALLOW:' || true)
+
+          if [ -n "$VIOLATIONS" ]; then
+            BODY="## ⚠️ Unjustified \`#[allow(clippy::]\` detected
+
+          The following lines use \`#[allow(clippy::...)]\` without an \`ALLOW:\` justification comment:
+
+          \`\`\`
+          ${VIOLATIONS}
+          \`\`\`
+
+          Per project policy, every \`#[allow(clippy::...)]\` must include a comment starting with \`ALLOW:\` explaining why the suppression is needed."
+            echo "$BODY" | gh pr comment "$NUMBER" --body-file -
+            echo "::warning::Found #[allow(clippy::] without ALLOW: justification"
+          else
+            echo "No unjustified #[allow(clippy::] found."
+          fi

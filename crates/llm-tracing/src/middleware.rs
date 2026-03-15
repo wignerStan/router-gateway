@@ -168,6 +168,9 @@ impl TracingMiddlewareBuilder {
 
     pub fn build(self) -> TracingMiddleware {
         TracingMiddleware {
+            // ALLOW: Type-state builder — collector is required but not yet enforced at compile time.
+            // The API contract is: call `.with_collector()` before `.build()`.
+            #[allow(clippy::expect_used)]
             collector: self
                 .collector
                 .expect("Collector must be set to build TracingMiddleware"),
