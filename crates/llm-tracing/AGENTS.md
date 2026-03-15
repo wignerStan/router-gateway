@@ -4,7 +4,7 @@ This project is part of the workspace. Please refer to the root [AGENTS.md](../.
 
 ## Crate-Specific Instructions
 
-- **Location:** `packages/tracing`
+- **Location:** `crates/llm-tracing`
 - **Package:** `llm-tracing`
 - **Build:** Run `cargo build -p llm-tracing`
 - **Test:** Run `cargo test -p llm-tracing`

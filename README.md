@@ -102,24 +102,17 @@ Request/response observability via `TraceSpan`, `MemoryTraceCollector`, and `Tra
 
 ```
 gateway/
+  crates/
+    gateway/                 # HTTP API server (Axum) — lib + bin
+    model-registry/          # Model metadata, 5-dimension categorization
+    smart-routing/           # Weighted credential selection, health tracking
+    llm-tracing/             # Request/response observability
+  cli/                       # CLI management utility (package: my-cli)
+  deploy/                    # Docker deployment files
   config/
     policies.json            # Routing policy configuration
     policies.schema.json     # JSON schema for policy validation
-  packages/
-    model-registry/          # Model metadata, 5-dimension categorization
-    smart-routing/           # Weighted credential selection, health tracking
-    tracing/                 # Request/response observability (package: llm-tracing)
-  apps/
-    gateway/                 # HTTP API server (Axum)
-    cli/                     # CLI management utility (package: my-cli)
 ```
-
-**Package names differ from directory names:**
-
-| Directory           | Package Name  |
-| ------------------- | ------------- |
-| `packages/tracing/` | `llm-tracing` |
-| `apps/cli/`         | `my-cli`      |
 
 ## Getting Started
 
@@ -276,7 +269,7 @@ The workspace enforces strict lints at the workspace level: `clippy::all`, `clip
 
 ## Package Reference
 
-### `smart-routing` (`packages/smart-routing/`)
+### `smart-routing` (`crates/smart-routing/`)
 
 Weighted credential selection with health tracking, time-aware routing, and policy-based dispatch.
 
@@ -289,7 +282,7 @@ Weighted credential selection with health tracking, time-aware routing, and poli
 | `Router`             | `src/router/mod.rs`        |
 | `MetricsCollector`   | `src/metrics.rs`           |
 
-### `model-registry` (`packages/model-registry/`)
+### `model-registry` (`crates/model-registry/`)
 
 Model metadata, 5-dimension categorization, and routing policy system with JSON schema validation.
 
@@ -301,7 +294,7 @@ Model metadata, 5-dimension categorization, and routing policy system with JSON 
 | `RoutingPolicy`       | `src/policy/mod.rs`      |
 | `PolicyRegistry`      | `src/policy/registry.rs` |
 
-### `llm-tracing` (`packages/tracing/`)
+### `llm-tracing` (`crates/llm-tracing/`)
 
 Request/response observability with in-memory trace collection and Axum middleware integration.
 
@@ -311,7 +304,7 @@ Request/response observability with in-memory trace collection and Axum middlewa
 | `MemoryTraceCollector` | `src/collector.rs`  |
 | `TracingMiddleware`    | `src/middleware.rs` |
 
-### `gateway` (`apps/gateway/`)
+### `gateway` (`crates/gateway/`)
 
 HTTP API server with middleware stack, provider adapters, and route handlers.
 

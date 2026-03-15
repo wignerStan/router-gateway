@@ -1,11 +1,11 @@
 [workspace]
 resolver = "2"
 members = [
-    "apps/cli",
-    "apps/gateway",
-    "packages/smart-routing",
-    "packages/model-registry",
-    "packages/tracing"
+    "cli",
+    "crates/gateway",
+    "crates/smart-routing",
+    "crates/model-registry",
+    "crates/llm-tracing",
 ]
 
 [workspace.package]
@@ -49,9 +49,9 @@ clap = { version = "4.4", features = ["derive"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 
 # Internal packages
-smart-routing = { path = "packages/smart-routing", version = "0.1.0" }
-model-registry = { path = "packages/model-registry", version = "0.1.0" }
-llm-tracing = { path = "packages/tracing", version = "0.1.0" }
+smart-routing = { path = "crates/smart-routing", version = "0.1.0" }
+model-registry = { path = "crates/model-registry", version = "0.1.0" }
+llm-tracing = { path = "crates/llm-tracing", version = "0.1.0" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

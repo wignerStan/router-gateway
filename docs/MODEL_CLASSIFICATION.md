@@ -1,6 +1,6 @@
 # Model Classification System
 
-> **Note:** Model classification is implemented in `packages/model-registry/src/categories.rs`.
+> **Note:** Model classification is implemented in `crates/model-registry/src/categories.rs`.
 > This documentation reflects the actual Rust implementation.
 
 ## Overview
@@ -22,7 +22,7 @@ Defines functional capabilities supported by a model.
 | `Streaming` | Streaming response support  | All models                              |
 | `Thinking`  | Extended thinking/reasoning | claude-sonnet-4, o1, gemini-2.5-flash   |
 
-**Implementation:** `packages/model-registry/src/categories.rs:8`
+**Implementation:** `crates/model-registry/src/categories.rs:8`
 
 ```rust
 pub enum CapabilityCategory {
@@ -43,7 +43,7 @@ Quality/performance tier for model selection.
 | `Standard` | Balanced quality/cost         | Default                            | claude-sonnet-4, gpt-4o                       |
 | `Fast`     | Lowest cost, highest speed    | Price ≤$1/1M or known fast ID      | claude-haiku-4, gpt-4o-mini, gemini-2.5-flash |
 
-**Implementation:** `packages/model-registry/src/categories.rs:29`
+**Implementation:** `crates/model-registry/src/categories.rs:29`
 
 ```rust
 pub enum TierCategory {
@@ -64,7 +64,7 @@ Pricing band based on input price per million tokens.
 | `Standard`     | $1-10/1M    | claude-sonnet-4, gpt-4o     |
 | `Economy`      | <$1/1M      | claude-haiku-4, gpt-4o-mini |
 
-**Implementation:** `packages/model-registry/src/categories.rs:51`
+**Implementation:** `crates/model-registry/src/categories.rs:51`
 
 ```rust
 pub enum CostCategory {
@@ -86,7 +86,7 @@ Context size band for request fitting.
 | `Large`  | 128K-500K   | claude-sonnet-4, gpt-4o, gemini-2.5-pro    |
 | `Ultra`  | ≥500K       | gemini-2.5-flash (1M), gemini-1.5-pro (2M) |
 
-**Implementation:** `packages/model-registry/src/categories.rs:76`
+**Implementation:** `crates/model-registry/src/categories.rs:76`
 
 ```rust
 pub enum ContextWindowCategory {
@@ -101,7 +101,7 @@ pub enum ContextWindowCategory {
 
 Model vendor for provider-specific routing.
 
-**Implementation:** `packages/model-registry/src/categories.rs:102`
+**Implementation:** `crates/model-registry/src/categories.rs:102`
 
 ```rust
 pub enum ProviderCategory {
@@ -316,7 +316,7 @@ async fn filter_by_provider(provider: ProviderCategory) -> Vec<ModelInfo>
 async fn find_best_fit(tokens: usize) -> Option<ModelInfo>
 ```
 
-**Implementation:** `packages/model-registry/src/registry/mod.rs:305-430`
+**Implementation:** `crates/model-registry/src/registry/mod.rs:305-430`
 
 ---
 

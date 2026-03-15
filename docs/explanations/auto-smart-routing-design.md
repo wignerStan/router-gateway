@@ -133,7 +133,7 @@ Advanced optimization.
 
 ## Proposed Package Changes
 
-### `packages/smart-routing`
+### `crates/smart-routing`
 
 This package should become the real routing engine.
 
@@ -164,7 +164,7 @@ Deprecate the placeholder role of:
 
 and replace it with a real orchestrator.
 
-### `apps/gateway`
+### `crates/gateway`
 
 This app should:
 
@@ -176,7 +176,7 @@ This app should:
 - record outcome,
 - emit route decision traces.
 
-### `packages/model-registry`
+### `crates/model-registry`
 
 This package remains the source of model metadata, but it needs stronger support for routing feasibility.
 
@@ -190,7 +190,7 @@ Add or extend metadata for:
 - provider family aliases,
 - fallback equivalence classes.
 
-### `packages/tracing`
+### `crates/llm-tracing`
 
 Extend to support:
 
@@ -201,7 +201,7 @@ Extend to support:
 
 ## Core Domain Types
 
-These types should be introduced in `packages/smart-routing`.
+These types should be introduced in `crates/smart-routing`.
 
 ### `RouteRequestContext`
 
@@ -332,7 +332,7 @@ Inference rules:
 Implementation:
 
 - create a `RequestClassifier` trait,
-- add `OpenAIRequestClassifier` in `apps/gateway`,
+- add `OpenAIRequestClassifier` in `crates/gateway`,
 - keep classifier logic deterministic in v1,
 - avoid LLM-based request classification in the router itself.
 

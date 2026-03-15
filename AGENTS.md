@@ -9,12 +9,7 @@ A **local LLM gateway** written in Rust for intelligent request routing. Routes 
 
 ### Package Names
 
-> **Note:** Directory names differ from Cargo package names:
-
-| Directory           | Package Name  |
-| ------------------- | ------------- |
-| `packages/tracing/` | `llm-tracing` |
-| `apps/cli/`         | `my-cli`      |
+Directory names match Cargo package names throughout the workspace.
 
 ### Build and test commands
 

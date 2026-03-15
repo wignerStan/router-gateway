@@ -4,7 +4,7 @@ This project is part of the workspace. Please refer to the root [AGENTS.md](../.
 
 ## Crate-Specific Instructions
 
-- **Location:** `packages/model-registry`
+- **Location:** `crates/model-registry`
 - **Package:** `model-registry`
 - **Build:** Run `cargo build -p model-registry`
 - **Test:** Run `cargo test -p model-registry`

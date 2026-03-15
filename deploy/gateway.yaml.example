@@ -1,0 +1,19 @@
+server:
+  port: 3000
+  host: 0.0.0.0
+  timeout_secs: 120
+  # auth_tokens:
+  #   - "your-secret-token-here"
+  # trust_proxy_headers: false
+
+credentials: []
+  # - id: anthropic-primary
+  #   provider: anthropic
+  #   api_key: ${ANTHROPIC_API_KEY}
+  #   priority: 10
+
+routing:
+  strategy: weighted
+  session_affinity: true
+  min_healthy_credentials: 1
+  fallback_depth: 2

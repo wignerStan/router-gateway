@@ -50,19 +50,19 @@ gateway/
 
 **Findings:**
 
-- `packages/smart-routing/` has good module organization:
+- `crates/smart-routing/` has good module organization:
   - `router.rs`, `selector.rs`, `health.rs`, `metrics.rs`, `weight.rs`
   - SQLite persistence isolated in `sqlite/` subdirectory
-- `packages/model-registry/` is well-structured:
+- `crates/model-registry/` is well-structured:
   - `categories.rs`, `registry.rs`, `info.rs`, `fetcher.rs`
-- `packages/tracing/` follows similar patterns
+- `crates/llm-tracing/` follows similar patterns
 
-**Issue:** The `apps/gateway/src/main.rs` contains inline route handlers (root, health_check, list_models, route_request) instead of feature modules.
+**Issue:** The `crates/gateway/src/main.rs` contains inline route handlers (root, health_check, list_models, route_request) instead of feature modules.
 
 **Recommendation:**
 
 ```rust
-// apps/gateway/src/
+// crates/gateway/src/
 //   main.rs          # Bootstrap only
 //   routes/
 //     mod.rs
@@ -85,7 +85,7 @@ gateway/
 **Recommendation:** Create local READMEs for each package:
 
 ```markdown
-# packages/model-registry/README.md (proposed)
+# crates/model-registry/README.md (proposed)
 
 ## Purpose
 
@@ -175,7 +175,7 @@ docs/
 **Current State:**
 
 - Unit tests: Inline `#[cfg(test)]` modules (acceptable for Rust)
-- Integration tests: `apps/gateway/src/main.rs` contains `integration_tests` module
+- Integration tests: `crates/gateway/src/main.rs` contains `integration_tests` module
 
 **Issues:**
 
@@ -216,12 +216,12 @@ tests/
 [workspace]
 resolver = "2"
 members = [
-    "apps/cli",
-    "apps/gateway",
-    "packages/smart-routing",
-    "packages/model-registry",
-    "packages/tracing",
-    "packages/core"
+    "cli",
+    "crates/gateway",
+    "crates/smart-routing",
+    "crates/model-registry",
+    "crates/llm-tracing",
+    "crates/core"
 ]
 ```
 
@@ -257,12 +257,12 @@ pedantic = "warn"
 
 ### Package Structure Issues
 
-**packages/core/src/lib.rs** contains only a placeholder `Greeting` struct:
+**crates/core/src/lib.rs** contains only a placeholder `Greeting` struct:
 
 - This package appears unused by other packages
 - Consider either removing or populating with actual shared utilities
 
-**apps/cli/src/main.rs** is a placeholder that only uses `my_core::Greeting`:
+**cli/src/main.rs** is a placeholder that only uses `my_core::Greeting`:
 
 - Should be removed or clearly marked as a template/placeholder
 
@@ -284,7 +284,7 @@ pedantic = "warn"
 
 ### Low Priority (Nice to Have)
 
-7. **Remove or develop placeholder packages** - `packages/core` and `apps/cli`
+7. **Remove or develop placeholder packages** - `crates/core` and `cli`
 8. **Add package-specific justfile tasks**
 9. **Generate API documentation** - Configure `cargo doc` automation
 

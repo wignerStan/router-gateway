@@ -84,12 +84,12 @@ Enhanced the justfile with:
 1. **Create Package READMEs**
 
    Missing READMEs in:
-   - `packages/smart-routing/README.md`
-   - `packages/model-registry/README.md`
-   - `packages/tracing/README.md`
+   - `crates/smart-routing/README.md`
+   - `crates/model-registry/README.md`
+   - `crates/llm-tracing/README.md`
    - `packages/core/README.md`
-   - `apps/gateway/README.md`
-   - `apps/cli/README.md`
+   - `crates/gateway/README.md`
+   - `cli/README.md`
 
 2. **Add Workspace Dependencies to Cargo.toml**
 
@@ -109,7 +109,7 @@ Enhanced the justfile with:
    Extract route handlers from `main.rs` into feature modules:
 
    ```
-   apps/gateway/src/
+   crates/gateway/src/
      main.rs          # Bootstrap only
      routes/
        mod.rs
