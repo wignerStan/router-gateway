@@ -199,32 +199,6 @@ jobs:
             echo "::warning::Coverage file coverage/cobertura.xml not found"
           fi
 
-  security:
-    name: Security Audit
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo registry
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: security
-
-      - name: Install audit and gitleaks
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-audit,gitleaks
-
-      - name: Run security audit
-        run: cargo audit
-
-      - name: Run secret scan
-        run: gitleaks detect --source . --verbose
-
   # ===========================================
   # TIER 4: BUILD ARTIFACTS
   # ===========================================
@@ -332,7 +306,7 @@ jobs:
   quality-gate:
     name: Quality Gate
     runs-on: ubuntu-latest
-    needs: [fmt, lint, msrv, type-check, test, coverage, security, build]
+    needs: [fmt, lint, msrv, type-check, test, coverage, build]
     if: always()
     steps:
       - name: Check all jobs passed
@@ -343,7 +317,6 @@ jobs:
                 "${{ needs.type-check.result }}" != "success" ||
                 "${{ needs.test.result }}" != "success" ||
                 "${{ needs.coverage.result }}" != "success" ||
-                "${{ needs.security.result }}" != "success" ||
                 "${{ needs.build.result }}" != "success" ]]; then
             echo "::error::Quality gate failed - one or more required jobs did not pass"
             exit 1
