@@ -33,9 +33,13 @@ pub fn expand_env_var(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{LazyLock, Mutex};
+
+    static ENV_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
     #[test]
     fn expands_set_variable() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         std::env::set_var("TEST_UTILS_API_KEY", "secret-value");
         let expanded = expand_env_var("${TEST_UTILS_API_KEY}");
         assert_eq!(expanded, "secret-value");
@@ -44,6 +48,7 @@ mod tests {
 
     #[test]
     fn expands_with_default_when_unset() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         let expanded = expand_env_var("${NONEXISTENT_VAR_UTILS:-default-value}");
         assert_eq!(expanded, "default-value");
     }
@@ -56,6 +61,7 @@ mod tests {
 
     #[test]
     fn embedded_references() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         std::env::set_var("TEST_UTILS_HOST", "example.com");
         let expanded = expand_env_var("https://${TEST_UTILS_HOST}/api");
         assert_eq!(expanded, "https://example.com/api");
@@ -70,6 +76,7 @@ mod tests {
 
     #[test]
     fn unset_var_expands_to_empty() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         let expanded = expand_env_var("${SURELY_NONEXISTENT_VAR_XYZ}");
         assert_eq!(expanded, "");
     }
