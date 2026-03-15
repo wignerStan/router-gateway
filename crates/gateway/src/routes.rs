@@ -28,8 +28,8 @@ pub async fn root() -> Json<Value> {
 }
 
 /// Authentication middleware for protected routes
-/// Validates Bearer token against configured auth_tokens
-/// Fails-closed by default (requires auth) unless GATEWAY_ENV=development is set
+/// Validates Bearer token against configured `auth_tokens`
+/// Fails-closed by default (requires auth) unless `GATEWAY_ENV=development` is set
 pub async fn auth_middleware(
     State(state): State<AppState>,
     req: axum::extract::Request,
@@ -389,15 +389,15 @@ pub async fn chat_completions(
         model: model_id.to_string(),
         max_tokens: request
             .get("max_tokens")
-            .and_then(|m| m.as_u64())
+            .and_then(serde_json::Value::as_u64)
             .map(|v| v as u32),
         temperature: request
             .get("temperature")
-            .and_then(|t| t.as_f64())
+            .and_then(serde_json::Value::as_f64)
             .map(|v| v as f32),
         top_p: request
             .get("top_p")
-            .and_then(|t| t.as_f64())
+            .and_then(serde_json::Value::as_f64)
             .map(|v| v as f32),
         stop: request.get("stop").and_then(|s| s.as_array()).map(|arr| {
             arr.iter()
@@ -406,7 +406,7 @@ pub async fn chat_completions(
         }),
         stream: request
             .get("stream")
-            .and_then(|s| s.as_bool())
+            .and_then(serde_json::Value::as_bool)
             .unwrap_or(false),
         system: request
             .get("system")

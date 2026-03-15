@@ -3,6 +3,11 @@ name = "llm-tracing"
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
+description = "Tracing and observability middleware for LLM requests"
+readme = "README.md"
+keywords = ["tracing", "observability", "llm", "middleware"]
+categories = ["development-tools::debugging"]
+repository.workspace = true
 
 [dependencies]
 tokio = { version = "1.40", features = ["sync", "time"] }

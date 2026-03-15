@@ -154,7 +154,7 @@ mod sqlite_tests {
             // Write some history entries
             for i in 0..5 {
                 let result = store
-                    .write_status_history(&format!("auth-{}", i), 200, 100.0, true)
+                    .write_status_history(&format!("auth-{i}"), 200, 100.0, true)
                     .await;
                 assert!(result.is_ok(), "Failed to write status history");
             }
@@ -199,7 +199,7 @@ mod sqlite_tests {
                 };
 
                 store
-                    .write_metrics(&format!("auth-{}", i), &metrics)
+                    .write_metrics(&format!("auth-{i}"), &metrics)
                     .await
                     .unwrap();
             }
@@ -705,14 +705,14 @@ mod sqlite_tests {
                 match selected_id.as_str() {
                     "auth1" => auth1_count += 1,
                     "auth2" => auth2_count += 1,
-                    _ => panic!("Unexpected auth selected: {}", selected_id),
+                    _ => panic!("Unexpected auth selected: {selected_id}"),
                 }
             }
 
             // auth1 should be selected more often due to better metrics.
             // Use a proportional check (auth1 > 40% of selections) to avoid
             // flaky failures from statistical variance in random selection.
-            let auth1_ratio = auth1_count as f64 / iterations as f64;
+            let auth1_ratio = f64::from(auth1_count) / f64::from(iterations);
             assert!(
                 auth1_ratio > 0.4,
                 "auth1 should be selected >40% of the time (got {:.0}%, auth1: {}, auth2: {})",
@@ -778,8 +778,7 @@ mod sqlite_tests {
                     let selected: Option<String> = selector_clone.pick(auths).await;
                     assert!(
                         selected.is_some(),
-                        "Task {} should successfully select an auth",
-                        i
+                        "Task {i} should successfully select an auth"
                     );
                     selected
                 });
@@ -795,16 +794,11 @@ mod sqlite_tests {
 
             // Verify all selections are valid
             for (i, selected) in results.iter().enumerate() {
-                assert!(
-                    selected.is_some(),
-                    "Task {} should have a valid selection",
-                    i
-                );
+                assert!(selected.is_some(), "Task {i} should have a valid selection");
                 let id = selected.as_ref().unwrap();
                 assert!(
                     id == "auth1" || id == "auth2" || id == "auth3",
-                    "Task {} should select a valid auth ID",
-                    i
+                    "Task {i} should select a valid auth ID"
                 );
             }
         }
@@ -839,8 +833,8 @@ mod sqlite_tests {
             .await;
 
             match result {
-                Ok(Ok(_)) => {}, // Success
-                Ok(Err(e)) => panic!("Failed to precompute weights: {}", e),
+                Ok(Ok(())) => {}, // Success
+                Ok(Err(e)) => panic!("Failed to precompute weights: {e}"),
                 Err(_) => {}, // Timeout - acceptable for empty database
             }
 
@@ -945,16 +939,14 @@ mod sqlite_tests {
                 match selected_id.as_str() {
                     "auth1" => auth1_count += 1,
                     "auth2" => auth2_count += 1,
-                    _ => panic!("Unexpected auth selected: {}", selected_id),
+                    _ => panic!("Unexpected auth selected: {selected_id}"),
                 }
             }
 
             // auth2 should be selected more often due to quota availability
             assert!(
                 auth2_count > auth1_count,
-                "auth2 (no quota) should be selected more often than auth1 (quota exceeded) (auth1: {}, auth2: {})",
-                auth1_count,
-                auth2_count
+                "auth2 (no quota) should be selected more often than auth1 (quota exceeded) (auth1: {auth1_count}, auth2: {auth2_count})"
             );
         }
 
@@ -1021,7 +1013,7 @@ mod sqlite_tests {
                 match selected_id.as_str() {
                     "auth1" => auth1_count += 1,
                     "auth2" => auth2_count += 1,
-                    _ => panic!("Unexpected auth selected: {}", selected_id),
+                    _ => panic!("Unexpected auth selected: {selected_id}"),
                 }
             }
 
@@ -1029,9 +1021,7 @@ mod sqlite_tests {
             // With high priority weight and 200 iterations, this should be reliable
             assert!(
                 auth1_count > auth2_count,
-                "auth1 (high priority) should be selected more often than auth2 (low priority) (auth1: {}, auth2: {})",
-                auth1_count,
-                auth2_count
+                "auth1 (high priority) should be selected more often than auth2 (low priority) (auth1: {auth1_count}, auth2: {auth2_count})"
             );
         }
 

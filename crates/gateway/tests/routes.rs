@@ -1304,7 +1304,10 @@ mod provider_integration_tests {
             id: id.to_string(),
             provider: provider.to_string(),
             api_key: "test-key-123".to_string(), // gitleaks:allow
-            allowed_models: models.iter().map(|m| m.to_string()).collect(),
+            allowed_models: models
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect(),
             ..Default::default()
         }
     }

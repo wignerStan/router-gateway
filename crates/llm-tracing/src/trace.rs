@@ -99,9 +99,7 @@ impl TraceSpan {
 
     /// Check if the trace was successful
     pub fn is_success(&self) -> bool {
-        self.status_code
-            .map(|s| (200..300).contains(&s))
-            .unwrap_or(false)
+        self.status_code.is_some_and(|s| (200..300).contains(&s))
     }
 }
 
@@ -220,8 +218,8 @@ mod tests {
             "gpt-4".to_string(),
             None,
         );
-        span.set_error("".to_string());
-        assert_eq!(span.error_message, Some("".to_string()));
+        span.set_error(String::new());
+        assert_eq!(span.error_message, Some(String::new()));
         assert_eq!(span.status_code, Some(500));
         assert!(!span.is_success());
     }

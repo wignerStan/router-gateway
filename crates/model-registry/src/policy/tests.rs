@@ -23,7 +23,7 @@ fn test_policy_matching() {
     assert!(policy.matches(&context));
 
     // Test with condition
-    let mut policy_with_condition = policy.clone();
+    let mut policy_with_condition = policy;
     policy_with_condition.conditions.push(PolicyCondition {
         condition_type: PolicyConditionType::TimeOfDay,
         value: "10".to_string(),

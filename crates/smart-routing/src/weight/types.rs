@@ -17,7 +17,7 @@ pub struct ModelState {
 
 /// Data availability assessment for planner mode adaptation
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum DataAvailability {
+pub enum DataAvailability {
     /// Full data available - all metrics populated with sufficient history
     Full,
     /// Sparse data - some metrics missing or insufficient history
@@ -28,7 +28,7 @@ pub(crate) enum DataAvailability {
 
 /// Planner mode for weight calculation adaptation
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum PlannerMode {
+pub enum PlannerMode {
     /// Learned mode - use full weight calculation with all factors
     Learned,
     /// Heuristic mode - simplified calculation using available metrics

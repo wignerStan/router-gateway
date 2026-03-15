@@ -71,7 +71,7 @@ impl Default for ServerConfig {
     }
 }
 
-fn default_port() -> u16 {
+const fn default_port() -> u16 {
     3000
 }
 
@@ -79,7 +79,7 @@ fn default_host() -> String {
     "0.0.0.0".to_string()
 }
 
-fn default_timeout() -> u64 {
+const fn default_timeout() -> u64 {
     120
 }
 
@@ -92,7 +92,7 @@ pub struct CredentialConfig {
     /// Provider name (e.g., "anthropic", "openai")
     pub provider: String,
 
-    /// API key (can be loaded from env with ${VAR_NAME})
+    /// API key (can be loaded from env with ${`VAR_NAME`})
     pub api_key: String,
 
     /// Optional base URL override
@@ -123,7 +123,7 @@ pub struct CredentialConfig {
 /// Routing policy configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoutingPolicyConfig {
-    /// Selection strategy: "weighted", "time_aware", "quota_aware", "adaptive", "policy_aware"
+    /// Selection strategy: "weighted", "`time_aware`", "`quota_aware`", "adaptive", "`policy_aware`"
     #[serde(default = "default_strategy")]
     pub strategy: String,
 
@@ -155,15 +155,15 @@ fn default_strategy() -> String {
     "weighted".to_string()
 }
 
-fn default_true() -> bool {
+const fn default_true() -> bool {
     true
 }
 
-fn default_min_healthy() -> usize {
+const fn default_min_healthy() -> usize {
     1
 }
 
-fn default_fallback_depth() -> usize {
+const fn default_fallback_depth() -> usize {
     2
 }
 
@@ -198,7 +198,7 @@ impl GatewayConfig {
 
     /// Parse configuration from YAML string
     pub fn from_yaml(yaml: &str) -> Result<Self> {
-        let mut config: GatewayConfig =
+        let mut config: Self =
             serde_yaml_ng::from_str(yaml).with_context(|| "Failed to parse YAML configuration")?;
 
         // Expand environment variables in secrets
@@ -285,10 +285,7 @@ impl GatewayConfig {
 
     /// Check if a provider is enabled
     pub fn is_provider_enabled(&self, provider: &str) -> bool {
-        self.providers
-            .get(provider)
-            .map(|p| p.enabled)
-            .unwrap_or(true) // Enabled by default if not configured
+        self.providers.get(provider).is_none_or(|p| p.enabled) // Enabled by default if not configured
     }
 
     /// Check if authentication is enabled (at least one auth token configured)
@@ -307,7 +304,7 @@ mod tests {
         std::env::set_var("TEST_PROVIDER_KEY", "secret-key");
 
         let config = GatewayConfig::from_yaml(
-            r#"
+            r"
 credentials:
   - id: cred1
     provider: openai
@@ -318,7 +315,7 @@ providers:
     base_url: ${TEST_PROVIDER_URL}
     headers:
       X-Api-Key: ${TEST_PROVIDER_KEY}
-"#,
+",
         )
         .unwrap();
 

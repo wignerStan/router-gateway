@@ -4,7 +4,7 @@ use tempfile::NamedTempFile;
 
 fn config_from_yaml_content(yaml_content: &str) -> GatewayConfig {
     let mut tmp_file = NamedTempFile::new().expect("failed to create temp file");
-    write!(tmp_file, "{}", yaml_content).expect("failed to write temp file");
+    write!(tmp_file, "{yaml_content}").expect("failed to write temp file");
     GatewayConfig::from_file(tmp_file.path()).expect("failed to load config from file")
 }
 
@@ -18,23 +18,23 @@ fn test_default_config() {
 
 #[test]
 fn test_parse_minimal_yaml() {
-    let yaml = r#"
+    let yaml = r"
 server:
   port: 8080
-"#;
+";
     let config = GatewayConfig::from_yaml(yaml).unwrap();
     assert_eq!(config.server.port, 8080);
 }
 
 #[test]
 fn test_parse_credentials() {
-    let yaml = r#"
+    let yaml = r"
 credentials:
   - id: anthropic-primary
     provider: anthropic
     api_key: sk-test-key
     priority: 10
-"#;
+";
     let config = GatewayConfig::from_yaml(yaml).unwrap();
     assert_eq!(config.credentials.len(), 1);
     assert_eq!(config.credentials[0].id, "anthropic-primary");
@@ -44,7 +44,7 @@ credentials:
 
 #[test]
 fn test_duplicate_credential_id_fails() {
-    let yaml = r#"
+    let yaml = r"
 credentials:
   - id: test-cred
     provider: anthropic
@@ -52,7 +52,7 @@ credentials:
   - id: test-cred
     provider: openai
     api_key: key2
-"#;
+";
     let result = GatewayConfig::from_yaml(yaml);
     assert!(result.is_err());
     assert!(result
@@ -63,10 +63,10 @@ credentials:
 
 #[test]
 fn test_invalid_strategy_fails() {
-    let yaml = r#"
+    let yaml = r"
 routing:
   strategy: invalid
-"#;
+";
     let result = GatewayConfig::from_yaml(yaml);
     assert!(result.is_err());
     assert!(result
@@ -78,7 +78,7 @@ routing:
 #[test]
 fn test_provider_filtering() {
     let config = GatewayConfig::from_yaml(
-        r#"
+        r"
 credentials:
   - id: cred1
     provider: anthropic
@@ -89,7 +89,7 @@ credentials:
   - id: cred3
     provider: anthropic
     api_key: key3
-"#,
+",
     )
     .unwrap();
 
@@ -104,13 +104,13 @@ credentials:
 
 #[test]
 fn test_ssrf_reject_loopback() {
-    let yaml = r#"
+    let yaml = r"
 credentials:
   - id: test
     provider: openai
     api_key: key1
     base_url: http://127.0.0.1:8000
-"#;
+";
     let result = GatewayConfig::from_yaml(yaml);
     assert!(result.is_err());
     let err_msg = result.unwrap_err().to_string();
@@ -123,7 +123,7 @@ credentials:
 #[test]
 fn test_provider_env_vars_with_defaults() {
     let config = GatewayConfig::from_yaml(
-        r#"
+        r"
 credentials:
   - id: cred1
     provider: openai
@@ -134,7 +134,7 @@ providers:
     base_url: ${PROVIDER_BASE_URL:-https://api.openai.com}
     headers:
       Authorization: Bearer ${PROVIDER_AUTH}
-"#,
+",
     )
     .unwrap();
 
@@ -149,12 +149,12 @@ providers:
 
 #[test]
 fn test_ssrf_allow_credential_without_base_url() {
-    let yaml = r#"
+    let yaml = r"
 credentials:
   - id: test
     provider: openai
     api_key: key1
-"#;
+";
     let result = GatewayConfig::from_yaml(yaml);
     assert!(result.is_ok());
 }
@@ -181,7 +181,7 @@ server:
 #[test]
 fn test_provider_config_without_env_vars_unchanged() {
     let config = GatewayConfig::from_yaml(
-        r#"
+        r"
 credentials:
   - id: cred1
     provider: openai
@@ -192,7 +192,7 @@ providers:
     base_url: https://api.openai.com
     headers:
       X-Custom: literal-value
-"#,
+",
     )
     .unwrap();
 
@@ -205,7 +205,7 @@ providers:
 
 #[test]
 fn test_from_file_valid_yaml() {
-    let yaml_content = r#"
+    let yaml_content = r"
 server:
   port: 9090
   host: 127.0.0.1
@@ -215,7 +215,7 @@ credentials:
     provider: openai
     api_key: sk-test-key-123 # gitleaks:allow
     priority: 5
-"#;
+";
     let config = config_from_yaml_content(yaml_content);
 
     assert_eq!(config.server.port, 9090);
@@ -240,7 +240,7 @@ fn test_from_file_nonexistent() {
 
 #[test]
 fn test_full_config_with_all_sections() {
-    let yaml_content = r#"
+    let yaml_content = r"
 server:
   port: 8080
   host: 0.0.0.0
@@ -279,7 +279,7 @@ providers:
   google:
     enabled: true
     base_url: https://generativelanguage.googleapis.com/v1beta
-"#;
+";
     let config = config_from_yaml_content(yaml_content);
 
     // Server section
@@ -331,7 +331,7 @@ fn test_default_routing_policy() {
 
 #[test]
 fn test_credential_with_all_fields() {
-    let yaml_content = r#"
+    let yaml_content = r"
 credentials:
   - id: full-cred
     provider: openai
@@ -344,7 +344,7 @@ credentials:
     priority: 15
     daily_quota: 10000
     rate_limit: 60
-"#;
+";
     let config = config_from_yaml_content(yaml_content);
 
     let cred = &config.credentials[0];
@@ -446,10 +446,10 @@ fn test_trust_proxy_headers_default_false() {
 
 #[test]
 fn test_trust_proxy_headers_from_yaml() {
-    let yaml = r#"
+    let yaml = r"
 server:
   trust_proxy_headers: true
-"#;
+";
     let config = GatewayConfig::from_yaml(yaml).unwrap();
     assert!(config.server.trust_proxy_headers);
 }
@@ -467,11 +467,11 @@ fn test_is_provider_enabled_default() {
 
 #[test]
 fn test_is_provider_enabled_explicitly_disabled() {
-    let yaml = r#"
+    let yaml = r"
 providers:
   openai:
     enabled: false
-"#;
+";
     let config = GatewayConfig::from_yaml(yaml).unwrap();
     assert!(!config.is_provider_enabled("openai"));
     // Other providers still default to enabled
@@ -480,11 +480,11 @@ providers:
 
 #[test]
 fn test_is_provider_enabled_explicitly_enabled() {
-    let yaml = r#"
+    let yaml = r"
 providers:
   google:
     enabled: true
-"#;
+";
     let config = GatewayConfig::from_yaml(yaml).unwrap();
     assert!(config.is_provider_enabled("google"));
 }

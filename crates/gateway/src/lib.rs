@@ -59,7 +59,7 @@ pub async fn run() -> anyhow::Result<()> {
     // Get host and port from config before moving state
     let port = state.config.server.port;
     let host = &state.config.server.host;
-    let addr: SocketAddr = format!("{}:{}", host, port)
+    let addr: SocketAddr = format!("{host}:{port}")
         .parse()
         .context("Invalid host/port configuration")?;
     tracing::info!("Gateway listening on {}", addr);
@@ -93,27 +93,22 @@ pub fn load_config() -> anyhow::Result<GatewayConfig> {
         ["./gateway.yaml", "./config/gateway.yaml", "./gateway.yml"]
             .iter()
             .find(|path| std::path::Path::new(path).exists())
-            .map(|path| path.to_string())
+            .map(std::string::ToString::to_string)
     });
 
-    match config_path {
-        Some(path) => {
-            tracing::info!("Loading configuration from {}", path);
-            match GatewayConfig::from_file(&path) {
-                Ok(config) => Ok(config),
-                Err(e) => {
-                    anyhow::bail!(
-                        "Failed to load config from {}: {}. Please fix the configuration file.",
-                        path,
-                        e
-                    );
-                },
-            }
-        },
-        None => {
-            tracing::info!("No configuration file found, using defaults");
-            Ok(GatewayConfig::default())
-        },
+    if let Some(path) = config_path {
+        tracing::info!("Loading configuration from {}", path);
+        match GatewayConfig::from_file(&path) {
+            Ok(config) => Ok(config),
+            Err(e) => {
+                anyhow::bail!(
+                    "Failed to load config from {path}: {e}. Please fix the configuration file."
+                );
+            },
+        }
+    } else {
+        tracing::info!("No configuration file found, using defaults");
+        Ok(GatewayConfig::default())
     }
 }
 

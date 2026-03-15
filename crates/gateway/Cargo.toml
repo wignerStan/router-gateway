@@ -3,6 +3,11 @@ name = "gateway"
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
+description = "Local LLM gateway for intelligent request routing"
+readme = "README.md"
+keywords = ["gateway", "llm", "routing", "proxy"]
+categories = ["web-programming::http-server"]
+repository.workspace = true
 
 [lib]
 path = "src/lib.rs"
