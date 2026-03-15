@@ -432,10 +432,10 @@ impl SQLiteStore {
             .query_map([], |row| {
                 let auth_id: String = row.get(0)?;
                 let status_str: String = row.get(1)?;
-                let last_status_change_str: String = row.get(3)?;
-                let last_check_time_str: String = row.get(4)?;
-                let unavailable_until_str: Option<String> = row.get(5)?;
-                let error_counts_str: String = row.get(6)?;
+                let last_status_change_str: String = row.get(4)?;
+                let last_check_time_str: String = row.get(5)?;
+                let unavailable_until_str: Option<String> = row.get(6)?;
+                let error_counts_str: String = row.get(7)?;
 
                 let status = match status_str.as_str() {
                     "Degraded" => HealthStatus::Degraded,

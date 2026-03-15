@@ -182,17 +182,21 @@ jobs:
 
       - name: Check coverage threshold
         run: |
-          COVERAGE=$(grep -oP 'line-rate="\K[0-9.]+' coverage/cobertura.xml | head -1)
-          if [ -n "$COVERAGE" ]; then
-            COVERAGE_PERCENT=$(echo "$COVERAGE * 100" | bc | awk '{printf "%.2f", $0}')
-            echo "Coverage: ${COVERAGE_PERCENT}%"
-            if (( $(echo "$COVERAGE_PERCENT < $COVERAGE_THRESHOLD" | bc -l) )); then
-              echo "::warning::Coverage ${COVERAGE_PERCENT}% is below threshold ${COVERAGE_THRESHOLD}%"
+          if [ -f coverage/cobertura.xml ]; then
+            COVERAGE=$(grep -oP 'line-rate="\K[0-9.]+' coverage/cobertura.xml | head -1 || true)
+            if [ -n "$COVERAGE" ]; then
+              COVERAGE_PERCENT=$(echo "$COVERAGE * 100" | bc | awk '{printf "%.2f", $0}')
+              echo "Coverage: ${COVERAGE_PERCENT}%"
+              if (( $(echo "$COVERAGE_PERCENT < $COVERAGE_THRESHOLD" | bc -l) )); then
+                echo "::warning::Coverage ${COVERAGE_PERCENT}% is below threshold ${COVERAGE_THRESHOLD}%"
+              else
+                echo "::notice::Coverage ${COVERAGE_PERCENT}% meets threshold ${COVERAGE_THRESHOLD}%"
+              fi
             else
-              echo "::notice::Coverage ${COVERAGE_PERCENT}% meets threshold ${COVERAGE_THRESHOLD}%"
+              echo "::warning::Failed to parse coverage XML - no line-rate found"
             fi
           else
-            echo "::warning::Failed to parse coverage XML"
+            echo "::warning::Coverage file coverage/cobertura.xml not found"
           fi
 
   # ===========================================
