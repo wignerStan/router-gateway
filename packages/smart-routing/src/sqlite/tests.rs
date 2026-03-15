@@ -36,7 +36,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.expect("Failed to create store");
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("Failed to create store");
 
             // Write metrics
             let metrics = AuthMetrics {
@@ -79,7 +81,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.expect("Failed to create store");
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("Failed to create store");
 
             // Write health
             let health = AuthHealth {
@@ -114,7 +118,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.expect("Failed to create store");
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("Failed to create store");
 
             // Write status history entries
             let result = store
@@ -141,7 +147,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.expect("Failed to create store");
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("Failed to create store");
 
             // Write some history entries
             for i in 0..5 {
@@ -168,7 +176,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.expect("Failed to create store");
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("Failed to create store");
 
             // Write metrics for multiple auths
             for i in 1..=3 {
@@ -215,7 +225,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.expect("Failed to create store");
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("Failed to create store");
             let collector = SQLiteMetricsCollector::new(store);
 
             // Initialize auth
@@ -249,7 +261,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.expect("Failed to create store");
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("Failed to create store");
             let collector = SQLiteMetricsCollector::new(store.clone());
 
             collector.initialize_auth("test-auth-flush").await;
@@ -258,14 +272,20 @@ mod sqlite_tests {
                 .await;
 
             // Database should not have it yet
-            let db_metrics = store.load_metrics("test-auth-flush").await.expect("Failed to load metrics");
+            let db_metrics = store
+                .load_metrics("test-auth-flush")
+                .await
+                .expect("Failed to load metrics");
             assert!(db_metrics.is_none(), "Metrics should not be in DB yet");
 
             // Flush
             collector.flush().await.expect("Failed to flush");
 
             // DB should now have it
-            let db_metrics = store.load_metrics("test-auth-flush").await.expect("Failed to load metrics");
+            let db_metrics = store
+                .load_metrics("test-auth-flush")
+                .await
+                .expect("Failed to load metrics");
             assert!(db_metrics.is_some(), "Metrics should be in DB after flush");
             let db_metrics = db_metrics.expect("Metrics not found");
             assert_eq!(db_metrics.total_requests, 1);
@@ -279,7 +299,10 @@ mod sqlite_tests {
                 "New collector should be empty initially"
             );
 
-            new_collector.load_from_db().await.expect("Failed to load from db");
+            new_collector
+                .load_from_db()
+                .await
+                .expect("Failed to load from db");
 
             let loaded_metrics = new_collector.get_metrics("test-auth-flush").await;
             assert!(loaded_metrics.is_some(), "Should have loaded metrics");
@@ -293,7 +316,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.expect("Failed to create store");
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("Failed to create store");
             let manager = SQLiteHealthManager::new(store);
 
             // Record successes
@@ -326,20 +351,28 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.expect("Failed to create store");
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("Failed to create store");
             let manager = SQLiteHealthManager::new(store.clone());
 
             manager.record_success("test-auth-health-flush").await;
 
             // Database should not have it yet
-            let db_health = store.load_health("test-auth-health-flush").await.expect("Failed to load health");
+            let db_health = store
+                .load_health("test-auth-health-flush")
+                .await
+                .expect("Failed to load health");
             assert!(db_health.is_none(), "Health should not be in DB yet");
 
             // Flush
             manager.flush().await.expect("Failed to flush health");
 
             // DB should now have it
-            let db_health = store.load_health("test-auth-health-flush").await.expect("Failed to load health");
+            let db_health = store
+                .load_health("test-auth-health-flush")
+                .await
+                .expect("Failed to load health");
             assert!(db_health.is_some(), "Health should be in DB after flush");
             let db_health = db_health.expect("Health not found");
             assert_eq!(db_health.status, HealthStatus::Healthy);
@@ -352,11 +385,17 @@ mod sqlite_tests {
                 "New manager should be empty initially"
             );
 
-            new_manager.load_from_db().await.expect("Failed to load health from db");
+            new_manager
+                .load_from_db()
+                .await
+                .expect("Failed to load health from db");
 
             let loaded_health = new_manager.get_health("test-auth-health-flush").await;
             assert!(loaded_health.is_some(), "Should have loaded health");
-            assert_eq!(loaded_health.expect("Health not found").status, HealthStatus::Healthy);
+            assert_eq!(
+                loaded_health.expect("Health not found").status,
+                HealthStatus::Healthy
+            );
         }
     }
 
@@ -374,7 +413,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.expect("Failed to create store");
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("Failed to create store");
 
             let routing_config = SmartRoutingConfig::default();
             let selector = SQLiteSelector::new(store, routing_config);
@@ -417,7 +458,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.expect("Failed to create store");
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("Failed to create store");
             let routing_config = SmartRoutingConfig::default();
             let selector = SQLiteSelector::new(store, routing_config);
 
@@ -441,7 +484,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.expect("Failed to create store");
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("Failed to create store");
             let routing_config = SmartRoutingConfig::default();
             let selector = SQLiteSelector::new(store, routing_config);
 
@@ -480,7 +525,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.expect("Failed to create store");
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("Failed to create store");
 
             // Create selector with smart routing disabled
             let routing_config = SmartRoutingConfig {
@@ -535,7 +582,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.expect("Failed to create store");
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("Failed to create store");
 
             // Setup metrics for auth1 (good performance)
             let metrics1 = AuthMetrics {
@@ -641,7 +690,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.expect("Failed to create store");
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("Failed to create store");
             let routing_config = SmartRoutingConfig::default();
             let selector = std::sync::Arc::new(SQLiteSelector::new(store, routing_config));
 
@@ -721,7 +772,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.expect("Failed to create store");
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("Failed to create store");
             let routing_config = SmartRoutingConfig::default();
             let selector = SQLiteSelector::new(store, routing_config);
 
@@ -769,7 +822,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.expect("Failed to create store");
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("Failed to create store");
 
             // Setup good metrics for auth1
             let metrics1 = AuthMetrics {
@@ -867,7 +922,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.expect("Failed to create store");
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("Failed to create store");
 
             // Use a config where priority has a much higher weight
             let routing_config = SmartRoutingConfig {
@@ -942,7 +999,9 @@ mod sqlite_tests {
                 ..Default::default()
             };
 
-            let store = SQLiteStore::new(config).await.expect("Failed to create store");
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("Failed to create store");
             let routing_config = SmartRoutingConfig::default();
             let selector = SQLiteSelector::new(store, routing_config);
 
