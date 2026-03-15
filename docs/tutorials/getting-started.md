@@ -106,13 +106,12 @@ The smart routing system uses multiple strategies to select the optimal credenti
 
 ```
 gateway/
-├── apps/
-│   ├── gateway/      # Main HTTP server (Axum)
-│   └── cli/          # Command-line interface
-└── packages/
+├── cli/              # Command-line interface
+└── crates/
+    ├── gateway/          # Main HTTP server (Axum)
     ├── smart-routing/    # Routing algorithms
     ├── model-registry/   # Model management
-    └── tracing/          # Request tracing
+    └── llm-tracing/      # Request tracing
 ```
 
 ## Next Steps

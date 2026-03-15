@@ -1,3 +1,4 @@
 #!/bin/sh
 set -e
-exec gateway --config /etc/gateway/gateway.yaml "$@"
+export GATEWAY_CONFIG=/etc/gateway/gateway.yaml
+exec gateway "$@"
