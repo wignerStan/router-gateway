@@ -22,7 +22,19 @@ jobs:
   # SECRET SCANNING
   # ===========================================
 
+  gitleaks:
+    name: Secret Scan (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   trufflehog:
     name: Secret Scan (TruffleHog)
@@ -144,13 +156,14 @@ jobs:
   security-summary:
     name: Security Summary
     runs-on: ubuntu-latest
-    needs: [trufflehog, cargo-audit, cargo-deny]
+    needs: [gitleaks, trufflehog, cargo-audit, cargo-deny]
     if: always()
     steps:
       - name: Check security status
         run: |
           FAILED=""
-                    [[ "${{ needs.trufflehog.result }}" != "success" ]] && FAILED+="trufflehog "
+          [[ "${{ needs.gitleaks.result }}" != "success" ]] && FAILED+="gitleaks "
+          [[ "${{ needs.trufflehog.result }}" != "success" ]] && FAILED+="trufflehog "
           [[ "${{ needs.cargo-audit.result }}" != "success" ]] && FAILED+="cargo-audit "
           [[ "${{ needs.cargo-deny.result }}" != "success" ]] && FAILED+="cargo-deny "
 
@@ -165,6 +178,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Scanner | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
-                    echo "| TruffleHog (Secrets) | ${{ needs.trufflehog.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Gitleaks (Secrets) | ${{ needs.gitleaks.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| TruffleHog (Secrets) | ${{ needs.trufflehog.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Cargo Audit (CVEs) | ${{ needs.cargo-audit.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Cargo Deny (Policy) | ${{ needs.cargo-deny.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
