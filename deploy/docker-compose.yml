@@ -1,0 +1,12 @@
+services:
+  gateway:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./gateway.yaml:/etc/gateway/gateway.yaml
+    environment:
+      - RUST_LOG=info
+    restart: unless-stopped

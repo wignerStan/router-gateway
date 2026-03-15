@@ -1,6 +1,6 @@
 # Configuration Reference
 
-> **Source:** `packages/smart-routing/src/config/mod.rs`
+> **Source:** `crates/smart-routing/src/config/mod.rs`
 > **Last Updated:** 2026-03-13
 
 This document provides complete reference information for all configuration options in the Gateway smart routing system.
@@ -19,7 +19,7 @@ The Gateway uses a hierarchical configuration structure defined in Rust structs.
 
 The root configuration struct for smart routing.
 
-**Source:** `packages/smart-routing/src/config/mod.rs:25`
+**Source:** `crates/smart-routing/src/config/mod.rs:25`
 
 | Field         | Type               | Default      | Description                             |
 | ------------- | ------------------ | ------------ | --------------------------------------- |
@@ -48,7 +48,7 @@ The root configuration struct for smart routing.
 
 Configuration for weighted routing calculations.
 
-**Source:** `packages/smart-routing/src/config/mod.rs:83`
+**Source:** `crates/smart-routing/src/config/mod.rs:83`
 
 | Field                    | Type  | Default | Range   | Description                                       |
 | ------------------------ | ----- | ------- | ------- | ------------------------------------------------- |
@@ -78,7 +78,7 @@ if total != 1.0 {
 }
 ```
 
-**Source:** `packages/smart-routing/src/config/mod.rs:137`
+**Source:** `crates/smart-routing/src/config/mod.rs:137`
 
 ---
 
@@ -86,7 +86,7 @@ if total != 1.0 {
 
 Configuration for credential health tracking.
 
-**Source:** `packages/smart-routing/src/config/time_quota.rs:8`
+**Source:** `crates/smart-routing/src/config/time_quota.rs:8`
 
 | Field                     | Type                     | Default      | Description                                            |
 | ------------------------- | ------------------------ | ------------ | ------------------------------------------------------ |
@@ -121,7 +121,7 @@ Configuration for credential health tracking.
 
 Configuration for HTTP status code health classification.
 
-**Source:** `packages/smart-routing/src/config/time_quota.rs:23`
+**Source:** `crates/smart-routing/src/config/time_quota.rs:23`
 
 | Field       | Type       | Default                          | Description                              |
 | ----------- | ---------- | -------------------------------- | ---------------------------------------- |
@@ -143,7 +143,7 @@ Configuration for HTTP status code health classification.
 
 Configuration for time-based routing optimization.
 
-**Source:** `packages/smart-routing/src/config/time_quota.rs:34`
+**Source:** `crates/smart-routing/src/config/time_quota.rs:34`
 
 | Field                           | Type                           | Default | Description                             |
 | ------------------------------- | ------------------------------ | ------- | --------------------------------------- |
@@ -154,7 +154,7 @@ Configuration for time-based routing optimization.
 
 ### TimeSlot
 
-**Source:** `packages/smart-routing/src/config/time_quota.rs:47`
+**Source:** `crates/smart-routing/src/config/time_quota.rs:47`
 
 | Field          | Type       | Range | Description                         |
 | -------------- | ---------- | ----- | ----------------------------------- |
@@ -192,7 +192,7 @@ Configuration for time-based routing optimization.
 
 Configuration for quota-balanced routing.
 
-**Source:** `packages/smart-routing/src/config/time_quota.rs:60`
+**Source:** `crates/smart-routing/src/config/time_quota.rs:60`
 
 | Field                     | Type     | Default      | Description                                 |
 | ------------------------- | -------- | ------------ | ------------------------------------------- |
@@ -223,7 +223,7 @@ The `reserve_ratio` determines how much quota to reserve:
 
 Configuration for routing decision logging.
 
-**Source:** `packages/smart-routing/src/config/time_quota.rs:73`
+**Source:** `crates/smart-routing/src/config/time_quota.rs:73`
 
 | Field     | Type     | Default  | Description                     |
 | --------- | -------- | -------- | ------------------------------- |
@@ -245,7 +245,7 @@ Configuration for routing decision logging.
 
 Configuration for policy-aware routing.
 
-**Source:** `packages/smart-routing/src/config/mod.rs:47`
+**Source:** `crates/smart-routing/src/config/mod.rs:47`
 
 | Field             | Type                 | Default | Description                                            |
 | ----------------- | -------------------- | ------- | ------------------------------------------------------ |
@@ -334,7 +334,7 @@ The configuration is automatically validated when loaded:
 4. **Time slot validation** - Hours clamped to 0-23, invalid days removed
 5. **Quota strategy validation** - Invalid strategies reset to `"adaptive"`
 
-**Source:** `packages/smart-routing/src/config/mod.rs:193`
+**Source:** `crates/smart-routing/src/config/mod.rs:193`
 
 ---
 

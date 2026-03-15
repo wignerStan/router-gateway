@@ -5,7 +5,7 @@
 set shell := ["bash", "-c"]
 
 # Workspace members for quick reference
-members := "apps/cli apps/gateway packages/smart-routing packages/model-registry packages/tracing"
+members := "cli crates/gateway crates/smart-routing crates/model-registry crates/llm-tracing"
 
 # ============================================
 # DEFAULT & HELP
@@ -266,7 +266,7 @@ graph:
 # Show workspace structure
 structure:
     @echo "📁 Workspace Structure:"
-    @find packages apps -name "Cargo.toml" 2>/dev/null | head -20
+    @find crates cli -name "Cargo.toml" 2>/dev/null | head -20
 
 # Update all dependencies
 update:
@@ -375,7 +375,7 @@ check-time:
 # Show binary sizes
 binary-sizes:
     @echo "📊 Binary Sizes:"
-    @ls -lh target/debug/{gateway,cli} 2>/dev/null || echo "Build first with: just build"
+    @ls -lh target/debug/{gateway,my-cli} 2>/dev/null || echo "Build first with: just build"
 
 # Quick status check
 status: members env

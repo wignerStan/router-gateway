@@ -75,7 +75,7 @@ The low priority items are correctly categorized. I add one additional considera
 
 **Recommendation:** Add to Medium Priority:
 
-- Create `apps/gateway/config/` with `default.toml` and `production.toml`
+- Create `crates/gateway/config/` with `default.toml` and `production.toml`
 - Implement config loading in main.rs before initializing components
 
 ### 4. API Versioning Strategy
@@ -122,12 +122,12 @@ The low priority items are correctly categorized. I add one additional considera
 
 | Task                                                 | Effort | Impact | Owner          |
 | ---------------------------------------------------- | ------ | ------ | -------------- |
-| Create `packages/smart-routing/README.md`            | 30 min | High   | Any developer  |
-| Create `packages/model-registry/README.md`           | 30 min | High   | Any developer  |
-| Create `packages/tracing/README.md`                  | 20 min | High   | Any developer  |
+| Create `crates/smart-routing/README.md`              | 30 min | High   | Any developer  |
+| Create `crates/model-registry/README.md`             | 30 min | High   | Any developer  |
+| Create `crates/llm-tracing/README.md`                | 20 min | High   | Any developer  |
 | Create `packages/core/README.md` (or remove package) | 15 min | Medium | Any developer  |
-| Create `apps/gateway/README.md`                      | 30 min | High   | Any developer  |
-| Create `apps/cli/README.md`                          | 15 min | Low    | Any developer  |
+| Create `crates/gateway/README.md`                    | 30 min | High   | Any developer  |
+| Create `cli/README.md`                               | 15 min | Low    | Any developer  |
 | Add workspace dependencies to Cargo.toml             | 45 min | High   | Rust developer |
 | Add workspace lints to Cargo.toml                    | 15 min | Medium | Rust developer |
 
@@ -146,12 +146,12 @@ The low priority items are correctly categorized. I add one additional considera
 
 ### Sprint 3 (Week 5-6) - Structure
 
-| Task                                        | Effort | Impact | Owner     |
-| ------------------------------------------- | ------ | ------ | --------- |
-| Create `tests/` directory structure         | 30 min | Medium | Developer |
-| Create `apps/gateway/config/` with defaults | 1 hr   | Medium | Developer |
-| Verify CI workflow uses justfile            | 30 min | Medium | DevOps    |
-| Add package test aliases to justfile        | 15 min | Low    | Developer |
+| Task                                          | Effort | Impact | Owner     |
+| --------------------------------------------- | ------ | ------ | --------- |
+| Create `tests/` directory structure           | 30 min | Medium | Developer |
+| Create `crates/gateway/config/` with defaults | 1 hr   | Medium | Developer |
+| Verify CI workflow uses justfile              | 30 min | Medium | DevOps    |
+| Add package test aliases to justfile          | 15 min | Low    | Developer |
 
 **Sprint 3 Total:** ~2.5 hours
 
@@ -268,7 +268,7 @@ The review work is comprehensive and the recommendations are actionable. The con
 | `/Users/jacob/Work/proxy/gateway/justfile`                            | Task runner        |
 | `/Users/jacob/Work/proxy/gateway/Cargo.toml`                          | Workspace config   |
 | `/Users/jacob/Work/proxy/gateway/README.md`                           | Root documentation |
-| `/Users/jacob/Work/proxy/gateway/apps/gateway/src/main.rs`            | Main application   |
+| `/Users/jacob/Work/proxy/gateway/crates/gateway/src/main.rs`          | Main application   |
 
 ---
 

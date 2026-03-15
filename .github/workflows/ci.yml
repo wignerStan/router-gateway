@@ -169,7 +169,7 @@ jobs:
           tool: cargo-tarpaulin
 
       - name: Generate coverage report
-        run: cargo tarpaulin --all --all-features --out Xml --output-dir coverage --timeout 300 --exclude-files "apps/cli/src/main.rs" --exclude-files "apps/gateway/src/main.rs"
+        run: cargo tarpaulin --all --all-features --out Xml --output-dir coverage --timeout 300 --exclude-files "cli/src/main.rs" --exclude-files "crates/gateway/src/main.rs"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

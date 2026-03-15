@@ -28,8 +28,8 @@ use routes::{
 };
 use state::{AppState, DefaultRequestClassifier, RateLimiter, DEFAULT_RATE_LIMIT};
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+/// Build and run the gateway server.
+pub async fn run() -> anyhow::Result<()> {
     // Initialize tracing
     tracing_subscriber::registry()
         .with(
@@ -87,7 +87,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 /// Load configuration from file or environment
-fn load_config() -> anyhow::Result<GatewayConfig> {
+pub fn load_config() -> anyhow::Result<GatewayConfig> {
     // Try to load from GATEWAY_CONFIG env var or default paths
     let config_path = std::env::var("GATEWAY_CONFIG").ok().or_else(|| {
         ["./gateway.yaml", "./config/gateway.yaml", "./gateway.yml"]
@@ -119,10 +119,10 @@ fn load_config() -> anyhow::Result<GatewayConfig> {
 
 /// Creates the application state from the given config.
 ///
-/// Shared by [`main()`] and test helpers to ensure production and test setups
+/// Shared by [`run()`] and test helpers to ensure production and test setups
 /// stay in sync. The `rate_limit` parameter overrides the default when
 /// provided.
-fn build_app_state(config: GatewayConfig, rate_limit: Option<u64>) -> AppState {
+pub(crate) fn build_app_state(config: GatewayConfig, rate_limit: Option<u64>) -> AppState {
     let smart_router = config
         .credentials
         .iter()
@@ -176,9 +176,9 @@ fn build_app_state(config: GatewayConfig, rate_limit: Option<u64>) -> AppState {
 /// Constructs the complete Axum router with all middleware layers in
 /// production order.
 ///
-/// Shared by [`main()`] and test helpers to guarantee the router structure
+/// Shared by [`run()`] and test helpers to guarantee the router structure
 /// never diverges between production and test builds.
-fn build_app_router(state: AppState) -> Router {
+pub(crate) fn build_app_router(state: AppState) -> Router {
     let public_routes = Router::new()
         .route("/", axum::routing::get(root))
         .route("/health", axum::routing::get(health_check));

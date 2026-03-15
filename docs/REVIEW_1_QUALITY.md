@@ -37,11 +37,11 @@ The deliverables demonstrate solid technical understanding and provide valuable 
 #### Weaknesses / Gaps
 
 1. **Inaccurate line reference**:
-   - Claims `apps/gateway/src/main.rs:42-56` for HTTP endpoint setup
+   - Claims `crates/gateway/src/main.rs:42-56` for HTTP endpoint setup
    - **Actual**: The router setup is at lines 43-48, not 42-56
 
 2. **Missing package name accuracy**:
-   - Uses `tracing` as package name, but actual package name is `llm-tracing` (see `packages/tracing/Cargo.toml`)
+   - Uses `tracing` as package name, but actual package name is `llm-tracing` (see `crates/llm-tracing/Cargo.toml`)
    - Uses `core` as package name, but actual package name is `my-core`
 
 3. **Missing reference to CLIProxyAPI**: The document mentions "CLIProxyAPI as an external service for format conversion" but this service is not visible in the current codebase. This may confuse future readers.
@@ -80,7 +80,7 @@ The deliverables demonstrate solid technical understanding and provide valuable 
 1. **Date typo**: Shows "Date: 2025-02-17" instead of "2026-02-17"
 
 2. **Package name inconsistencies**:
-   - Refers to `packages/tracing/` following patterns but actual package name is `llm-tracing`
+   - Refers to `crates/llm-tracing/` following patterns but actual package name is `llm-tracing`
    - Should clarify the directory name vs package name distinction
 
 3. **Test organization claim incomplete**:
@@ -194,11 +194,11 @@ The deliverables demonstrate solid technical understanding and provide valuable 
 
 The most significant accuracy issue is the mismatch between directory names and Cargo package names:
 
-| Directory           | Package Name (Cargo.toml) |
-| ------------------- | ------------------------- |
-| `packages/core/`    | `my-core`                 |
-| `apps/cli/`         | `my-cli`                  |
-| `packages/tracing/` | `llm-tracing`             |
+| Directory             | Package Name (Cargo.toml) |
+| --------------------- | ------------------------- |
+| `packages/core/`      | `my-core`                 |
+| `cli/`                | `my-cli`                  |
+| `crates/llm-tracing/` | `llm-tracing`             |
 
 All deliverables should consistently clarify this distinction or use the actual package names when referencing imports/dependencies.
 

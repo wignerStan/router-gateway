@@ -6,10 +6,10 @@ This report analyzes the repository as it exists today and evaluates how close i
 
 This analysis is based on the current implementation in:
 
-- `apps/gateway/src/main.rs`
-- `packages/smart-routing/src/*.rs`
-- `packages/model-registry/src/*.rs`
-- `packages/tracing/src/*.rs`
+- `crates/gateway/src/main.rs`
+- `crates/smart-routing/src/*.rs`
+- `crates/model-registry/src/*.rs`
+- `crates/llm-tracing/src/*.rs`
 - `config/policies.json`
 
 The goal of this report is not to restate the intended design. It is to separate:
@@ -52,7 +52,7 @@ Current status: scaffold only.
 
 What exists:
 
-- `apps/gateway/src/main.rs` starts an Axum server.
+- `crates/gateway/src/main.rs` starts an Axum server.
 - It wires model registry, smart router, and tracing middleware into shared state.
 - It exposes `GET /`, `GET /health`, `GET /api/models`, and `GET /api/route`.
 
@@ -1061,6 +1061,6 @@ The best interpretation of the current codebase is:
 - `model-registry` is a strong metadata and policy foundation,
 - `smart-routing` is a selection toolkit with an unfinished orchestration layer,
 - `tracing` is a local middleware package, not yet an observability system,
-- `apps/gateway` is a stub server that still needs real proxy behavior.
+- `crates/gateway` is a stub server that still needs real proxy behavior.
 
 The highest-value improvement is not adding more strategy types. It is connecting request parsing, model filtering, route scoring, upstream forwarding, and feedback updates into one coherent routing pipeline.

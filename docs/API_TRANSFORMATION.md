@@ -98,7 +98,7 @@ struct SmartRoutingConfig {
 }
 ```
 
-See `packages/smart-routing/src/config/mod.rs` for full configuration options.
+See `crates/smart-routing/src/config/mod.rs` for full configuration options.
 
 ---
 

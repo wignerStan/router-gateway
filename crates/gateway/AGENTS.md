@@ -4,11 +4,12 @@ This project is part of the workspace. Please refer to the root [AGENTS.md](../.
 
 ## Crate-Specific Instructions
 
-- **Location:** `apps/gateway`
+- **Location:** `crates/gateway`
 - **Package:** `gateway`
 - **Build:** Run `cargo build -p gateway`
 - **Test:** Run `cargo test -p gateway`
 - **Run:** `cargo run -p gateway` (starts on 0.0.0.0:3000)
+- **Deploy:** `docker build -f deploy/Dockerfile .` or `docker compose -f deploy/docker-compose.yml up`
 
 ## Key Facts
 

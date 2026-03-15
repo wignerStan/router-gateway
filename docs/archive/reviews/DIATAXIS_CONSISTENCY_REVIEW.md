@@ -62,8 +62,8 @@ Correct package names used:
 
 All source file references are accurate:
 
-- `packages/smart-routing/src/config.rs`
-- `packages/model-registry/src/categories.rs`
+- `crates/smart-routing/src/config.rs`
+- `crates/model-registry/src/categories.rs`
 
 ### 5. No Contradictions ✅
 

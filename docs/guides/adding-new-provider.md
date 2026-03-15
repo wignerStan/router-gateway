@@ -4,7 +4,7 @@ This guide explains how to add support for a new LLM provider (e.g., Mistral, Co
 
 ## Step 1: Add Provider to the Enum
 
-Edit `packages/model-registry/src/categories.rs`:
+Edit `crates/model-registry/src/categories.rs`:
 
 ```rust
 pub enum ProviderCategory {
