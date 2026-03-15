@@ -1,4 +1,4 @@
-use super::types::{PolicyContext, PolicyLoadError, RoutingPolicy};
+use super::types::*;
 
 /// Policy registry for managing multiple routing policies
 #[derive(Debug, Clone, Default)]
@@ -8,7 +8,7 @@ pub struct PolicyRegistry {
 
 impl PolicyRegistry {
     /// Create empty registry
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             policies: Vec::new(),
         }

@@ -140,7 +140,7 @@ impl BanditPolicy {
 
             loop {
                 x = rng.gen();
-                x = 2.0f64.mul_add(x, -1.0);
+                x = 2.0 * x - 1.0;
                 v = 1.0 + c * x;
 
                 if v > 0.0 {
@@ -151,11 +151,11 @@ impl BanditPolicy {
             v = v * v * v;
             let u: f64 = rng.gen();
 
-            if u < 0.0331f64.mul_add(-(x * x).powi(2), 1.0) {
+            if u < 1.0 - 0.0331 * (x * x).powi(2) {
                 return d * v;
             }
 
-            if (u / v).ln() < (0.5 * x).mul_add(x, d * (1.0 - v + v.ln())) {
+            if (u / v).ln() < 0.5 * x * x + d * (1.0 - v + v.ln()) {
                 return d * v;
             }
         }
@@ -194,7 +194,7 @@ impl BanditPolicy {
     }
 
     /// Get all route statistics
-    pub const fn get_all_stats(&self) -> &HashMap<String, RouteStats> {
+    pub fn get_all_stats(&self) -> &HashMap<String, RouteStats> {
         &self.route_stats
     }
 
@@ -222,12 +222,12 @@ impl BanditPolicy {
     }
 
     /// Get utility estimator
-    pub const fn utility_estimator(&self) -> &crate::utility::UtilityEstimator {
+    pub fn utility_estimator(&self) -> &crate::utility::UtilityEstimator {
         &self.utility_estimator
     }
 
     /// Get config
-    pub const fn config(&self) -> &BanditConfig {
+    pub fn config(&self) -> &BanditConfig {
         &self.config
     }
 }
@@ -238,5 +238,6 @@ fn best_index(samples: &[f64]) -> usize {
         .iter()
         .enumerate()
         .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-        .map_or(0, |(i, _)| i)
+        .map(|(i, _)| i)
+        .unwrap_or(0)
 }

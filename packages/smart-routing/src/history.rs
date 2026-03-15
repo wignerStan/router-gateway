@@ -147,12 +147,12 @@ impl RouteAttempt {
     }
 
     /// Check if attempt was successful
-    pub const fn is_successful(&self) -> bool {
+    pub fn is_successful(&self) -> bool {
         self.outcome.success
     }
 
     /// Check if fallback was used
-    pub const fn used_fallback(&self) -> bool {
+    pub fn used_fallback(&self) -> bool {
         self.outcome.used_fallback
     }
 }
@@ -168,7 +168,7 @@ pub struct AttemptHistory {
 
 impl AttemptHistory {
     /// Create a new attempt history
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             attempts: Vec::new(),
             max_attempts: 100_000,
@@ -176,7 +176,7 @@ impl AttemptHistory {
     }
 
     /// Create with a limit
-    pub const fn with_limit(max_attempts: usize) -> Self {
+    pub fn with_limit(max_attempts: usize) -> Self {
         Self {
             attempts: Vec::new(),
             max_attempts: if max_attempts > 0 {
@@ -362,7 +362,7 @@ impl AttemptHistory {
         let fallbacks = attempts.iter().filter(|a| a.used_fallback()).count() as u64;
 
         let mut latencies: Vec<f64> = attempts.iter().map(|a| a.outcome.latency_ms).collect();
-        latencies.sort_by(f64::total_cmp);
+        latencies.sort_by(|a, b| a.total_cmp(b));
 
         let avg_latency: f64 = latencies.iter().sum::<f64>() / latencies.len() as f64;
         let p50 = latencies[(latencies.len() * 50 / 100).min(latencies.len() - 1)];
@@ -372,7 +372,7 @@ impl AttemptHistory {
         let selection_mode_dist = self
             .get_selection_mode_distribution()
             .into_iter()
-            .map(|(k, v)| (format!("{k:?}"), v as u64))
+            .map(|(k, v)| (format!("{:?}", k), v as u64))
             .collect();
 
         Some(AttemptMetrics {
@@ -409,7 +409,7 @@ impl TrackingSystem {
     }
 
     /// Create with custom configuration
-    pub const fn with_config(statistics: StatisticsAggregator, history: AttemptHistory) -> Self {
+    pub fn with_config(statistics: StatisticsAggregator, history: AttemptHistory) -> Self {
         Self {
             statistics,
             history,
@@ -547,7 +547,7 @@ mod tests {
 
         for i in 0..3 {
             let decision_context = DecisionContext::new(
-                format!("req-{i}"),
+                format!("req-{}", i),
                 "model-1".to_string(),
                 vec!["route-1".to_string()],
                 SelectionMode::Weighted,
@@ -555,7 +555,7 @@ mod tests {
             );
 
             let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
-            let attempt = RouteAttempt::new(format!("req-{i}"), decision_context, outcome);
+            let attempt = RouteAttempt::new(format!("req-{}", i), decision_context, outcome);
             history.record(attempt);
         }
 
@@ -569,7 +569,7 @@ mod tests {
 
         for i in 0..5 {
             let decision_context = DecisionContext::new(
-                format!("req-{i}"),
+                format!("req-{}", i),
                 "model-1".to_string(),
                 vec!["route-1".to_string()],
                 SelectionMode::Weighted,
@@ -583,13 +583,11 @@ mod tests {
                 ExecutionOutcome::failure("route-1".to_string(), 200.0, 500, false, None)
             };
 
-            let attempt = RouteAttempt::new(format!("req-{i}"), decision_context, outcome);
+            let attempt = RouteAttempt::new(format!("req-{}", i), decision_context, outcome);
             history.record(attempt);
         }
 
-        let success_rate = history
-            .get_success_rate_for_route("route-1")
-            .expect("Operation should succeed during test");
+        let success_rate = history.get_success_rate_for_route("route-1").unwrap();
         assert_eq!(success_rate, 0.6); // 3 out of 5
     }
 
@@ -599,7 +597,7 @@ mod tests {
 
         for i in 0..3 {
             let decision_context = DecisionContext::new(
-                format!("req-{i}"),
+                format!("req-{}", i),
                 "model-1".to_string(),
                 vec!["route-1".to_string()],
                 SelectionMode::Weighted,
@@ -608,18 +606,16 @@ mod tests {
 
             let outcome = ExecutionOutcome::success(
                 "route-1".to_string(),
-                (i as f64).mul_add(50.0, 100.0),
+                100.0 + i as f64 * 50.0,
                 10,
                 5,
                 200,
             );
-            let attempt = RouteAttempt::new(format!("req-{i}"), decision_context, outcome);
+            let attempt = RouteAttempt::new(format!("req-{}", i), decision_context, outcome);
             history.record(attempt);
         }
 
-        let avg_latency = history
-            .get_avg_latency_for_route("route-1")
-            .expect("Operation should succeed during test");
+        let avg_latency = history.get_avg_latency_for_route("route-1").unwrap();
         assert_eq!(avg_latency, 150.0); // (100 + 150 + 200) / 3
     }
 
@@ -635,7 +631,7 @@ mod tests {
 
         for (i, mode) in modes.iter().enumerate() {
             let decision_context = DecisionContext::new(
-                format!("req-{i}"),
+                format!("req-{}", i),
                 "model-1".to_string(),
                 vec!["route-1".to_string()],
                 mode.clone(),
@@ -643,7 +639,7 @@ mod tests {
             );
 
             let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
-            let attempt = RouteAttempt::new(format!("req-{i}"), decision_context, outcome);
+            let attempt = RouteAttempt::new(format!("req-{}", i), decision_context, outcome);
             history.record(attempt);
         }
 
@@ -687,7 +683,7 @@ mod tests {
         );
 
         let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
-        let attempt = RouteAttempt::new("req-1".to_string(), decision_context, outcome);
+        let attempt = RouteAttempt::new("req-1".to_string(), decision_context, outcome.clone());
 
         tracking.record_attempt(attempt);
 

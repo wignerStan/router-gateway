@@ -1,9 +1,6 @@
 //! Predefined policy templates for common use cases.
 
-use super::types::{
-    CapabilityCategory, PolicyCondition, PolicyConditionType, ProviderCategory, RoutingPolicy,
-    TierCategory,
-};
+use super::types::*;
 
 /// Create cost-optimization policy
 pub fn cost_optimization() -> RoutingPolicy {
@@ -55,8 +52,8 @@ pub fn large_context() -> RoutingPolicy {
 /// Create provider preference policy
 pub fn prefer_provider(provider: ProviderCategory) -> RoutingPolicy {
     RoutingPolicy::new(
-        format!("prefer_{provider:?}").to_lowercase(),
-        format!("Prefer {provider:?}"),
+        format!("prefer_{:?}", provider).to_lowercase(),
+        format!("Prefer {:?}", provider),
     )
     .with_priority(15)
     .with_provider(provider)

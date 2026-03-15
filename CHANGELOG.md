@@ -9,31 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Comprehensive doc comments for all public modules, structs, and enums across all packages (`gateway`, `my-cli`, `model-registry`, `smart-routing`, `llm-tracing`).
-- Detailed documentation for stateful components (`HealthManager`, `MetricsCollector`) with a focus on clone semantics and internal storage sharing.
-- New integration tests for `llm-tracing` Axum middleware to verify trace collection during the HTTP lifecycle.
-- Descriptive and context-aware `.expect()` messages in all test files to improve diagnostics.
-- Local LLM gateway with smart request routing.
-- Five routing strategies: weighted, time_aware, quota_aware, adaptive, policy_aware.
-- OpenAI-compatible API at `POST /v1/chat/completions`.
-- Three provider adapters: OpenAI, Google, Anthropic.
-- Model registry with 5-dimension classification.
-- LLM request tracing and observability.
-- Management CLI (`my-cli`).
-- SQLite-backed metrics and health persistence.
-- SSRF protection for credential base URLs.
-- Constant-time token comparison (timing attack prevention).
-- BDD integration test suite.
+- Initial template structure
+- Workspace configuration for Bun package manager
+- TypeScript project references support
+- Pre-commit hooks with gitleaks integration
+- GitHub Actions CI/CD workflows
 
 ### Changed
 
-- Promoted `missing_docs` from `warn` to `deny` in the workspace `Cargo.toml`.
-- Configured workspace-level `clippy::all` and `clippy::pedantic` as `deny`.
-- Replaced `#[allow(clippy::panic)]` with idiomatic `assert!(matches!(...))` in several tests.
-- Simplified `GatewayConfig::expand_env_vars` to return `()` as it no longer produces errors.
+- Removed detect-secrets in favor of gitleaks
+- Enhanced TypeScript configuration with strict mode options
 
-### Fixed
+### Security
 
-- Improved lock scoping in `MetricsCollector`, `HealthManager`, and `SQLiteStore` to address `significant_drop_tightening` and reduce contention.
+- gitleaks for secret scanning
+- Dependency audit workflow
 
-[Unreleased]: https://github.com/wignerStan/router-gateway/compare/main...HEAD
+---
+
+## [1.0.0] - YYYY-MM-DD
+
+### Initial Release
+
+- Workspace architecture with packages/core, packages/api, packages/bin
+- Comprehensive documentation (AGENTS.md, README-WORKSPACE.md, ROADMAP.md)
+- Production-ready CI/CD pipeline
+- Docker support with multi-stage builds
+- Just task runner with comprehensive commands
+- Security-first configuration (gitleaks, audit)

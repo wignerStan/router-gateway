@@ -23,7 +23,7 @@ fn test_policy_matching() {
     assert!(policy.matches(&context));
 
     // Test with condition
-    let mut policy_with_condition = policy;
+    let mut policy_with_condition = policy.clone();
     policy_with_condition.conditions.push(PolicyCondition {
         condition_type: PolicyConditionType::TimeOfDay,
         value: "10".to_string(),
@@ -91,12 +91,10 @@ fn test_policy_serialization() {
         .with_priority(10)
         .with_capability(CapabilityCategory::Vision, "require");
 
-    let json = serde_json::to_string(&policy)
-        .expect("Model registry operation should succeed during test");
+    let json = serde_json::to_string(&policy).unwrap();
     assert!(json.contains("\"id\":\"test\""));
 
-    let deserialized: RoutingPolicy =
-        serde_json::from_str(&json).expect("Model registry operation should succeed during test");
+    let deserialized: RoutingPolicy = serde_json::from_str(&json).unwrap();
     assert_eq!(deserialized.id, policy.id);
 }
 
@@ -201,9 +199,9 @@ fn test_from_file_loads_and_validates_policies_json() {
     let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let policies_path = manifest_dir
         .parent()
-        .expect("Model registry operation should succeed during test")
+        .unwrap()
         .parent()
-        .expect("Model registry operation should succeed during test")
+        .unwrap()
         .join("config")
         .join("policies.json");
 
@@ -212,7 +210,7 @@ fn test_from_file_loads_and_validates_policies_json() {
         registry.is_ok(),
         "config/policies.json should load successfully: {registry:?}"
     );
-    let registry = registry.expect("Model registry operation should succeed during test");
+    let registry = registry.unwrap();
     assert_eq!(
         registry.all().len(),
         10,
@@ -222,10 +220,8 @@ fn test_from_file_loads_and_validates_policies_json() {
 
 #[test]
 fn test_from_file_rejects_invalid_json() {
-    let tmp = tempfile::NamedTempFile::new()
-        .expect("Model registry operation should succeed during test");
-    std::fs::write(tmp.path(), r#"{"policies": [{"id": 1, "name": "Bad"}]}"#)
-        .expect("Model registry operation should succeed during test");
+    let tmp = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(tmp.path(), r#"{"policies": [{"id": 1, "name": "Bad"}]}"#).unwrap();
 
     let result = PolicyRegistry::from_file(tmp.path());
     assert!(
@@ -236,13 +232,12 @@ fn test_from_file_rejects_invalid_json() {
 
 #[test]
 fn test_from_file_rejects_missing_schema_elements() {
-    let tmp = tempfile::NamedTempFile::new()
-        .expect("Model registry operation should succeed during test");
+    let tmp = tempfile::NamedTempFile::new().unwrap();
     std::fs::write(
         tmp.path(),
         r#"{"policies": [{"priority": 5, "enabled": true, "filters": {}, "action": {"action_type": "prefer"}}]}"#,
     )
-    .expect("Model registry operation should succeed during test");
+    .unwrap();
 
     let result = PolicyRegistry::from_file(tmp.path());
     assert!(

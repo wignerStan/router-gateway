@@ -1,8 +1,4 @@
-use super::{
-    broadcast, Arc, CachedModelInfo, CancellationToken, CapabilityCategory, ContextWindowCategory,
-    CostCategory, DateTime, FetchResult, HashMap, ModelCategorization, ModelInfo, Mutex,
-    ProviderCategory, Registry, RegistryConfig, RwLock, TierCategory, Utc,
-};
+use super::*;
 
 use tokio::task::JoinSet;
 
@@ -60,9 +56,8 @@ impl Registry {
         // 1. Check cache first (read lock)
         {
             let cache = self.cache.read().await;
-            let now = Utc::now();
             if let Some(cached) = cache.get(model_id) {
-                if now < cached.expires_at {
+                if Utc::now() < cached.expires_at {
                     return Ok(Some(cached.info.clone()));
                 }
             }
@@ -107,13 +102,12 @@ impl Registry {
                             Err(e.to_string())
                         } else {
                             // Cache valid result
-                            let expires_at = Utc::now() + self.ttl;
                             let mut cache = self.cache.write().await;
                             cache.insert(
                                 model_id.to_string(),
                                 CachedModelInfo {
                                     info: info.clone(),
-                                    expires_at,
+                                    expires_at: Utc::now() + self.ttl,
                                 },
                             );
                             Ok(Some(info))
@@ -142,7 +136,7 @@ impl Registry {
     }
 
     /// Retrieves model information for multiple model IDs.
-    /// Returns a map of modelID -> `ModelInfo` for found models.
+    /// Returns a map of modelID -> ModelInfo for found models.
     pub async fn get_multiple(
         &self,
         model_ids: &[String],
@@ -153,21 +147,18 @@ impl Registry {
 
         let mut set = JoinSet::new();
         let mut result = HashMap::new();
+        let now = Utc::now();
 
         // Check cache and identify needed models
         {
-            let now = Utc::now();
+            let cache = self.cache.read().await;
             for model_id in model_ids {
                 if model_id.is_empty() {
                     continue;
                 }
-                let cached = {
-                    let cache = self.cache.read().await;
-                    cache.get(model_id).map(|c| (c.info.clone(), c.expires_at))
-                };
-                if let Some((info, expires_at)) = cached {
-                    if now < expires_at {
-                        result.insert(model_id.clone(), info);
+                if let Some(cached) = cache.get(model_id) {
+                    if now < cached.expires_at {
+                        result.insert(model_id.clone(), cached.info.clone());
                         continue;
                     }
                 }
@@ -191,17 +182,18 @@ impl Registry {
     }
 
     /// Refreshes the cache for specific model IDs.
-    /// If `model_ids` is empty, refreshes all models from the fetcher.
+    /// If model_ids is empty, refreshes all models from the fetcher.
     pub async fn refresh(
         &self,
         model_ids: &[String],
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = Utc::now();
+
         if model_ids.is_empty() {
             // Refresh all models
             let models = self.fetcher.list_all().await?;
 
             let mut cache = self.cache.write().await;
-            let now = Utc::now();
             for (id, info) in models {
                 if info.validate().is_err() {
                     continue;
@@ -225,7 +217,7 @@ impl Registry {
     }
 
     /// Removes specific models from the cache.
-    /// If `model_ids` is empty, clears the entire cache.
+    /// If model_ids is empty, clears the entire cache.
     pub async fn invalidate(&self, model_ids: &[String]) {
         let mut cache = self.cache.write().await;
         if model_ids.is_empty() {
@@ -262,141 +254,106 @@ impl Registry {
 
     /// Finds all cached models that support a specific capability.
     pub async fn find_by_capability(&self, capability: &str) -> Vec<ModelInfo> {
+        let cache = self.cache.read().await;
         let now = Utc::now();
-        let entries: Vec<(ModelInfo, DateTime<Utc>)> = {
-            let cache = self.cache.read().await;
-            cache
-                .values()
-                .map(|c| (c.info.clone(), c.expires_at))
-                .collect()
-        };
-
         let mut result = Vec::new();
-        for (info, expires_at) in entries {
-            if now < expires_at && info.supports_capability(capability) {
-                result.push(info);
+
+        for cached in cache.values() {
+            if now < cached.expires_at && cached.info.supports_capability(capability) {
+                result.push(cached.info.clone());
             }
         }
+
         result
     }
 
     /// Finds all cached models from a specific provider.
     pub async fn find_by_provider(&self, provider: &str) -> Vec<ModelInfo> {
+        let cache = self.cache.read().await;
         let now = Utc::now();
-        let entries: Vec<(ModelInfo, DateTime<Utc>)> = {
-            let cache = self.cache.read().await;
-            cache
-                .values()
-                .map(|c| (c.info.clone(), c.expires_at))
-                .collect()
-        };
-
         let mut result = Vec::new();
-        for (info, expires_at) in entries {
-            if now < expires_at && info.provider == provider {
-                result.push(info);
+
+        for cached in cache.values() {
+            if now < cached.expires_at && cached.info.provider == provider {
+                result.push(cached.info.clone());
             }
         }
+
         result
     }
 
     /// Filters cached models by capability category.
     pub async fn filter_by_capability(&self, cap: CapabilityCategory) -> Vec<ModelInfo> {
+        let cache = self.cache.read().await;
         let now = Utc::now();
-        let entries: Vec<(ModelInfo, DateTime<Utc>)> = {
-            let cache = self.cache.read().await;
-            cache
-                .values()
-                .map(|c| (c.info.clone(), c.expires_at))
-                .collect()
-        };
-
         let mut result = Vec::new();
-        for (info, expires_at) in entries {
-            if now < expires_at && info.has_any_capability(&[cap]) {
-                result.push(info);
+
+        for cached in cache.values() {
+            if now < cached.expires_at && cached.info.has_any_capability(&[cap]) {
+                result.push(cached.info.clone());
             }
         }
+
         result
     }
 
     /// Filters models by quality tier.
     pub async fn filter_by_tier(&self, tier: TierCategory) -> Vec<ModelInfo> {
+        let cache = self.cache.read().await;
         let now = Utc::now();
-        let entries: Vec<(ModelInfo, DateTime<Utc>)> = {
-            let cache = self.cache.read().await;
-            cache
-                .values()
-                .map(|c| (c.info.clone(), c.expires_at))
-                .collect()
-        };
-
         let mut result = Vec::new();
-        for (info, expires_at) in entries {
-            if now < expires_at && info.is_in_tier(tier) {
-                result.push(info);
+
+        for cached in cache.values() {
+            if now < cached.expires_at && cached.info.is_in_tier(tier) {
+                result.push(cached.info.clone());
             }
         }
+
         result
     }
 
     /// Filters models by cost category.
     pub async fn filter_by_cost(&self, cost: CostCategory) -> Vec<ModelInfo> {
+        let cache = self.cache.read().await;
         let now = Utc::now();
-        let entries: Vec<(ModelInfo, DateTime<Utc>)> = {
-            let cache = self.cache.read().await;
-            cache
-                .values()
-                .map(|c| (c.info.clone(), c.expires_at))
-                .collect()
-        };
-
         let mut result = Vec::new();
-        for (info, expires_at) in entries {
-            if now < expires_at && info.is_in_cost_range(cost) {
-                result.push(info);
+
+        for cached in cache.values() {
+            if now < cached.expires_at && cached.info.is_in_cost_range(cost) {
+                result.push(cached.info.clone());
             }
         }
+
         result
     }
 
     /// Filters models by context window category.
     pub async fn filter_by_context_window(&self, context: ContextWindowCategory) -> Vec<ModelInfo> {
+        let cache = self.cache.read().await;
         let now = Utc::now();
-        let entries: Vec<(ModelInfo, DateTime<Utc>)> = {
-            let cache = self.cache.read().await;
-            cache
-                .values()
-                .map(|c| (c.info.clone(), c.expires_at))
-                .collect()
-        };
-
         let mut result = Vec::new();
-        for (info, expires_at) in entries {
-            if now < expires_at && info.is_in_context_range(context) {
-                result.push(info);
+
+        for cached in cache.values() {
+            if now < cached.expires_at && cached.info.is_in_context_range(context) {
+                result.push(cached.info.clone());
             }
         }
+
         result
     }
 
     /// Filters models by provider vendor.
     pub async fn filter_by_provider(&self, provider: ProviderCategory) -> Vec<ModelInfo> {
+        let cache = self.cache.read().await;
         let now = Utc::now();
-        let entries: Vec<(ModelInfo, DateTime<Utc>)> = {
-            let cache = self.cache.read().await;
-            cache
-                .values()
-                .map(|c| (c.info.clone(), c.expires_at))
-                .collect()
-        };
-
         let mut result = Vec::new();
-        for (info, expires_at) in entries {
-            if now < expires_at && info.is_from_provider(provider) {
-                result.push(info);
+
+        for cached in cache.values() {
+            if now < cached.expires_at && cached.info.is_from_provider(provider) {
+                result.push(cached.info.clone());
             }
         }
+
         result
     }
 
@@ -423,33 +380,29 @@ impl Registry {
     /// Finds the cheapest model that can fit the context window.
     /// Returns None if no model can fit the requested token count.
     pub async fn find_best_fit(&self, tokens: usize) -> Option<ModelInfo> {
+        let cache = self.cache.read().await;
         let now = Utc::now();
-        let entries: Vec<(ModelInfo, DateTime<Utc>)> = self
-            .cache
-            .read()
-            .await
-            .values()
-            .map(|c| (c.info.clone(), c.expires_at))
-            .collect();
-
         let mut best_model: Option<ModelInfo> = None;
         let mut best_cost = f64::MAX;
 
-        for (info, expires_at) in entries {
-            if now >= expires_at {
+        for cached in cache.values() {
+            if now >= cached.expires_at {
                 continue;
             }
-            if !info.can_fit_context(tokens) {
+
+            if !cached.info.can_fit_context(tokens) {
                 continue;
             }
 
             // Estimate cost (using average input/output ratio of 70/30)
             let estimated_input = (tokens as f64) * 0.7;
             let estimated_output = (tokens as f64) * 0.3;
-            let cost = info.estimate_cost(estimated_input as usize, estimated_output as usize);
+            let cost = cached
+                .info
+                .estimate_cost(estimated_input as usize, estimated_output as usize);
 
             if best_model.is_none() || cost < best_cost {
-                best_model = Some(info);
+                best_model = Some(cached.info.clone());
                 best_cost = cost;
             }
         }
@@ -472,13 +425,11 @@ impl Registry {
             loop {
                 tokio::select! {
                     _ = interval_timer.tick() => {
-                        let fetch_result = fetcher.list_all().await;
-
                         let mut cache_write = cache.write().await;
                         let now = Utc::now();
 
                         // Refresh all models
-                        if let Ok(models) = fetch_result {
+                        if let Ok(models) = fetcher.list_all().await {
                             for (id, info) in models {
                                 if info.validate().is_ok() {
                                     cache_write.insert(
@@ -495,7 +446,7 @@ impl Registry {
                         // Cleanup expired entries
                         cache_write.retain(|_, cached| now < cached.expires_at);
                     }
-                    () = token.cancelled() => {
+                    _ = token.cancelled() => {
                         break;
                     }
                 }

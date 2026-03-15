@@ -1,5 +1,5 @@
 [alias]
-# Strict lint: warnings as errors
+# Add useful aliases if needed
 lint = "clippy --workspace --all-targets --all-features -- -D warnings"
 
 [target.'cfg(all())']

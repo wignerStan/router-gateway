@@ -19,24 +19,19 @@ pub struct TraceSpan {
 
     /// Timestamps
     pub start_time: DateTime<Utc>,
-    /// Timestamp when the request completed.
     pub end_time: Option<DateTime<Utc>>,
 
     /// Request data
     pub input_tokens: Option<u32>,
-    /// The prompt or input text sent to the model.
     pub prompt: Option<String>,
 
     /// Response data
     pub output_tokens: Option<u32>,
-    /// HTTP status code from the response.
     pub status_code: Option<u16>,
-    /// Request latency in milliseconds.
     pub latency_ms: Option<u64>,
 
     /// Metadata
     pub error_message: Option<String>,
-    /// Whether the request used streaming responses.
     pub is_streaming: bool,
 }
 
@@ -104,7 +99,9 @@ impl TraceSpan {
 
     /// Check if the trace was successful
     pub fn is_success(&self) -> bool {
-        self.status_code.is_some_and(|s| (200..300).contains(&s))
+        self.status_code
+            .map(|s| (200..300).contains(&s))
+            .unwrap_or(false)
     }
 }
 
@@ -145,11 +142,7 @@ mod tests {
         assert!(span.end_time.is_some());
         assert_eq!(span.status_code, Some(200));
         assert!(span.latency_ms.is_some());
-        assert!(
-            span.latency_ms
-                .expect("Tracing operation should succeed during test")
-                >= 9
-        );
+        assert!(span.latency_ms.unwrap() >= 9);
         assert!(span.is_success());
     }
 
@@ -216,11 +209,7 @@ mod tests {
         span.complete(500);
         // Should update status but end_time and latency should reflect second call
         assert_eq!(span.status_code, Some(500));
-        assert!(
-            span.latency_ms
-                .expect("Tracing operation should succeed during test")
-                >= first_latency.expect("Tracing operation should succeed during test")
-        );
+        assert!(span.latency_ms.unwrap() >= first_latency.unwrap());
     }
 
     #[test]

@@ -60,7 +60,7 @@ pub struct TimeSlot {
 pub struct QuotaAwareConfig {
     /// Whether quota-aware routing is enabled
     pub enabled: bool,
-    /// Quota balance strategy: `least_used`, `round_robin`, adaptive
+    /// Quota balance strategy: least_used, round_robin, adaptive
     pub quota_balance_strategy: String,
     /// Reserve ratio: quota reserved for peak periods
     pub reserve_ratio: f64,

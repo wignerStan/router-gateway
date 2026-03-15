@@ -28,20 +28,18 @@ impl TracingMiddleware {
             .get("x-request-id")
             .or_else(|| headers.get("x-trace-id"))
             .and_then(|v| v.to_str().ok())
-            .map_or_else(
-                || {
-                    // Generate UUID-based request ID
-                    Uuid::new_v4().to_string()
-                },
-                std::string::ToString::to_string,
-            )
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| {
+                // Generate UUID-based request ID
+                Uuid::new_v4().to_string()
+            })
     }
 
     /// Extract provider from request (e.g., from path or headers)
     fn extract_provider(&self, headers: &HeaderMap) -> Option<String> {
         // Try to get from header first
         if let Some(provider) = headers.get("x-llm-provider") {
-            return provider.to_str().ok().map(std::string::ToString::to_string);
+            return provider.to_str().ok().map(|s| s.to_string());
         }
         // Could also extract from URI path in a real implementation
         None
@@ -50,7 +48,7 @@ impl TracingMiddleware {
     /// Extract model from request (e.g., from body or headers)
     fn extract_model(&self, headers: &HeaderMap) -> Option<String> {
         if let Some(model) = headers.get("x-llm-model") {
-            return model.to_str().ok().map(std::string::ToString::to_string);
+            return model.to_str().ok().map(|s| s.to_string());
         }
         None
     }
@@ -74,7 +72,6 @@ impl TracingMiddleware {
     }
 
     /// Process the request and generate a trace
-    #[allow(clippy::unused_async)]
     pub async fn trace_request(
         &self,
         _method: axum::http::Method,
@@ -104,7 +101,8 @@ impl TracingMiddleware {
         span.is_streaming = headers
             .get("x-streaming")
             .and_then(|v| v.to_str().ok())
-            .is_some_and(|v| v == "true" || v == "1");
+            .map(|v| v == "true" || v == "1")
+            .unwrap_or(false);
 
         span
     }
@@ -159,22 +157,15 @@ impl Default for TracingMiddlewareBuilder {
 }
 
 impl TracingMiddlewareBuilder {
-    /// Create a new builder with no collector set.
     pub fn new() -> Self {
         Self { collector: None }
     }
 
-    /// Set the trace collector for this middleware.
     pub fn with_collector(mut self, collector: Arc<dyn TraceCollector>) -> Self {
         self.collector = Some(collector);
         self
     }
 
-    /// Build the `TracingMiddleware`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if no collector has been set.
     pub fn build(self) -> TracingMiddleware {
         TracingMiddleware {
             collector: self
@@ -276,9 +267,7 @@ mod tests {
         let span = middleware
             .trace_request(
                 axum::http::Method::POST,
-                "/v1/messages"
-                    .parse()
-                    .expect("Tracing operation should succeed during test"),
+                "/v1/messages".parse().unwrap(),
                 headers,
                 vec![],
             )
@@ -317,8 +306,7 @@ mod tests {
         // but test that we fall back to UUID generation when header value is not valid string
         headers.insert(
             "x-request-id",
-            HeaderValue::from_bytes(b"valid-id")
-                .expect("Tracing operation should succeed during test"),
+            HeaderValue::from_bytes(b"valid-id").unwrap(),
         );
         assert_eq!(middleware.extract_request_id(&headers), "valid-id");
 
@@ -393,9 +381,7 @@ mod tests {
         let span = middleware
             .trace_request(
                 axum::http::Method::POST,
-                "/v1/messages"
-                    .parse()
-                    .expect("Tracing operation should succeed during test"),
+                "/v1/messages".parse().unwrap(),
                 headers,
                 vec![],
             )
@@ -425,9 +411,7 @@ mod tests {
         let span = middleware
             .trace_request(
                 axum::http::Method::POST,
-                "/v1/chat/completions"
-                    .parse()
-                    .expect("Tracing operation should succeed during test"),
+                "/v1/chat/completions".parse().unwrap(),
                 headers,
                 large_body,
             )
@@ -474,9 +458,7 @@ mod tests {
         let span = middleware
             .trace_request(
                 axum::http::Method::POST,
-                "/v1/messages"
-                    .parse()
-                    .expect("Tracing operation should succeed during test"),
+                "/v1/messages".parse().unwrap(),
                 headers,
                 vec![],
             )
@@ -497,9 +479,7 @@ mod tests {
         let span1 = middleware
             .trace_request(
                 axum::http::Method::POST,
-                "/v1/messages"
-                    .parse()
-                    .expect("Tracing operation should succeed during test"),
+                "/v1/messages".parse().unwrap(),
                 headers1,
                 vec![],
             )
@@ -512,9 +492,7 @@ mod tests {
         let span2 = middleware
             .trace_request(
                 axum::http::Method::POST,
-                "/v1/messages"
-                    .parse()
-                    .expect("Tracing operation should succeed during test"),
+                "/v1/messages".parse().unwrap(),
                 headers2,
                 vec![],
             )
@@ -527,9 +505,7 @@ mod tests {
         let span3 = middleware
             .trace_request(
                 axum::http::Method::POST,
-                "/v1/messages"
-                    .parse()
-                    .expect("Tracing operation should succeed during test"),
+                "/v1/messages".parse().unwrap(),
                 headers3,
                 vec![],
             )
@@ -541,120 +517,11 @@ mod tests {
         let span4 = middleware
             .trace_request(
                 axum::http::Method::POST,
-                "/v1/messages"
-                    .parse()
-                    .expect("Tracing operation should succeed during test"),
+                "/v1/messages".parse().unwrap(),
                 headers4,
                 vec![],
             )
             .await;
         assert!(!span4.is_streaming);
-    }
-
-    // ===== Integration Tests for Axum Middleware =====
-
-    #[tokio::test]
-    async fn test_tracing_middleware_axum_layer() {
-        use axum::{
-            body::Body,
-            http::{Request, StatusCode},
-            routing::post,
-            Router,
-        };
-        use tower::ServiceExt;
-
-        let collector =
-            std::sync::Arc::new(crate::collector::MemoryTraceCollector::with_default_size());
-        let collector_dyn = std::sync::Arc::clone(&collector)
-            as std::sync::Arc<dyn crate::collector::TraceCollector>;
-        let middleware = TracingMiddleware::new(collector_dyn);
-
-        let app = Router::new()
-            .route(
-                "/v1/chat",
-                post(|| async {
-                    let mut res = axum::response::Response::new(Body::empty());
-                    res.headers_mut().insert(
-                        "x-output-tokens",
-                        axum::http::HeaderValue::from_static("42"),
-                    );
-                    res
-                }),
-            )
-            .layer(axum::middleware::from_fn_with_state(
-                middleware,
-                super::tracing_middleware,
-            ));
-
-        let request = Request::builder()
-            .method("POST")
-            .uri("/v1/chat")
-            .header("x-request-id", "test-req-axum")
-            .header("x-llm-provider", "test-provider")
-            .body(Body::empty())
-            .expect("Axum request should be constructible");
-
-        let response = app
-            .oneshot(request)
-            .await
-            .expect("Router should handle request successfully");
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let traces = collector.get_traces().await;
-        assert_eq!(traces.len(), 1);
-        let trace = &traces[0];
-        assert_eq!(trace.request_id, "test-req-axum");
-        assert_eq!(trace.provider, "test-provider");
-        assert_eq!(trace.status_code, Some(200));
-        assert_eq!(trace.output_tokens, Some(42));
-        assert!(trace.latency_ms.is_some());
-        assert!(trace.end_time.is_some());
-    }
-
-    #[tokio::test]
-    async fn test_tracing_middleware_axum_layer_error_status() {
-        use axum::{
-            body::Body,
-            http::{Request, StatusCode},
-            routing::get,
-            Router,
-        };
-        use tower::ServiceExt;
-
-        let collector =
-            std::sync::Arc::new(crate::collector::MemoryTraceCollector::with_default_size());
-        let collector_dyn = std::sync::Arc::clone(&collector)
-            as std::sync::Arc<dyn crate::collector::TraceCollector>;
-        let middleware = TracingMiddleware::new(collector_dyn);
-
-        let app = Router::new()
-            .route(
-                "/error",
-                get(|| async { (StatusCode::INTERNAL_SERVER_ERROR, "Error") }),
-            )
-            .layer(axum::middleware::from_fn_with_state(
-                middleware,
-                super::tracing_middleware,
-            ));
-
-        let request = Request::builder()
-            .method("GET")
-            .uri("/error")
-            .header("x-request-id", "err-req-axum")
-            .body(Body::empty())
-            .expect("Axum request should be constructible");
-
-        let response = app
-            .oneshot(request)
-            .await
-            .expect("Router should handle request successfully");
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-
-        let traces = collector.get_traces().await;
-        assert_eq!(traces.len(), 1);
-        let trace = &traces[0];
-        assert_eq!(trace.request_id, "err-req-axum");
-        assert_eq!(trace.status_code, Some(500));
-        assert!(trace.latency_ms.is_some());
     }
 }

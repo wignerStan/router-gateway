@@ -334,27 +334,27 @@ impl Router {
     }
 
     /// Get metrics collector
-    pub const fn metrics(&self) -> &MetricsCollector {
+    pub fn metrics(&self) -> &MetricsCollector {
         self.selector.metrics()
     }
 
     /// Get health manager
-    pub const fn health(&self) -> &HealthManager {
+    pub fn health(&self) -> &HealthManager {
         self.selector.health()
     }
 
     /// Get session manager
-    pub const fn session_manager(&self) -> &SessionAffinityManager {
+    pub fn session_manager(&self) -> &SessionAffinityManager {
         &self.session_manager
     }
 
     /// Get bandit policy (returns reference to the Arc for shared access)
-    pub const fn bandit_policy(&self) -> &Arc<Mutex<BanditPolicy>> {
+    pub fn bandit_policy(&self) -> &Arc<Mutex<BanditPolicy>> {
         &self.bandit_policy
     }
 
     /// Get config
-    pub const fn config(&self) -> &RouterConfig {
+    pub fn config(&self) -> &RouterConfig {
         &self.config
     }
 }

@@ -30,15 +30,10 @@ pub struct TraceMetrics {
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
 pub struct ProviderMetrics {
-    /// Total number of requests for this provider.
     pub total_requests: u64,
-    /// Number of successful requests for this provider.
     pub successful_requests: u64,
-    /// Number of requests with recorded latency.
     pub latency_count: u64,
-    /// Average latency in milliseconds.
     pub avg_latency_ms: f64,
-    /// Exponentially weighted moving average of latency.
     pub ewma_latency_ms: f64,
 }
 
@@ -46,17 +41,11 @@ pub struct ProviderMetrics {
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
 pub struct ModelMetrics {
-    /// Total number of requests for this model.
     pub total_requests: u64,
-    /// Number of successful requests for this model.
     pub successful_requests: u64,
-    /// Number of requests with recorded latency.
     pub latency_count: u64,
-    /// Average latency in milliseconds.
     pub avg_latency_ms: f64,
-    /// Cumulative input tokens across all requests.
     pub total_input_tokens: u64,
-    /// Cumulative output tokens across all requests.
     pub total_output_tokens: u64,
 }
 
@@ -73,7 +62,7 @@ impl TraceMetrics {
         if prev_ewma == 0.0 {
             new_value
         } else {
-            alpha.mul_add(new_value, (1.0 - alpha) * prev_ewma)
+            alpha * new_value + (1.0 - alpha) * prev_ewma
         }
     }
 
@@ -94,9 +83,8 @@ impl TraceMetrics {
             let latency_f64 = latency as f64;
 
             // Simple average
-            self.avg_latency_ms = self
-                .avg_latency_ms
-                .mul_add((self.latency_count - 1) as f64, latency_f64)
+            self.avg_latency_ms = (self.avg_latency_ms * (self.latency_count - 1) as f64
+                + latency_f64)
                 / self.latency_count as f64;
 
             // EWMA with alpha=0.1 (smoothing factor)
@@ -130,7 +118,7 @@ impl TraceMetrics {
 
     /// Get percentile approximation using simple interpolation
     /// Note: This requires storing all values; for production, consider t-digest or similar
-    pub const fn get_percentile(&self, _percentile: f64) -> Option<f64> {
+    pub fn get_percentile(&self, _percentile: f64) -> Option<f64> {
         // Placeholder: would need to store actual latency values
         // For production, use a proper percentile approximation algorithm
         None
@@ -147,9 +135,8 @@ impl ProviderMetrics {
         if let Some(latency) = trace.latency_ms {
             self.latency_count += 1;
             let latency_f64 = latency as f64;
-            self.avg_latency_ms = self
-                .avg_latency_ms
-                .mul_add((self.latency_count - 1) as f64, latency_f64)
+            self.avg_latency_ms = (self.avg_latency_ms * (self.latency_count - 1) as f64
+                + latency_f64)
                 / self.latency_count as f64;
             self.ewma_latency_ms =
                 TraceMetrics::calculate_ewma(self.ewma_latency_ms, latency_f64, 0.1);
@@ -176,18 +163,17 @@ impl ModelMetrics {
         if let Some(latency) = trace.latency_ms {
             self.latency_count += 1;
             let latency_f64 = latency as f64;
-            self.avg_latency_ms = self
-                .avg_latency_ms
-                .mul_add((self.latency_count - 1) as f64, latency_f64)
+            self.avg_latency_ms = (self.avg_latency_ms * (self.latency_count - 1) as f64
+                + latency_f64)
                 / self.latency_count as f64;
         }
 
         if let Some(tokens) = trace.input_tokens {
-            self.total_input_tokens += u64::from(tokens);
+            self.total_input_tokens += tokens as u64;
         }
 
         if let Some(tokens) = trace.output_tokens {
-            self.total_output_tokens += u64::from(tokens);
+            self.total_output_tokens += tokens as u64;
         }
     }
 
@@ -265,19 +251,13 @@ mod tests {
         let metrics = TraceMetrics::aggregate(&traces);
 
         // Check OpenAI provider metrics
-        let openai_metrics = metrics
-            .provider_metrics
-            .get("openai")
-            .expect("openai metrics should be present");
+        let openai_metrics = metrics.provider_metrics.get("openai").unwrap();
         assert_eq!(openai_metrics.total_requests, 2);
         assert_eq!(openai_metrics.successful_requests, 2);
         assert!((openai_metrics.avg_latency_ms - 150.0).abs() < 0.1);
 
         // Check Anthropic provider metrics
-        let anthropic_metrics = metrics
-            .provider_metrics
-            .get("anthropic")
-            .expect("anthropic metrics should be present");
+        let anthropic_metrics = metrics.provider_metrics.get("anthropic").unwrap();
         assert_eq!(anthropic_metrics.total_requests, 1);
         assert_eq!(anthropic_metrics.successful_requests, 0);
     }
@@ -294,10 +274,7 @@ mod tests {
 
         let metrics = TraceMetrics::aggregate(&[trace1, trace2]);
 
-        let gpt4_metrics = metrics
-            .model_metrics
-            .get("gpt-4")
-            .expect("gpt-4 metrics should be present");
+        let gpt4_metrics = metrics.model_metrics.get("gpt-4").unwrap();
         assert_eq!(gpt4_metrics.total_requests, 2);
         assert_eq!(gpt4_metrics.total_input_tokens, 300);
         assert_eq!(gpt4_metrics.total_output_tokens, 150);
@@ -392,7 +369,7 @@ mod tests {
             .map(|i| {
                 let status = if i % 4 == 0 { 500 } else { 200 }; // 25% failure rate
                 create_test_trace(
-                    &format!("req-{i}"),
+                    &format!("req-{}", i),
                     if i % 2 == 0 { "openai" } else { "anthropic" },
                     if i % 3 == 0 { "gpt-4" } else { "gpt-3.5" },
                     100 + (i % 100) as u64,

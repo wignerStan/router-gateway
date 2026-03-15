@@ -8,13 +8,10 @@ pub use crate::categories::{
 /// Error type for policy loading operations
 #[derive(Debug, thiserror::Error)]
 pub enum PolicyLoadError {
-    /// An I/O error occurred while loading policy data.
     #[error("I/O error: {0}")]
     Io(String),
-    /// Failed to parse policy data.
     #[error("parse error: {0}")]
     Parse(String),
-    /// Policy data failed schema validation.
     #[error("schema validation failed: {0}")]
     Schema(String),
 }
@@ -40,7 +37,7 @@ pub struct RoutingPolicy {
 }
 
 /// Dimension filters for policy matching
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct PolicyFilters {
     /// Required capabilities (model must have ALL)
     #[serde(default)]
@@ -68,7 +65,7 @@ pub struct PolicyFilters {
 }
 
 /// Capability filter with match mode
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CapabilityFilter {
     /// Capability to check
     pub capability: CapabilityCategory,
@@ -100,27 +97,25 @@ pub enum ModalityCategory {
 }
 
 impl ModalityCategory {
-    /// Returns the string representation of this modality category.
-    pub const fn as_str(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         match self {
-            Self::Text => "text",
-            Self::Image => "image",
-            Self::Audio => "audio",
-            Self::Video => "video",
-            Self::Embedding => "embedding",
-            Self::Code => "code",
+            ModalityCategory::Text => "text",
+            ModalityCategory::Image => "image",
+            ModalityCategory::Audio => "audio",
+            ModalityCategory::Video => "video",
+            ModalityCategory::Embedding => "embedding",
+            ModalityCategory::Code => "code",
         }
     }
 
-    /// Parse a modality name string into a `ModalityCategory`.
     pub fn parse(s: &str) -> Option<Self> {
         match s {
-            "text" => Some(Self::Text),
-            "image" => Some(Self::Image),
-            "audio" => Some(Self::Audio),
-            "video" => Some(Self::Video),
-            "embedding" => Some(Self::Embedding),
-            "code" => Some(Self::Code),
+            "text" => Some(ModalityCategory::Text),
+            "image" => Some(ModalityCategory::Image),
+            "audio" => Some(ModalityCategory::Audio),
+            "video" => Some(ModalityCategory::Video),
+            "embedding" => Some(ModalityCategory::Embedding),
+            "code" => Some(ModalityCategory::Code),
             _ => None,
         }
     }
@@ -163,7 +158,7 @@ fn default_action_type() -> String {
 }
 
 /// Conditional policy application
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PolicyCondition {
     /// Condition type
     pub condition_type: PolicyConditionType,
@@ -176,8 +171,7 @@ pub struct PolicyCondition {
     pub operator: String,
 }
 
-/// Types of conditions for conditional policy application.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum PolicyConditionType {
     /// Time-based condition (hour of day)
@@ -241,7 +235,7 @@ impl RoutingPolicy {
     }
 
     /// Set policy priority
-    pub const fn with_priority(mut self, priority: i32) -> Self {
+    pub fn with_priority(mut self, priority: i32) -> Self {
         self.priority = priority;
         self
     }
@@ -282,7 +276,7 @@ impl RoutingPolicy {
     }
 
     /// Set weight factor
-    pub const fn with_weight_factor(mut self, factor: f64) -> Self {
+    pub fn with_weight_factor(mut self, factor: f64) -> Self {
         self.action.weight_factor = factor;
         self
     }
@@ -314,7 +308,7 @@ impl RoutingPolicy {
                 // Parse value as "key:value" format
                 let parts: Vec<&str> = condition.value.splitn(2, ':').collect();
                 if parts.len() == 2 {
-                    context.metadata.get(parts[0]).cloned()
+                    context.metadata.get(parts[0]).map(|v| v.to_string())
                 } else {
                     None
                 }

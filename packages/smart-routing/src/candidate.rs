@@ -122,7 +122,7 @@ impl Default for CandidateBuilder {
 }
 
 /// Check if required capabilities are supported by a model
-pub const fn check_capability_support(
+pub fn check_capability_support(
     required: &RequiredCapabilities,
     model_info: &ModelInfo,
 ) -> CapabilitySupport {
@@ -152,28 +152,24 @@ pub enum CapabilitySupport {
     Supported,
     /// Some required capabilities are not supported
     Unsupported {
-        /// Whether vision capability is missing.
         missing_vision: bool,
-        /// Whether tool use capability is missing.
         missing_tools: bool,
-        /// Whether streaming capability is missing.
         missing_streaming: bool,
-        /// Whether extended thinking capability is missing.
         missing_thinking: bool,
     },
 }
 
 impl CapabilitySupport {
     /// Check if capabilities are fully supported
-    pub const fn is_supported(&self) -> bool {
-        matches!(self, Self::Supported)
+    pub fn is_supported(&self) -> bool {
+        matches!(self, CapabilitySupport::Supported)
     }
 
     /// Get description of missing capabilities
     pub fn missing_description(&self) -> Option<String> {
         match self {
-            Self::Supported => None,
-            Self::Unsupported {
+            CapabilitySupport::Supported => None,
+            CapabilitySupport::Unsupported {
                 missing_vision,
                 missing_tools,
                 missing_streaming,
@@ -210,7 +206,7 @@ mod tests {
     fn create_test_model(id: &str, provider: &str, context_window: usize) -> ModelInfo {
         ModelInfo {
             id: id.to_string(),
-            name: format!("Test Model {id}"),
+            name: format!("Test Model {}", id),
             provider: provider.to_string(),
             context_window,
             max_output_tokens: 4096,
@@ -458,7 +454,7 @@ mod tests {
         assert!(!support.is_supported());
         let missing = support.missing_description();
         assert!(missing.is_some());
-        let desc = missing.expect("Operation should succeed during test");
+        let desc = missing.unwrap();
         assert!(desc.contains("vision"));
         assert!(desc.contains("thinking"));
     }

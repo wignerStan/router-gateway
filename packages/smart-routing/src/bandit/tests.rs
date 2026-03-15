@@ -25,11 +25,7 @@ mod route_selection {
 
         let result = policy.select_route(&routes);
         assert!(result.is_some());
-        assert!(routes.contains(
-            &result
-                .expect("Operation should succeed during test")
-                .as_str()
-        ));
+        assert!(routes.contains(&result.unwrap().as_str()));
     }
 
     #[test]
@@ -53,9 +49,7 @@ mod route_selection {
         // Run many selections and count
         let mut counts = HashMap::new();
         for _ in 0..100 {
-            let selected = policy
-                .select_route(&routes)
-                .expect("Operation should succeed during test");
+            let selected = policy.select_route(&routes).unwrap();
             *counts.entry(selected).or_insert(0) += 1;
         }
 
@@ -77,9 +71,7 @@ mod recording_and_decay {
         policy.record_result("route1", true, 0.9);
         policy.record_result("route1", false, 0.3);
 
-        let stats = policy
-            .get_stats("route1")
-            .expect("Operation should succeed during test");
+        let stats = policy.get_stats("route1").unwrap();
         assert_eq!(stats.successes, 2.0 + 1.0); // 2 successes + prior
         assert_eq!(stats.failures, 1.0 + 1.0); // 1 failure + prior
         assert_eq!(stats.pulls, 3);
@@ -98,9 +90,7 @@ mod recording_and_decay {
         policy.record_result("route1", true, 0.9);
         policy.record_result("route1", true, 0.9);
 
-        let stats1 = policy
-            .get_stats("route1")
-            .expect("Operation should succeed during test");
+        let stats1 = policy.get_stats("route1").unwrap();
         let successes_after_2 = stats1.successes;
 
         // Add more pulls
@@ -108,9 +98,7 @@ mod recording_and_decay {
             policy.record_result("route1", true, 0.9);
         }
 
-        let stats2 = policy
-            .get_stats("route1")
-            .expect("Operation should succeed during test");
+        let stats2 = policy.get_stats("route1").unwrap();
 
         // With decay, successes should not grow linearly
         assert!(stats2.successes < successes_after_2 + 10.0);
@@ -121,9 +109,7 @@ mod recording_and_decay {
         let mut policy = BanditPolicy::new();
 
         policy.record_result("route1", true, 0.0);
-        let stats = policy
-            .get_stats("route1")
-            .expect("Operation should succeed during test");
+        let stats = policy.get_stats("route1").unwrap();
 
         assert_eq!(stats.last_utility, 0.0);
         assert_eq!(stats.successes, 2.0); // 1 + prior
@@ -168,11 +154,7 @@ mod utility_weighting {
         for _ in 0..20 {
             let result = policy.select_route_with_utility(&routes, &utilities);
             assert!(result.is_some());
-            assert!(routes.contains(
-                &result
-                    .expect("Operation should succeed during test")
-                    .as_str()
-            ));
+            assert!(routes.contains(&result.unwrap().as_str()));
         }
     }
 
@@ -235,7 +217,8 @@ mod diversity_and_reset {
         // This should give route1 a measurable advantage (>55% selection rate)
         assert!(
             count1 > 275,
-            "route1 selected {count1} out of 500 times, expected > 275"
+            "route1 selected {} out of 500 times, expected > 275",
+            count1
         );
     }
 
@@ -245,27 +228,21 @@ mod diversity_and_reset {
 
         // Test clamping to [0, 1]
         policy.set_diversity_penalty("route1", -0.5);
-        let stats = policy
-            .get_stats("route1")
-            .expect("Operation should succeed during test");
+        let stats = policy.get_stats("route1").unwrap();
         assert_eq!(
             stats.diversity_penalty, 0.0,
             "Negative penalty should be clamped to 0"
         );
 
         policy.set_diversity_penalty("route1", 1.5);
-        let stats = policy
-            .get_stats("route1")
-            .expect("Operation should succeed during test");
+        let stats = policy.get_stats("route1").unwrap();
         assert_eq!(
             stats.diversity_penalty, 1.0,
             "Penalty > 1 should be clamped to 1"
         );
 
         policy.set_diversity_penalty("route1", 0.5);
-        let stats = policy
-            .get_stats("route1")
-            .expect("Operation should succeed during test");
+        let stats = policy.get_stats("route1").unwrap();
         assert_eq!(
             stats.diversity_penalty, 0.5,
             "Penalty in [0,1] should be unchanged"
@@ -335,7 +312,8 @@ mod beta_sampling {
             let sample = policy.sample_beta(0.001, 0.001);
             assert!(
                 (0.0..=1.0).contains(&sample),
-                "Sample should be in [0,1] with small params: {sample}"
+                "Sample should be in [0,1] with small params: {}",
+                sample
             );
         }
     }
@@ -350,7 +328,8 @@ mod beta_sampling {
             let sample = policy.sample_beta(100.0, 100.0);
             assert!(
                 (0.0..=1.0).contains(&sample),
-                "Sample should be in [0,1] with large params: {sample}"
+                "Sample should be in [0,1] with large params: {}",
+                sample
             );
             samples.push(sample);
         }
@@ -359,7 +338,8 @@ mod beta_sampling {
         let mean: f64 = samples.iter().sum::<f64>() / samples.len() as f64;
         assert!(
             (mean - 0.5).abs() < 0.1,
-            "Mean should be close to 0.5 with large symmetric params: {mean}"
+            "Mean should be close to 0.5 with large symmetric params: {}",
+            mean
         );
     }
 
@@ -375,7 +355,8 @@ mod beta_sampling {
         let mean_high: f64 = samples_high.iter().sum::<f64>() / samples_high.len() as f64;
         assert!(
             mean_high > 0.9,
-            "Beta(100,1) mean should be high: {mean_high}"
+            "Beta(100,1) mean should be high: {}",
+            mean_high
         );
 
         // Beta(1, 100) should give values close to 0
@@ -384,7 +365,11 @@ mod beta_sampling {
             samples_low.push(policy.sample_beta(1.0, 100.0));
         }
         let mean_low: f64 = samples_low.iter().sum::<f64>() / samples_low.len() as f64;
-        assert!(mean_low < 0.1, "Beta(1,100) mean should be low: {mean_low}");
+        assert!(
+            mean_low < 0.1,
+            "Beta(1,100) mean should be low: {}",
+            mean_low
+        );
     }
 }
 
@@ -412,11 +397,15 @@ mod gamma_sampling {
                 let sample = policy.sample_gamma(shape);
                 assert!(
                     sample > 0.0,
-                    "Gamma sample with shape {shape} should be positive: {sample}"
+                    "Gamma sample with shape {} should be positive: {}",
+                    shape,
+                    sample
                 );
                 assert!(
                     sample.is_finite(),
-                    "Gamma sample with shape {shape} should be finite: {sample}"
+                    "Gamma sample with shape {} should be finite: {}",
+                    shape,
+                    sample
                 );
             }
         }
@@ -460,7 +449,8 @@ mod priors {
         // Prior mean is 10/(10+2) = 0.833
         assert!(
             mean > 0.7,
-            "Mean with optimistic prior (10,2) should be high: {mean}"
+            "Mean with optimistic prior (10,2) should be high: {}",
+            mean
         );
     }
 
@@ -490,7 +480,9 @@ mod priors {
 
         assert!(
             flagship_mean > fast_mean,
-            "Flagship prior mean ({flagship_mean}) should be > fast prior mean ({fast_mean})"
+            "Flagship prior mean ({}) should be > fast prior mean ({})",
+            flagship_mean,
+            fast_mean
         );
     }
 }
@@ -525,7 +517,9 @@ mod tier_priors {
         // Flagship should have significantly higher samples than fast
         assert!(
             flagship_mean > fast_mean + 0.2,
-            "Flagship mean ({flagship_mean}) should be at least 0.2 higher than fast mean ({fast_mean})"
+            "Flagship mean ({}) should be at least 0.2 higher than fast mean ({})",
+            flagship_mean,
+            fast_mean
         );
     }
 
@@ -559,11 +553,13 @@ mod tier_priors {
         // Both means should be close to 3/(3+1) = 0.75
         assert!(
             (flagship_mean - 0.75).abs() < 0.15,
-            "Flagship mean ({flagship_mean}) should be near 0.75 without tier priors"
+            "Flagship mean ({}) should be near 0.75 without tier priors",
+            flagship_mean
         );
         assert!(
             (fast_mean - 0.75).abs() < 0.15,
-            "Fast mean ({fast_mean}) should be near 0.75 without tier priors"
+            "Fast mean ({}) should be near 0.75 without tier priors",
+            fast_mean
         );
     }
 
@@ -588,7 +584,8 @@ mod tier_priors {
         // Should use default prior (2,2) -> mean = 0.5
         assert!(
             (mean - 0.5).abs() < 0.15,
-            "Untiered route mean ({mean}) should be near 0.5 (default prior)"
+            "Untiered route mean ({}) should be near 0.5 (default prior)",
+            mean
         );
     }
 
@@ -617,7 +614,8 @@ mod tier_priors {
         // After many failures, samples should be low despite flagship prior
         assert!(
             mean < 0.5,
-            "After many failures, mean ({mean}) should be low despite flagship prior"
+            "After many failures, mean ({}) should be low despite flagship prior",
+            mean
         );
     }
 }

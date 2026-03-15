@@ -30,14 +30,14 @@ pub enum MessageContent {
 impl MessageContent {
     /// Create text content
     pub fn text(text: impl Into<String>) -> Self {
-        Self::Text(text.into())
+        MessageContent::Text(text.into())
     }
 
     /// Get text if this is text-only content
     pub fn as_text(&self) -> Option<&str> {
         match self {
-            Self::Text(t) => Some(t),
-            Self::Parts(_) => None,
+            MessageContent::Text(t) => Some(t),
+            MessageContent::Parts(_) => None,
         }
     }
 }
@@ -45,13 +45,13 @@ impl MessageContent {
 /// Content part for multi-modal messages
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContentPart {
-    /// Part type: text, `image_url`, image, etc.
+    /// Part type: text, image_url, image, etc.
     #[serde(rename = "type")]
     pub part_type: String,
     /// Text content (for text parts)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
-    /// Image URL (for `image_url` parts)
+    /// Image URL (for image_url parts)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_url: Option<ImageUrl>,
     /// Image data (for inline images)
@@ -156,11 +156,8 @@ pub enum ToolChoice {
     None,
     /// Must use a tool
     Required,
-    /// Use a specific function.
-    Function {
-        /// Name of the function to call.
-        name: String,
-    },
+    /// Use a specific function
+    Function { name: String },
 }
 
 #[cfg(test)]
@@ -193,26 +190,17 @@ mod tests {
         assert!(part.text.is_none());
         assert!(part.image_url.is_some());
         assert_eq!(
-            part.image_url
-                .as_ref()
-                .expect("JSON operation should succeed for message types")
-                .url,
+            part.image_url.as_ref().unwrap().url,
             "https://example.com/image.png"
         );
-        assert!(part
-            .image_url
-            .as_ref()
-            .expect("JSON operation should succeed for message types")
-            .detail
-            .is_none());
+        assert!(part.image_url.as_ref().unwrap().detail.is_none());
         assert!(part.image_data.is_none());
     }
 
     #[test]
     fn test_content_part_serialization() {
         let part = ContentPart::text("Test");
-        let json =
-            serde_json::to_string(&part).expect("JSON operation should succeed for message types");
+        let json = serde_json::to_string(&part).unwrap();
         assert!(json.contains("\"type\":\"text\""));
         assert!(json.contains("\"text\":\"Test\""));
     }
@@ -223,8 +211,7 @@ mod tests {
             "type": "text",
             "text": "Hello"
         });
-        let part: ContentPart =
-            serde_json::from_value(json).expect("JSON operation should succeed for message types");
+        let part: ContentPart = serde_json::from_value(json).unwrap();
         assert_eq!(part.part_type, "text");
         assert_eq!(part.text, Some("Hello".to_string()));
     }
@@ -242,9 +229,7 @@ mod tests {
         };
         assert_eq!(part.part_type, "image");
         assert!(part.image_data.is_some());
-        let img_data = part
-            .image_data
-            .expect("JSON operation should succeed for message types");
+        let img_data = part.image_data.unwrap();
         assert_eq!(img_data.mime_type, "image/png");
         assert_eq!(img_data.data, "base64encoded");
     }
@@ -265,8 +250,7 @@ mod tests {
             url: "https://example.com/img.png".to_string(),
             detail: Some("auto".to_string()),
         };
-        let json =
-            serde_json::to_string(&url).expect("JSON operation should succeed for message types");
+        let json = serde_json::to_string(&url).unwrap();
         assert!(json.contains("\"url\":\"https://example.com/img.png\""));
         assert!(json.contains("\"detail\":\"auto\""));
     }
@@ -276,8 +260,7 @@ mod tests {
         let json = json!({
             "url": "https://example.com/img.png"
         });
-        let url: ImageUrl =
-            serde_json::from_value(json).expect("JSON operation should succeed for message types");
+        let url: ImageUrl = serde_json::from_value(json).unwrap();
         assert_eq!(url.url, "https://example.com/img.png");
         assert!(url.detail.is_none());
     }
@@ -298,8 +281,7 @@ mod tests {
             mime_type: "image/png".to_string(),
             data: "abc123".to_string(),
         };
-        let json =
-            serde_json::to_string(&data).expect("JSON operation should succeed for message types");
+        let json = serde_json::to_string(&data).unwrap();
         assert!(json.contains("\"mime_type\":\"image/png\""));
         assert!(json.contains("\"data\":\"abc123\""));
     }
@@ -319,8 +301,7 @@ mod tests {
     #[test]
     fn test_tool_serialization() {
         let tool = Tool::function("calc", "Calculator").with_parameters(json!({"type": "object"}));
-        let json_str =
-            serde_json::to_string(&tool).expect("JSON operation should succeed for message types");
+        let json_str = serde_json::to_string(&tool).unwrap();
         assert!(json_str.contains("\"type\":\"function\""));
         assert!(json_str.contains("\"name\":\"calc\""));
     }
@@ -331,20 +312,22 @@ mod tests {
             ContentPart::text("Hello"),
             ContentPart::image_url("https://example.com/img.png"),
         ]);
-        assert!(matches!(content, MessageContent::Parts(_)));
-        if let MessageContent::Parts(parts) = content {
-            assert_eq!(parts.len(), 2);
-            assert_eq!(parts[0].part_type, "text");
-            assert_eq!(parts[1].part_type, "image_url");
+        match content {
+            MessageContent::Parts(parts) => {
+                assert_eq!(parts.len(), 2);
+                assert_eq!(parts[0].part_type, "text");
+                assert_eq!(parts[1].part_type, "image_url");
+            },
+            _ => panic!("Expected Parts variant"),
         }
     }
 
     #[test]
     fn test_message_content_text_variant() {
         let content = MessageContent::Text("Hello world".to_string());
-        assert!(matches!(content, MessageContent::Text(_)));
-        if let MessageContent::Text(text) = content {
-            assert_eq!(text, "Hello world");
+        match content {
+            MessageContent::Text(text) => assert_eq!(text, "Hello world"),
+            _ => panic!("Expected Text variant"),
         }
     }
 
@@ -367,8 +350,7 @@ mod tests {
             description: None,
             parameters: None,
         };
-        let json =
-            serde_json::to_string(&func).expect("JSON operation should succeed for message types");
+        let json = serde_json::to_string(&func).unwrap();
         assert!(json.contains("\"name\":\"my_func\""));
         // description and parameters should be omitted when None
         assert!(!json.contains("\"description\""));
@@ -394,8 +376,7 @@ mod tests {
             content: MessageContent::Text("Hi there".to_string()),
             name: None,
         };
-        let json =
-            serde_json::to_string(&msg).expect("JSON operation should succeed for message types");
+        let json = serde_json::to_string(&msg).unwrap();
         assert!(json.contains("\"role\":\"assistant\""));
         assert!(json.contains("\"content\":\"Hi there\""));
     }

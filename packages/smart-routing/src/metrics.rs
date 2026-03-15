@@ -109,7 +109,7 @@ impl MetricsCollector {
 
         // Cleanup old entries periodically
         if metrics.len() > self.max_entries {
-            self.cleanup_old_entries(&mut metrics);
+            self.cleanup_old_entries(&mut metrics).await;
         }
     }
 
@@ -132,69 +132,66 @@ impl MetricsCollector {
         if op_count % self.cleanup_interval == 0 {
             let mut metrics = self.metrics.write().await;
             if metrics.len() > self.max_entries {
-                self.cleanup_old_entries(&mut metrics);
+                self.cleanup_old_entries(&mut metrics).await;
             }
         }
 
-        {
-            let mut metrics = self.metrics.write().await;
-            let entry = metrics
-                .entry(auth_id.to_string())
-                .or_insert_with(|| AuthMetrics {
-                    total_requests: 0,
-                    success_count: 0,
-                    failure_count: 0,
-                    avg_latency_ms: 0.0,
-                    min_latency_ms: f64::MAX,
-                    max_latency_ms: 0.0,
-                    success_rate: 1.0,
-                    error_rate: 0.0,
-                    consecutive_successes: 0,
-                    consecutive_failures: 0,
-                    last_request_time: Utc::now(),
-                    last_success_time: None,
-                    last_failure_time: None,
-                });
+        let mut metrics = self.metrics.write().await;
+        let entry = metrics
+            .entry(auth_id.to_string())
+            .or_insert_with(|| AuthMetrics {
+                total_requests: 0,
+                success_count: 0,
+                failure_count: 0,
+                avg_latency_ms: 0.0,
+                min_latency_ms: f64::MAX,
+                max_latency_ms: 0.0,
+                success_rate: 1.0,
+                error_rate: 0.0,
+                consecutive_successes: 0,
+                consecutive_failures: 0,
+                last_request_time: Utc::now(),
+                last_success_time: None,
+                last_failure_time: None,
+            });
 
-            // Update request counts
-            entry.total_requests += 1;
-            entry.last_request_time = Utc::now();
+        // Update request counts
+        entry.total_requests += 1;
+        entry.last_request_time = Utc::now();
 
-            if success {
-                entry.success_count += 1;
-                entry.consecutive_successes += 1;
-                entry.consecutive_failures = 0;
-                entry.last_success_time = Some(Utc::now());
+        if success {
+            entry.success_count += 1;
+            entry.consecutive_successes += 1;
+            entry.consecutive_failures = 0;
+            entry.last_success_time = Some(Utc::now());
+        } else {
+            entry.failure_count += 1;
+            entry.consecutive_failures += 1;
+            entry.consecutive_successes = 0;
+            entry.last_failure_time = Some(Utc::now());
+        }
+
+        // Update latency using EWMA
+        if latency_ms > 0.0 {
+            if entry.avg_latency_ms == 0.0 {
+                entry.avg_latency_ms = latency_ms;
             } else {
-                entry.failure_count += 1;
-                entry.consecutive_failures += 1;
-                entry.consecutive_successes = 0;
-                entry.last_failure_time = Some(Utc::now());
+                entry.avg_latency_ms =
+                    EWMA_ALPHA * latency_ms + (1.0 - EWMA_ALPHA) * entry.avg_latency_ms;
             }
 
-            // Update latency using EWMA
-            if latency_ms > 0.0 {
-                if entry.avg_latency_ms == 0.0 {
-                    entry.avg_latency_ms = latency_ms;
-                } else {
-                    entry.avg_latency_ms =
-                        EWMA_ALPHA.mul_add(latency_ms, (1.0 - EWMA_ALPHA) * entry.avg_latency_ms);
-                }
-
-                if latency_ms < entry.min_latency_ms {
-                    entry.min_latency_ms = latency_ms;
-                }
-                if latency_ms > entry.max_latency_ms {
-                    entry.max_latency_ms = latency_ms;
-                }
+            if latency_ms < entry.min_latency_ms {
+                entry.min_latency_ms = latency_ms;
             }
-
-            // Update success/error rate using EWMA
-            let current_success = if success { 1.0 } else { 0.0 };
-            entry.success_rate =
-                EWMA_ALPHA.mul_add(current_success, (1.0 - EWMA_ALPHA) * entry.success_rate);
-            entry.error_rate = 1.0 - entry.success_rate;
+            if latency_ms > entry.max_latency_ms {
+                entry.max_latency_ms = latency_ms;
+            }
         }
+
+        // Update success/error rate using EWMA
+        let current_success = if success { 1.0 } else { 0.0 };
+        entry.success_rate = EWMA_ALPHA * current_success + (1.0 - EWMA_ALPHA) * entry.success_rate;
+        entry.error_rate = 1.0 - entry.success_rate;
     }
 
     /// Get auth metrics
@@ -247,7 +244,10 @@ impl MetricsCollector {
     }
 
     /// Cleanup old entries to control memory growth
-    fn cleanup_old_entries(&self, metrics: &mut std::collections::HashMap<String, AuthMetrics>) {
+    async fn cleanup_old_entries(
+        &self,
+        metrics: &mut std::collections::HashMap<String, AuthMetrics>,
+    ) {
         if self.max_entries == 0 {
             return;
         }
@@ -293,10 +293,7 @@ mod tests {
             .record_result("test-auth", false, 200.0, 500)
             .await;
 
-        let metrics = collector
-            .get_metrics("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let metrics = collector.get_metrics("test-auth").await.unwrap();
         assert_eq!(metrics.total_requests, 3);
         assert_eq!(metrics.success_count, 2);
         assert_eq!(metrics.failure_count, 1);
@@ -314,10 +311,7 @@ mod tests {
         collector.record_result("test-auth", true, 200.0, 200).await;
         collector.record_result("test-auth", true, 300.0, 200).await;
 
-        let metrics = collector
-            .get_metrics("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let metrics = collector.get_metrics("test-auth").await.unwrap();
         // EWMA should smooth the values
         assert!(metrics.avg_latency_ms > 100.0 && metrics.avg_latency_ms < 300.0);
     }
@@ -333,18 +327,12 @@ mod tests {
             .record_result("test-auth", false, 100.0, 500)
             .await;
 
-        let metrics = collector
-            .get_metrics("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let metrics = collector.get_metrics("test-auth").await.unwrap();
         assert_eq!(metrics.consecutive_failures, 1);
         assert_eq!(metrics.consecutive_successes, 0);
 
         collector.record_result("test-auth", true, 100.0, 200).await;
-        let metrics = collector
-            .get_metrics("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let metrics = collector.get_metrics("test-auth").await.unwrap();
         assert_eq!(metrics.consecutive_failures, 0);
         assert_eq!(metrics.consecutive_successes, 1);
     }
@@ -373,10 +361,7 @@ mod tests {
         // Record result with zero latency
         collector.record_result("test-auth", true, 0.0, 200).await;
 
-        let metrics = collector
-            .get_metrics("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let metrics = collector.get_metrics("test-auth").await.unwrap();
         // Zero latency should not affect min/max/avg
         assert_eq!(metrics.avg_latency_ms, 0.0);
         assert_eq!(metrics.min_latency_ms, f64::MAX);
@@ -389,7 +374,7 @@ mod tests {
 
         // Add more entries than the limit
         for i in 0..10 {
-            collector.initialize_auth(&format!("auth-{i}")).await;
+            collector.initialize_auth(&format!("auth-{}", i)).await;
         }
 
         // Cleanup should have removed oldest entries
@@ -404,11 +389,11 @@ mod tests {
 
         // Spawn multiple concurrent recorders
         for i in 0..10 {
-            let collector_clone = Arc::clone(&collector);
+            let collector_clone = collector.clone();
             let handle = tokio::spawn(async move {
                 for j in 0..10 {
                     collector_clone
-                        .record_result(&format!("auth-{i}"), true, 100.0 + j as f64, 200)
+                        .record_result(&format!("auth-{}", i), true, 100.0 + j as f64, 200)
                         .await;
                 }
             });
@@ -417,7 +402,7 @@ mod tests {
 
         // Wait for all tasks to complete
         for handle in handles {
-            handle.await.expect("Operation should succeed during test");
+            handle.await.unwrap();
         }
 
         // Verify all metrics were recorded
@@ -425,10 +410,7 @@ mod tests {
         assert_eq!(all_metrics.len(), 10);
 
         for i in 0..10 {
-            let metrics = collector
-                .get_metrics(&format!("auth-{i}"))
-                .await
-                .expect("Operation should succeed during test");
+            let metrics = collector.get_metrics(&format!("auth-{}", i)).await.unwrap();
             assert_eq!(metrics.total_requests, 10);
             assert_eq!(metrics.success_count, 10);
         }
@@ -444,20 +426,14 @@ mod tests {
         collector.record_result("test-auth", true, 150.0, 200).await;
 
         // Verify metrics exist
-        let metrics = collector
-            .get_metrics("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let metrics = collector.get_metrics("test-auth").await.unwrap();
         assert_eq!(metrics.total_requests, 2);
 
         // Reset metrics
         collector.reset("test-auth").await;
 
         // Verify metrics are reset
-        let metrics = collector
-            .get_metrics("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let metrics = collector.get_metrics("test-auth").await.unwrap();
         assert_eq!(metrics.total_requests, 0);
         assert_eq!(metrics.success_count, 0);
         assert_eq!(metrics.failure_count, 0);
@@ -496,10 +472,7 @@ mod tests {
         collector.record_result("test-auth", true, 150.0, 200).await;
         collector.record_result("test-auth", true, 100.0, 200).await;
 
-        let metrics = collector
-            .get_metrics("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let metrics = collector.get_metrics("test-auth").await.unwrap();
         assert_eq!(metrics.min_latency_ms, 50.0);
         assert_eq!(metrics.max_latency_ms, 150.0);
     }
@@ -538,10 +511,7 @@ mod tests {
         collector.record_result("auto-auth", true, 100.0, 200).await;
 
         // Should auto-create metrics
-        let metrics = collector
-            .get_metrics("auto-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let metrics = collector.get_metrics("auto-auth").await.unwrap();
         assert_eq!(metrics.total_requests, 1);
         assert_eq!(metrics.success_count, 1);
     }
@@ -555,10 +525,7 @@ mod tests {
         let collector = MetricsCollector::new();
         collector.initialize_auth("test-auth").await;
 
-        let metrics = collector
-            .get_metrics("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let metrics = collector.get_metrics("test-auth").await.unwrap();
 
         assert_eq!(metrics.total_requests, 0);
         assert_eq!(metrics.success_count, 0);
@@ -578,10 +545,7 @@ mod tests {
         // Single latency record
         collector.record_result("test-auth", true, 150.0, 200).await;
 
-        let metrics = collector
-            .get_metrics("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let metrics = collector.get_metrics("test-auth").await.unwrap();
 
         // With single request, avg should equal that request's latency
         assert_eq!(metrics.avg_latency_ms, 150.0);
@@ -601,10 +565,7 @@ mod tests {
                 .await;
         }
 
-        let metrics = collector
-            .get_metrics("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let metrics = collector.get_metrics("test-auth").await.unwrap();
 
         assert_eq!(metrics.total_requests, 50);
         assert_eq!(metrics.failure_count, 50);
@@ -633,7 +594,7 @@ mod tests {
 
         // Spawn many concurrent recorders for the SAME auth (tests locking)
         for _ in 0..10 {
-            let collector_clone = Arc::clone(&collector);
+            let collector_clone = collector.clone();
             let handle = tokio::spawn(async move {
                 for _ in 0..100 {
                     collector_clone
@@ -646,14 +607,11 @@ mod tests {
 
         // Wait for all tasks
         for handle in handles {
-            handle.await.expect("Operation should succeed during test");
+            handle.await.unwrap();
         }
 
         // Verify all metrics were recorded
-        let metrics = collector
-            .get_metrics("shared-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let metrics = collector.get_metrics("shared-auth").await.unwrap();
         assert_eq!(
             metrics.total_requests, 1000,
             "All 1000 requests should be recorded"
@@ -678,20 +636,14 @@ mod tests {
         }
 
         // Verify data exists
-        let before = collector
-            .get_metrics("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let before = collector.get_metrics("test-auth").await.unwrap();
         assert_eq!(before.total_requests, 60);
 
         // Reset
         collector.reset("test-auth").await;
 
         // Verify all reset
-        let after = collector
-            .get_metrics("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let after = collector.get_metrics("test-auth").await.unwrap();
         assert_eq!(after.total_requests, 0);
         assert_eq!(after.success_count, 0);
         assert_eq!(after.failure_count, 0);
@@ -714,14 +666,11 @@ mod tests {
         collector
             .record_result("test-auth", true, 1000.0, 200)
             .await;
-        let m2 = collector
-            .get_metrics("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let m2 = collector.get_metrics("test-auth").await.unwrap();
 
         // EWMA should smooth the jump (not immediately jump to 1000)
         // EWMA = 0.3 * new + 0.7 * old
-        let expected = 0.3f64.mul_add(1000.0, 0.7 * 100.0);
+        let expected = 0.3 * 1000.0 + 0.7 * 100.0;
         assert!(
             (m2.avg_latency_ms - expected).abs() < 0.1,
             "EWMA should smooth latency: expected {}, got {}",
@@ -741,23 +690,17 @@ mod tests {
 
         // Start with success (initial rate is 1.0)
         collector.record_result("test-auth", true, 100.0, 200).await;
-        let m1 = collector
-            .get_metrics("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let m1 = collector.get_metrics("test-auth").await.unwrap();
 
         // Now record failure
         collector
             .record_result("test-auth", false, 100.0, 500)
             .await;
-        let m2 = collector
-            .get_metrics("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let m2 = collector.get_metrics("test-auth").await.unwrap();
 
         // Success rate should decrease smoothly
         // EWMA = 0.3 * 0 + 0.7 * previous
-        let expected = 0.3f64.mul_add(0.0, 0.7 * m1.success_rate);
+        let expected = 0.3 * 0.0 + 0.7 * m1.success_rate;
         assert!(
             (m2.success_rate - expected).abs() < 0.1,
             "EWMA should smooth success rate"
@@ -773,20 +716,14 @@ mod tests {
         collector
             .record_result("test-auth", true, f64::MIN_POSITIVE, 200)
             .await;
-        let m1 = collector
-            .get_metrics("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let m1 = collector.get_metrics("test-auth").await.unwrap();
         assert!(m1.avg_latency_ms > 0.0);
 
         // Very large latency
         collector
             .record_result("test-auth", true, 1_000_000.0, 200)
             .await;
-        let m2 = collector
-            .get_metrics("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let m2 = collector.get_metrics("test-auth").await.unwrap();
         assert!(m2.max_latency_ms == 1_000_000.0);
         assert!(m2.min_latency_ms == f64::MIN_POSITIVE);
     }
@@ -802,10 +739,7 @@ mod tests {
         // Try to record negative latency (should be ignored per > 0.0 check)
         collector.record_result("test-auth", true, -50.0, 200).await;
 
-        let metrics = collector
-            .get_metrics("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let metrics = collector.get_metrics("test-auth").await.unwrap();
 
         // Total requests still increments
         assert_eq!(metrics.total_requests, 2);

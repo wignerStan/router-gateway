@@ -26,7 +26,7 @@ impl AnthropicAdapter {
     }
 
     /// Create with custom base URL
-    pub const fn with_base_url(base_url: String) -> Self {
+    pub fn with_base_url(base_url: String) -> Self {
         Self {
             default_base_url: base_url,
         }
@@ -34,7 +34,7 @@ impl AnthropicAdapter {
 }
 
 impl ProviderAdapter for AnthropicAdapter {
-    fn provider_name(&self) -> &'static str {
+    fn provider_name(&self) -> &str {
         "anthropic"
     }
 
@@ -235,7 +235,7 @@ impl ProviderAdapter for AnthropicAdapter {
         };
         // Remove trailing slash to prevent double-slash issues
         let base = base.trim_end_matches('/');
-        format!("{base}/messages")
+        format!("{}/messages", base)
     }
 
     fn build_headers(&self, api_key: &str) -> Vec<(String, String)> {
@@ -297,9 +297,7 @@ mod tests {
             }
         });
 
-        let result = adapter
-            .transform_response(response)
-            .expect("Provider transformation should succeed during test");
+        let result = adapter.transform_response(response).unwrap();
         assert_eq!(result.id, "msg_123");
         assert_eq!(result.content, "Hello there!");
         assert_eq!(result.usage.prompt_tokens, 10);
@@ -332,16 +330,12 @@ mod tests {
         let transformed = adapter.transform_request(&request);
         // Should still create a message with empty text
         assert_eq!(transformed["model"], "claude-3-opus");
-        let messages = transformed["messages"]
-            .as_array()
-            .expect("Provider transformation should succeed during test");
+        let messages = transformed["messages"].as_array().unwrap();
         assert_eq!(messages.len(), 1);
         // Content should be an array with empty text
         let content = &messages[0]["content"];
         assert!(content.is_array());
-        let content_arr = content
-            .as_array()
-            .expect("Provider transformation should succeed during test");
+        let content_arr = content.as_array().unwrap();
         assert_eq!(content_arr[0]["type"], "text");
         assert_eq!(content_arr[0]["text"], "");
     }
@@ -364,9 +358,7 @@ mod tests {
 
         let transformed = adapter.transform_request(&request);
         // Should handle empty messages gracefully
-        let messages = transformed["messages"]
-            .as_array()
-            .expect("Provider transformation should succeed during test");
+        let messages = transformed["messages"].as_array().unwrap();
         assert_eq!(messages.len(), 0);
     }
 
@@ -424,15 +416,11 @@ mod tests {
         };
 
         let transformed = adapter.transform_request(&request);
-        let messages = transformed["messages"]
-            .as_array()
-            .expect("Provider transformation should succeed during test");
+        let messages = transformed["messages"].as_array().unwrap();
         assert_eq!(messages.len(), 2);
 
         // First message should have text and malformed image placeholder
-        let first_content = messages[0]["content"]
-            .as_array()
-            .expect("Provider transformation should succeed during test");
+        let first_content = messages[0]["content"].as_array().unwrap();
         assert_eq!(first_content.len(), 2);
         assert_eq!(first_content[0]["type"], "text");
         assert_eq!(first_content[0]["text"], "Hello");
@@ -440,9 +428,7 @@ mod tests {
         assert_eq!(first_content[1]["text"], "[malformed image content]");
 
         // Second message should have text and empty URL image
-        let second_content = messages[1]["content"]
-            .as_array()
-            .expect("Provider transformation should succeed during test");
+        let second_content = messages[1]["content"].as_array().unwrap();
         assert_eq!(second_content.len(), 2);
         assert_eq!(second_content[0]["type"], "text");
         assert_eq!(second_content[0]["text"], "World");
@@ -483,14 +469,10 @@ mod tests {
         };
 
         let transformed = adapter.transform_request(&request);
-        let messages = transformed["messages"]
-            .as_array()
-            .expect("Provider transformation should succeed during test");
+        let messages = transformed["messages"].as_array().unwrap();
         assert_eq!(messages.len(), 1);
 
-        let content = messages[0]["content"]
-            .as_array()
-            .expect("Provider transformation should succeed during test");
+        let content = messages[0]["content"].as_array().unwrap();
         // Should have 4 parts: text, valid image, placeholder, text
         assert_eq!(content.len(), 4);
 
@@ -572,23 +554,19 @@ mod tests {
         let transformed = adapter.transform_request(&request);
         assert_eq!(transformed["max_tokens"], 2048);
         // f32 has precision limitations, compare with tolerance
-        let temp = transformed["temperature"]
-            .as_f64()
-            .expect("Provider transformation should succeed during test");
+        let temp = transformed["temperature"].as_f64().unwrap();
         assert!(
             (temp - 0.7).abs() < 0.001,
-            "Expected temperature ~0.7, got {temp}"
+            "Expected temperature ~0.7, got {}",
+            temp
         );
-        let top_p = transformed["top_p"]
-            .as_f64()
-            .expect("Provider transformation should succeed during test");
+        let top_p = transformed["top_p"].as_f64().unwrap();
         assert!(
             (top_p - 0.9).abs() < 0.001,
-            "Expected top_p ~0.9, got {top_p}"
+            "Expected top_p ~0.9, got {}",
+            top_p
         );
-        let stop = transformed["stop_sequences"]
-            .as_array()
-            .expect("Provider transformation should succeed during test");
+        let stop = transformed["stop_sequences"].as_array().unwrap();
         assert_eq!(stop.len(), 2);
         assert_eq!(transformed["stream"], true);
         assert_eq!(transformed["system"], "You are helpful.");
@@ -623,9 +601,7 @@ mod tests {
         };
 
         let transformed = adapter.transform_request(&request);
-        let tools = transformed["tools"]
-            .as_array()
-            .expect("Provider transformation should succeed during test");
+        let tools = transformed["tools"].as_array().unwrap();
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0]["name"], "get_weather");
         assert_eq!(tools[0]["description"], "Get weather info");
@@ -685,9 +661,7 @@ mod tests {
         };
 
         let transformed = adapter.transform_request(&request);
-        let messages = transformed["messages"]
-            .as_array()
-            .expect("Provider transformation should succeed during test");
+        let messages = transformed["messages"].as_array().unwrap();
         assert_eq!(messages.len(), 1);
     }
 
@@ -709,9 +683,7 @@ mod tests {
             }
         });
 
-        let result = adapter
-            .transform_response(response)
-            .expect("Provider transformation should succeed during test");
+        let result = adapter.transform_response(response).unwrap();
         assert_eq!(result.id, "msg_123");
         assert_eq!(result.content, ""); // Empty string from empty array
     }
@@ -731,9 +703,7 @@ mod tests {
             }
         });
 
-        let result = adapter
-            .transform_response(response)
-            .expect("Provider transformation should succeed during test");
+        let result = adapter.transform_response(response).unwrap();
         assert_eq!(result.id, "unknown"); // Should use default
     }
 
@@ -752,9 +722,7 @@ mod tests {
             }
         });
 
-        let result = adapter
-            .transform_response(response)
-            .expect("Provider transformation should succeed during test");
+        let result = adapter.transform_response(response).unwrap();
         assert_eq!(result.model, "unknown"); // Should use default
     }
 
@@ -773,9 +741,7 @@ mod tests {
             }
         });
 
-        let result = adapter
-            .transform_response(response)
-            .expect("Provider transformation should succeed during test");
+        let result = adapter.transform_response(response).unwrap();
         assert_eq!(result.finish_reason, "unknown"); // Should use default
     }
 
@@ -791,9 +757,7 @@ mod tests {
             "stop_reason": "end_turn"
         });
 
-        let result = adapter
-            .transform_response(response)
-            .expect("Provider transformation should succeed during test");
+        let result = adapter.transform_response(response).unwrap();
         assert_eq!(result.usage.prompt_tokens, 0);
         assert_eq!(result.usage.completion_tokens, 0);
         assert_eq!(result.usage.total_tokens, 0);
@@ -815,9 +779,7 @@ mod tests {
             }
         });
 
-        let result = adapter
-            .transform_response(response)
-            .expect("Provider transformation should succeed during test");
+        let result = adapter.transform_response(response).unwrap();
         assert_eq!(result.usage.prompt_tokens, 100);
         assert_eq!(result.usage.completion_tokens, 0); // Default
         assert_eq!(result.usage.total_tokens, 100);
@@ -879,9 +841,7 @@ mod tests {
             }
         });
 
-        let result = adapter
-            .transform_response(response)
-            .expect("Provider transformation should succeed during test");
+        let result = adapter.transform_response(response).unwrap();
         assert_eq!(result.content, "First Second Third");
     }
 
@@ -907,14 +867,9 @@ mod tests {
             }
         });
 
-        let result = adapter
-            .transform_response(response)
-            .expect("Provider transformation should succeed during test");
+        let result = adapter.transform_response(response).unwrap();
         assert!(result.has_tool_calls());
-        let tool_calls = result
-            .tool_calls
-            .as_ref()
-            .expect("Provider transformation should succeed during test");
+        let tool_calls = result.tool_calls.as_ref().unwrap();
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].id, "toolu_123");
         assert_eq!(tool_calls[0].function.name, "get_weather");
@@ -948,13 +903,8 @@ mod tests {
             }
         });
 
-        let result = adapter
-            .transform_response(response)
-            .expect("Provider transformation should succeed during test");
-        let tool_calls = result
-            .tool_calls
-            .as_ref()
-            .expect("Provider transformation should succeed during test");
+        let result = adapter.transform_response(response).unwrap();
+        let tool_calls = result.tool_calls.as_ref().unwrap();
         assert_eq!(tool_calls.len(), 2);
     }
 
@@ -978,17 +928,10 @@ mod tests {
             }
         });
 
-        let result = adapter
-            .transform_response(response)
-            .expect("Provider transformation should succeed during test");
+        let result = adapter.transform_response(response).unwrap();
         // Tool calls with missing fields should result in None
         assert!(
-            result.tool_calls.is_none()
-                || result
-                    .tool_calls
-                    .as_ref()
-                    .expect("Provider transformation should succeed during test")
-                    .is_empty(),
+            result.tool_calls.is_none() || result.tool_calls.as_ref().unwrap().is_empty(),
             "Tool calls with missing required fields should be filtered out"
         );
     }
@@ -1011,9 +954,7 @@ mod tests {
             }
         });
 
-        let result = adapter
-            .transform_response(response)
-            .expect("Provider transformation should succeed during test");
+        let result = adapter.transform_response(response).unwrap();
         // Only text content should be extracted
         assert_eq!(result.content, "Here's the image:  and text continues.");
     }
@@ -1103,32 +1044,17 @@ mod tests {
         // Check x-api-key header
         let api_key_header = headers.iter().find(|(k, _)| k == "x-api-key");
         assert!(api_key_header.is_some());
-        assert_eq!(
-            api_key_header
-                .expect("Provider transformation should succeed during test")
-                .1,
-            "test-api-key-12345"
-        );
+        assert_eq!(api_key_header.unwrap().1, "test-api-key-12345");
 
         // Check anthropic-version header
         let version_header = headers.iter().find(|(k, _)| k == "anthropic-version");
         assert!(version_header.is_some());
-        assert_eq!(
-            version_header
-                .expect("Provider transformation should succeed during test")
-                .1,
-            "2023-06-01"
-        );
+        assert_eq!(version_header.unwrap().1, "2023-06-01");
 
         // Check content-type header
         let content_type_header = headers.iter().find(|(k, _)| k == "content-type");
         assert!(content_type_header.is_some());
-        assert_eq!(
-            content_type_header
-                .expect("Provider transformation should succeed during test")
-                .1,
-            "application/json"
-        );
+        assert_eq!(content_type_header.unwrap().1, "application/json");
     }
 
     #[test]
@@ -1140,12 +1066,7 @@ mod tests {
         assert_eq!(headers.len(), 3);
         let api_key_header = headers.iter().find(|(k, _)| k == "x-api-key");
         assert!(api_key_header.is_some());
-        assert_eq!(
-            api_key_header
-                .expect("Provider transformation should succeed during test")
-                .1,
-            ""
-        );
+        assert_eq!(api_key_header.unwrap().1, "");
     }
 
     #[test]
@@ -1155,12 +1076,7 @@ mod tests {
         let headers = adapter.build_headers(special_key);
 
         let api_key_header = headers.iter().find(|(k, _)| k == "x-api-key");
-        assert_eq!(
-            api_key_header
-                .expect("Provider transformation should succeed during test")
-                .1,
-            special_key
-        );
+        assert_eq!(api_key_header.unwrap().1, special_key);
     }
 
     #[test]
@@ -1170,12 +1086,7 @@ mod tests {
         let headers = adapter.build_headers(unicode_key);
 
         let api_key_header = headers.iter().find(|(k, _)| k == "x-api-key");
-        assert_eq!(
-            api_key_header
-                .expect("Provider transformation should succeed during test")
-                .1,
-            unicode_key
-        );
+        assert_eq!(api_key_header.unwrap().1, unicode_key);
     }
 
     #[test]
@@ -1185,13 +1096,7 @@ mod tests {
         let headers = adapter.build_headers(&long_key);
 
         let api_key_header = headers.iter().find(|(k, _)| k == "x-api-key");
-        assert_eq!(
-            api_key_header
-                .expect("Provider transformation should succeed during test")
-                .1
-                .len(),
-            10000
-        );
+        assert_eq!(api_key_header.unwrap().1.len(), 10000);
     }
 
     #[test]

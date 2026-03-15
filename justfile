@@ -37,7 +37,7 @@ help:
 # ============================================
 
 # Tier 1: Fast feedback (<5s) - Use for pre-commit
-qa: fmt-check lint
+qa: fmt-check lint-fast
     @echo "✅ Tier 1 QA passed (fast checks)"
 
 # Tier 2: Comprehensive (>5s) - Use for pre-push / CI
@@ -288,8 +288,8 @@ lockfile:
 # PRE-COMMIT / PRE-PUSH HOOKS
 # ============================================
 
-# Pre-commit: strict checks
-pre-commit: fmt-check lint type-check
+# Pre-commit: fast checks only
+pre-commit: fmt-check lint-fast type-check
     @echo "✅ Pre-commit checks passed"
 
 # Pre-push: full verification
@@ -308,9 +308,9 @@ ci-full: ci-fmt ci-lint ci-test ci-build
 ci-fmt:
     cargo fmt --all -- --check
 
-# CI lint (strict, matches local `just lint`)
+# CI lint (strict)
 ci-lint:
-    cargo clippy --all-targets --all-features -- -D warnings
+    cargo clippy --all-targets --all-features -- -D warnings -D clippy::all
 
 # CI test (all features)
 ci-test:

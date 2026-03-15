@@ -71,7 +71,7 @@ pub struct BanditConfig {
     pub use_utility_weighting: bool,
     /// Decay factor for old samples (0-1)
     pub sample_decay: f64,
-    /// Optional tier-based priors (overrides `prior_successes/prior_failures` when tier is known)
+    /// Optional tier-based priors (overrides prior_successes/prior_failures when tier is known)
     pub tier_priors: Option<TierPriors>,
 }
 
@@ -124,7 +124,7 @@ impl Default for TierPriors {
 }
 
 impl TierPriors {
-    const fn get(&self, tier: &Tier) -> (f64, f64) {
+    fn get(&self, tier: &Tier) -> (f64, f64) {
         match tier {
             Tier::Flagship => self.flagship,
             Tier::Standard => self.standard,

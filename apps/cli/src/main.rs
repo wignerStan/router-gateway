@@ -103,7 +103,7 @@ struct ServerConfigYaml {
     timeout_secs: Option<u64>,
 }
 
-const fn default_port() -> u16 {
+fn default_port() -> u16 {
     3000
 }
 
@@ -132,7 +132,7 @@ fn default_strategy() -> String {
     "weighted".to_string()
 }
 
-const fn default_true() -> bool {
+fn default_true() -> bool {
     true
 }
 
@@ -145,7 +145,7 @@ async fn main() -> Result<()> {
 
     match args.command {
         Commands::Health { url } => {
-            let health_url = format!("{url}/health");
+            let health_url = format!("{}/health", url);
             let start = std::time::Instant::now();
 
             let response = reqwest::get(&health_url)
@@ -194,7 +194,7 @@ async fn main() -> Result<()> {
                 println!("{}", "=".repeat(50));
                 println!("Status:           {}", health.status.green());
                 println!("Uptime:           {}s", health.uptime_secs);
-                println!("Latency:          {latency_ms}ms");
+                println!("Latency:          {}ms", latency_ms);
                 println!();
                 println!("Credentials:");
                 println!("  Total:          {}", health.credential_count);
@@ -227,7 +227,7 @@ async fn main() -> Result<()> {
         },
 
         Commands::Models { url } => {
-            let models_url = format!("{url}/api/models");
+            let models_url = format!("{}/api/models", url);
 
             let response = reqwest::get(&models_url)
                 .await
@@ -274,7 +274,7 @@ async fn main() -> Result<()> {
                     .collect();
 
                 let table = Table::new(rows);
-                println!("{table}");
+                println!("{}", table);
                 println!();
                 println!("Total: {} models", models.count);
             }
@@ -350,7 +350,7 @@ async fn main() -> Result<()> {
                                 cred.allowed_models.len()
                             );
                             if let Some(ref base_url) = cred.base_url {
-                                println!("      base_url: {base_url}");
+                                println!("      base_url: {}", base_url);
                             }
                         }
                         if let Some(ref routing) = config_value.routing {
@@ -363,14 +363,14 @@ async fn main() -> Result<()> {
                             println!();
                             println!("{}", "Warnings:".yellow());
                             for warning in &warnings {
-                                println!("  ⚠ {warning}");
+                                println!("  ⚠ {}", warning);
                             }
                         }
                     } else {
                         println!("{} Configuration has errors", "✗".red());
                         println!();
                         for error in &errors {
-                            println!("  ✗ {error}");
+                            println!("  ✗ {}", error);
                         }
                     }
 
@@ -392,9 +392,9 @@ async fn main() -> Result<()> {
                         );
                     } else {
                         println!("{}: Invalid YAML syntax", "ERROR".red().bold());
-                        println!("  {e}");
+                        println!("  {}", e);
                     }
-                    anyhow::bail!("Invalid YAML syntax: {e}");
+                    anyhow::bail!("Invalid YAML syntax: {}", e);
                 },
             }
         },
@@ -415,18 +415,18 @@ fn validate_config_content(
     for (i, cred) in config_value.credentials.iter().enumerate() {
         // Check required fields
         if cred.id.is_empty() {
-            errors.push(format!("Credential {i}: 'id' field is empty"));
+            errors.push(format!("Credential {}: 'id' field is empty", i));
         }
         if cred.provider.is_empty() {
-            errors.push(format!("Credential {i}: 'provider' field is empty"));
+            errors.push(format!("Credential {}: 'provider' field is empty", i));
         }
         if cred.api_key.is_empty() {
-            errors.push(format!("Credential {i}: 'api_key' field is empty"));
+            errors.push(format!("Credential {}: 'api_key' field is empty", i));
         }
 
         // Check for env var in api_key
         if cred.api_key.starts_with("${") && !cred.api_key.contains(":-") {
-            let var_name = cred.api_key.trim_start_matches("${").trim_end_matches('}');
+            let var_name = cred.api_key.trim_start_matches("${").trim_end_matches("}");
             if std::env::var(var_name).is_err() {
                 warnings.push(format!(
                     "Credential '{}': environment variable '{}' not set",
@@ -477,7 +477,7 @@ routing:
 "#;
         let result = validate_config_content(yaml);
         assert!(result.is_ok());
-        let (_, errors, _) = result.expect("Validation result should be available");
+        let (_, errors, _) = result.unwrap();
         assert!(errors.is_empty());
     }
 
@@ -493,7 +493,7 @@ routing:
 "#;
         let result = validate_config_content(yaml);
         assert!(result.is_ok());
-        let (_, errors, _) = result.expect("Validation result should be available");
+        let (_, errors, _) = result.unwrap();
         assert!(!errors.is_empty());
         assert!(errors[0].contains("Invalid routing strategy"));
     }
@@ -508,7 +508,7 @@ credentials:
 "#;
         let result = validate_config_content(yaml);
         assert!(result.is_ok());
-        let (_, errors, _) = result.expect("Validation result should be available");
+        let (_, errors, _) = result.unwrap();
         assert_eq!(errors.len(), 3);
         assert!(errors[0].contains("'id' field is empty"));
         assert!(errors[1].contains("'provider' field is empty"));
@@ -532,7 +532,7 @@ credentials:
 "#;
         let result = validate_config_content(yaml);
         assert!(result.is_ok());
-        let (_, _, warnings) = result.expect("Validation result should be available");
+        let (_, _, warnings) = result.unwrap();
         assert!(!warnings.is_empty());
         assert!(warnings[0].contains("environment variable 'NON_EXISTENT_VAR_123' not set"));
     }

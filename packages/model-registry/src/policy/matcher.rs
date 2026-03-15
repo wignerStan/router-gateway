@@ -5,37 +5,34 @@
 //! context window, provider, modalities).
 
 use super::registry::PolicyRegistry;
-use super::types::{
-    CapabilityCategory, ModalityCategory, PolicyContext, PolicyMatch, RoutingPolicy,
-};
+use super::types::*;
 use crate::categories::ModelCategorization;
 use crate::info::ModelInfo;
 
-/// Evaluates routing policies against model metadata.
 pub struct PolicyMatcher {
     registry: PolicyRegistry,
 }
 
 impl PolicyMatcher {
     /// Create a new policy matcher with the given registry
-    pub const fn new(registry: PolicyRegistry) -> Self {
+    pub fn new(registry: PolicyRegistry) -> Self {
         Self { registry }
     }
 
     /// Create a matcher with an empty registry
-    pub const fn empty() -> Self {
+    pub fn empty() -> Self {
         Self {
             registry: PolicyRegistry::new(),
         }
     }
 
     /// Get reference to the underlying registry
-    pub const fn registry(&self) -> &PolicyRegistry {
+    pub fn registry(&self) -> &PolicyRegistry {
         &self.registry
     }
 
     /// Get mutable reference to the underlying registry
-    pub const fn registry_mut(&mut self) -> &mut PolicyRegistry {
+    pub fn registry_mut(&mut self) -> &mut PolicyRegistry {
         &mut self.registry
     }
 
@@ -175,7 +172,7 @@ impl PolicyMatcher {
     }
 
     /// Check if model supports a modality
-    const fn check_modality_match(&self, model: &ModelInfo, modality: &ModalityCategory) -> bool {
+    fn check_modality_match(&self, model: &ModelInfo, modality: &ModalityCategory) -> bool {
         match modality {
             ModalityCategory::Text => true, // All models support text
             ModalityCategory::Image => model.capabilities.vision,
@@ -237,7 +234,7 @@ impl PolicyMatcher {
         }
 
         // Priority factor (higher priority = higher score)
-        let priority_factor = f64::from(policy.priority).mul_add(0.01, 1.0);
+        let priority_factor = 1.0 + (policy.priority as f64 * 0.01);
         score *= priority_factor;
 
         score
@@ -260,7 +257,7 @@ impl PolicyMatcher {
         let mut total_priority = 0;
 
         for m in &matches {
-            let priority_weight = f64::from(m.policy.priority).mul_add(0.1, 1.0);
+            let priority_weight = 1.0 + (m.policy.priority as f64 * 0.1);
             total_weight += m.score * priority_weight;
             total_priority += m.policy.priority;
         }
