@@ -55,7 +55,7 @@ impl UtilityEstimator {
     }
 
     /// Create a new utility estimator with custom config
-    pub fn with_config(config: UtilityConfig) -> Self {
+    pub const fn with_config(config: UtilityConfig) -> Self {
         Self { config }
     }
 
@@ -75,9 +75,13 @@ impl UtilityEstimator {
                 let cost_utility = self.estimate_cost_utility(m);
 
                 // Weighted combination
-                let utility = success_utility * self.config.success_weight
-                    + latency_utility * self.config.latency_weight
-                    + cost_utility * self.config.cost_weight;
+                let utility = cost_utility.mul_add(
+                    self.config.cost_weight,
+                    success_utility.mul_add(
+                        self.config.success_weight,
+                        latency_utility * self.config.latency_weight,
+                    ),
+                );
 
                 utility.max(self.config.min_utility)
             },
@@ -102,9 +106,13 @@ impl UtilityEstimator {
                 let cost_utility = self.estimate_cost_utility_with_cost(cost_per_million);
 
                 // Weighted combination
-                let utility = success_utility * self.config.success_weight
-                    + latency_utility * self.config.latency_weight
-                    + cost_utility * self.config.cost_weight;
+                let utility = cost_utility.mul_add(
+                    self.config.cost_weight,
+                    success_utility.mul_add(
+                        self.config.success_weight,
+                        latency_utility * self.config.latency_weight,
+                    ),
+                );
 
                 utility.max(self.config.min_utility)
             },
@@ -113,7 +121,7 @@ impl UtilityEstimator {
 
     /// Estimate success utility (0-1)
     /// High success rate -> high utility
-    fn estimate_success_utility(&self, metrics: &AuthMetrics) -> f64 {
+    const fn estimate_success_utility(&self, metrics: &AuthMetrics) -> f64 {
         // Use success_rate directly (it's already EWMA smoothed)
         metrics.success_rate.clamp(0.0, 1.0)
     }
@@ -146,18 +154,18 @@ impl UtilityEstimator {
 
     /// Estimate cost utility (0-1)
     /// Low cost -> high utility (not used if cost not available)
-    fn estimate_cost_utility(&self, _metrics: &AuthMetrics) -> f64 {
+    const fn estimate_cost_utility(&self, _metrics: &AuthMetrics) -> f64 {
         // Default cost utility when cost not available
         1.0
     }
 
     /// Get config
-    pub fn config(&self) -> &UtilityConfig {
+    pub const fn config(&self) -> &UtilityConfig {
         &self.config
     }
 
     /// Set config
-    pub fn set_config(&mut self, config: UtilityConfig) {
+    pub const fn set_config(&mut self, config: UtilityConfig) {
         self.config = config;
     }
 }

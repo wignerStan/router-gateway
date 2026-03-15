@@ -4,6 +4,7 @@ use subtle::ConstantTimeEq;
 ///
 /// Iterates over all configured tokens regardless of where a match occurs,
 /// preventing timing side-channels from leaking token ordering or count.
+#[must_use]
 pub fn constant_time_token_matches(token: &str, configured_tokens: &[String]) -> bool {
     let token_bytes = token.as_bytes();
     let mut result: u8 = 0;

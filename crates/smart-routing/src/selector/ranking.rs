@@ -95,14 +95,12 @@ impl SmartSelector {
         let policy_factor = self
             .policy_matcher
             .as_ref()
-            .map(|m| m.calculate_weight_factor(model, context))
-            .unwrap_or(1.0);
+            .map_or(1.0, |m| m.calculate_weight_factor(model, context));
 
         let is_blocked = self
             .policy_matcher
             .as_ref()
-            .map(|m| m.is_blocked(model, context))
-            .unwrap_or(false);
+            .is_some_and(|m| m.is_blocked(model, context));
 
         if is_blocked {
             return Vec::new();

@@ -93,17 +93,17 @@ impl SmartSelector {
     }
 
     /// Get metrics collector
-    pub fn metrics(&self) -> &MetricsCollector {
+    pub const fn metrics(&self) -> &MetricsCollector {
         &self.metrics
     }
 
     /// Get health manager
-    pub fn health(&self) -> &HealthManager {
+    pub const fn health(&self) -> &HealthManager {
         &self.health
     }
 
     /// Get config
-    pub fn config(&self) -> &SmartRoutingConfig {
+    pub const fn config(&self) -> &SmartRoutingConfig {
         &self.config
     }
 

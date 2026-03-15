@@ -139,7 +139,7 @@ async fn test_concurrent_collector_access() {
         tasks.spawn(async move {
             for j in 0..20 {
                 let trace = create_completed_trace(
-                    &format!("concurrent-{}-{}", i, j),
+                    &format!("concurrent-{i}-{j}"),
                     "openai",
                     "gpt-4",
                     100,
@@ -168,7 +168,7 @@ async fn test_concurrent_read_write() {
         tasks.spawn(async move {
             for j in 0..40 {
                 let trace = create_completed_trace(
-                    &format!("writer-{}-{}", i, j),
+                    &format!("writer-{i}-{j}"),
                     "anthropic",
                     "claude-3",
                     150,
@@ -255,7 +255,7 @@ async fn test_collector_eviction_policy() {
 
     // Add 20 traces to a collector with capacity 10
     for i in 0..20 {
-        let trace = create_completed_trace(&format!("req-{}", i), "openai", "gpt-4", 100, 200);
+        let trace = create_completed_trace(&format!("req-{i}"), "openai", "gpt-4", 100, 200);
         collector.record_trace(trace).await;
     }
 
@@ -275,7 +275,7 @@ async fn test_collector_clear_and_refill() {
 
     // Fill with traces
     for i in 0..50 {
-        let trace = create_completed_trace(&format!("req-{}", i), "openai", "gpt-4", 100, 200);
+        let trace = create_completed_trace(&format!("req-{i}"), "openai", "gpt-4", 100, 200);
         collector.record_trace(trace).await;
     }
     assert_eq!(collector.trace_count().await, 50);
@@ -287,7 +287,7 @@ async fn test_collector_clear_and_refill() {
     // Refill
     for i in 0..30 {
         let trace =
-            create_completed_trace(&format!("new-req-{}", i), "anthropic", "claude-3", 150, 200);
+            create_completed_trace(&format!("new-req-{i}"), "anthropic", "claude-3", 150, 200);
         collector.record_trace(trace).await;
     }
     assert_eq!(collector.trace_count().await, 30);
@@ -392,7 +392,7 @@ async fn test_high_throughput_tracing() {
         tasks.spawn(async move {
             for i in 0..100 {
                 let trace = create_completed_trace(
-                    &format!("high-throughput-{}-{}", task_id, i),
+                    &format!("high-throughput-{task_id}-{i}"),
                     "openai",
                     "gpt-4",
                     50 + (i % 50) as u64,

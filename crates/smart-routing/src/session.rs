@@ -367,7 +367,7 @@ mod tests {
         // Add multiple sessions
         for i in 0..5 {
             manager
-                .set_provider(format!("session-{}", i), "provider-a".to_string())
+                .set_provider(format!("session-{i}"), "provider-a".to_string())
                 .await
                 .unwrap();
         }
@@ -393,7 +393,7 @@ mod tests {
 
         // Empty session ID cannot be set
         let result = manager
-            .set_provider("".to_string(), "provider-a".to_string())
+            .set_provider(String::new(), "provider-a".to_string())
             .await;
         assert!(result.is_err());
 
@@ -407,7 +407,7 @@ mod tests {
 
         // Empty provider should error
         let result = manager
-            .set_provider("session-1".to_string(), "".to_string())
+            .set_provider("session-1".to_string(), String::new())
             .await;
         assert!(result.is_err());
     }
@@ -439,13 +439,13 @@ mod tests {
         // Add sessions with multiple providers
         for i in 0..3 {
             manager
-                .set_provider(format!("session-{}", i), "provider-a".to_string())
+                .set_provider(format!("session-{i}"), "provider-a".to_string())
                 .await
                 .unwrap();
         }
         for i in 3..5 {
             manager
-                .set_provider(format!("session-{}", i), "provider-b".to_string())
+                .set_provider(format!("session-{i}"), "provider-b".to_string())
                 .await
                 .unwrap();
         }
@@ -484,7 +484,7 @@ mod tests {
         // Add more sessions than limit
         for i in 0..5 {
             manager
-                .set_provider(format!("session-{}", i), "provider-a".to_string())
+                .set_provider(format!("session-{i}"), "provider-a".to_string())
                 .await
                 .unwrap();
 

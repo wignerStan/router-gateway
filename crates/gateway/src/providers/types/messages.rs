@@ -30,14 +30,14 @@ pub enum MessageContent {
 impl MessageContent {
     /// Create text content
     pub fn text(text: impl Into<String>) -> Self {
-        MessageContent::Text(text.into())
+        Self::Text(text.into())
     }
 
     /// Get text if this is text-only content
     pub fn as_text(&self) -> Option<&str> {
         match self {
-            MessageContent::Text(t) => Some(t),
-            MessageContent::Parts(_) => None,
+            Self::Text(t) => Some(t),
+            Self::Parts(_) => None,
         }
     }
 }
@@ -45,13 +45,13 @@ impl MessageContent {
 /// Content part for multi-modal messages
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContentPart {
-    /// Part type: text, image_url, image, etc.
+    /// Part type: text, `image_url`, image, etc.
     #[serde(rename = "type")]
     pub part_type: String,
     /// Text content (for text parts)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
-    /// Image URL (for image_url parts)
+    /// Image URL (for `image_url` parts)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_url: Option<ImageUrl>,
     /// Image data (for inline images)

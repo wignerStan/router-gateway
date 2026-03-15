@@ -51,7 +51,7 @@ mod basic_get_and_cache {
         let result = registry
             .get_multiple(&[
                 "gpt-4o".to_string(),
-                "".to_string(),
+                String::new(),
                 "gemini-2.5-flash".to_string(),
             ])
             .await;
@@ -633,7 +633,7 @@ mod cost_estimation {
                     "gpt-4o".to_string(),           // Valid
                     "unknown-model".to_string(),    // Invalid
                     "gemini-2.5-flash".to_string(), // Valid
-                    "".to_string(),                 // Empty (invalid)
+                    String::new(),                  // Empty (invalid)
                 ],
                 1_000_000,
                 500_000,

@@ -1,12 +1,12 @@
-//! OpenAI API adapter
+//! `OpenAI` API adapter
 //!
-//! Transforms between gateway format and OpenAI's Chat Completions API.
+//! Transforms between gateway format and `OpenAI`'s Chat Completions API.
 
 use super::types::{ProviderAdapter, ProviderRequest, ProviderResponse};
 use anyhow::Result;
 use serde_json::{json, Value};
 
-/// OpenAI API adapter
+/// `OpenAI` API adapter
 pub struct OpenAIAdapter {
     default_base_url: String,
 }
@@ -24,7 +24,7 @@ impl OpenAIAdapter {
         Self::default()
     }
 
-    pub fn with_base_url(base_url: String) -> Self {
+    pub const fn with_base_url(base_url: String) -> Self {
         Self {
             default_base_url: base_url,
         }
@@ -32,7 +32,7 @@ impl OpenAIAdapter {
 }
 
 impl ProviderAdapter for OpenAIAdapter {
-    fn provider_name(&self) -> &str {
+    fn provider_name(&self) -> &'static str {
         "openai"
     }
 
@@ -59,7 +59,7 @@ impl ProviderAdapter for OpenAIAdapter {
                                 json!({
                                     "type": "image_url",
                                     "image_url": {
-                                        "url": p.image_url.as_ref().map(|u| &u.url).unwrap_or(&String::new()),
+                                        "url": p.image_url.as_ref().map_or(&String::new(), |u| &u.url),
                                         "detail": p.image_url.as_ref().and_then(|u| u.detail.as_deref())
                                     }
                                 })
@@ -205,12 +205,12 @@ impl ProviderAdapter for OpenAIAdapter {
         };
         // Remove trailing slash to prevent double-slash issues
         let base = base.trim_end_matches('/');
-        format!("{}/chat/completions", base)
+        format!("{base}/chat/completions")
     }
 
     fn build_headers(&self, api_key: &str) -> Vec<(String, String)> {
         vec![
-            ("Authorization".to_string(), format!("Bearer {}", api_key)),
+            ("Authorization".to_string(), format!("Bearer {api_key}")),
             ("Content-Type".to_string(), "application/json".to_string()),
         ]
     }
@@ -255,8 +255,7 @@ mod tests {
         let temp = transformed["temperature"].as_f64().unwrap();
         assert!(
             (temp - 0.7).abs() < 0.001,
-            "Expected temperature ~0.7, got {}",
-            temp
+            "Expected temperature ~0.7, got {temp}"
         );
     }
 

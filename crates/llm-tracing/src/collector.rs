@@ -126,7 +126,7 @@ mod tests {
         // Add 5 traces
         for i in 1..=5 {
             let trace = TraceSpan::new(
-                format!("req-{}", i),
+                format!("req-{i}"),
                 "openai".to_string(),
                 "gpt-4".to_string(),
                 None,
@@ -171,7 +171,7 @@ mod tests {
             let collector = collector.clone();
             let handle = tokio::spawn(async move {
                 let trace = TraceSpan::new(
-                    format!("req-{}", i),
+                    format!("req-{i}"),
                     "openai".to_string(),
                     "gpt-4".to_string(),
                     None,
@@ -215,7 +215,7 @@ mod tests {
 
         for i in 0..100 {
             let trace = TraceSpan::new(
-                format!("req-{}", i),
+                format!("req-{i}"),
                 "openai".to_string(),
                 "gpt-4".to_string(),
                 None,
@@ -262,10 +262,10 @@ mod tests {
             let handle = tokio::spawn(async move {
                 for i in 0..10 {
                     let trace = TraceSpan::new(
-                        format!("task-{}-req-{}", task_id, i),
+                        format!("task-{task_id}-req-{i}"),
                         "openai".to_string(),
                         "gpt-4".to_string(),
-                        Some(format!("user-{}", task_id)),
+                        Some(format!("user-{task_id}")),
                     );
                     collector.record_trace(trace).await;
                 }
@@ -289,7 +289,7 @@ mod tests {
         // Add 10 traces to a buffer of size 5
         for i in 0..10 {
             let trace = TraceSpan::new(
-                format!("req-{}", i),
+                format!("req-{i}"),
                 "openai".to_string(),
                 "gpt-4".to_string(),
                 None,
