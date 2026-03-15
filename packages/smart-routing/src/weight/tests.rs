@@ -497,7 +497,7 @@ mod tests {
         #[test]
         fn test_degraded_penalty_applied() {
             let config = WeightConfig::default();
-            let calculator = DefaultWeightCalculator::new(config);
+            let calculator = DefaultWeightCalculator::new(config.clone());
 
             let auth = AuthInfo {
                 id: "test-auth".to_string(),
@@ -529,7 +529,9 @@ mod tests {
 
             assert!(
                 degraded_weight < healthy_weight,
-                "Degraded weight ({degraded_weight}) should be less than healthy weight ({healthy_weight})"
+                "Degraded weight ({}) should be less than healthy weight ({})",
+                degraded_weight,
+                healthy_weight
             );
 
             assert!(degraded_weight > 0.0, "Degraded weight should be positive");
@@ -828,7 +830,8 @@ mod tests {
 
             assert!(
                 weight >= 0.0,
-                "Weight should always be non-negative, got: {weight}"
+                "Weight should always be non-negative, got: {}",
+                weight
             );
         }
 
@@ -914,7 +917,9 @@ mod tests {
 
             assert!(
                 quota_weight < normal_weight * 0.5,
-                "Quota exceeded should reduce weight by at least 50%: normal={normal_weight}, quota={quota_weight}"
+                "Quota exceeded should reduce weight by at least 50%: normal={}, quota={}",
+                normal_weight,
+                quota_weight
             );
 
             let expected = normal_weight * config.quota_exceeded_penalty;

@@ -1,12 +1,12 @@
-//! `OpenAI` API adapter
+//! OpenAI API adapter
 //!
-//! Transforms between gateway format and `OpenAI`'s Chat Completions API.
+//! Transforms between gateway format and OpenAI's Chat Completions API.
 
 use super::types::{ProviderAdapter, ProviderRequest, ProviderResponse};
 use anyhow::Result;
 use serde_json::{json, Value};
 
-/// `OpenAI` API adapter
+/// OpenAI API adapter
 pub struct OpenAIAdapter {
     default_base_url: String,
 }
@@ -20,13 +20,11 @@ impl Default for OpenAIAdapter {
 }
 
 impl OpenAIAdapter {
-    /// Create a new `OpenAIAdapter` with the default base URL.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Create a new adapter with a custom base URL.
-    pub const fn with_base_url(base_url: String) -> Self {
+    pub fn with_base_url(base_url: String) -> Self {
         Self {
             default_base_url: base_url,
         }
@@ -34,7 +32,7 @@ impl OpenAIAdapter {
 }
 
 impl ProviderAdapter for OpenAIAdapter {
-    fn provider_name(&self) -> &'static str {
+    fn provider_name(&self) -> &str {
         "openai"
     }
 
@@ -61,7 +59,7 @@ impl ProviderAdapter for OpenAIAdapter {
                                 json!({
                                     "type": "image_url",
                                     "image_url": {
-                                        "url": p.image_url.as_ref().map_or(&String::new(), |u| &u.url),
+                                        "url": p.image_url.as_ref().map(|u| &u.url).unwrap_or(&String::new()),
                                         "detail": p.image_url.as_ref().and_then(|u| u.detail.as_deref())
                                     }
                                 })
@@ -207,12 +205,12 @@ impl ProviderAdapter for OpenAIAdapter {
         };
         // Remove trailing slash to prevent double-slash issues
         let base = base.trim_end_matches('/');
-        format!("{base}/chat/completions")
+        format!("{}/chat/completions", base)
     }
 
     fn build_headers(&self, api_key: &str) -> Vec<(String, String)> {
         vec![
-            ("Authorization".to_string(), format!("Bearer {api_key}")),
+            ("Authorization".to_string(), format!("Bearer {}", api_key)),
             ("Content-Type".to_string(), "application/json".to_string()),
         ]
     }
@@ -254,12 +252,11 @@ mod tests {
         assert_eq!(transformed["model"], "gpt-4");
         assert_eq!(transformed["max_tokens"], 1024);
         // Compare temperature with approximate equality due to f32 precision
-        let temp = transformed["temperature"]
-            .as_f64()
-            .expect("Provider transformation should succeed during test");
+        let temp = transformed["temperature"].as_f64().unwrap();
         assert!(
             (temp - 0.7).abs() < 0.001,
-            "Expected temperature ~0.7, got {temp}"
+            "Expected temperature ~0.7, got {}",
+            temp
         );
     }
 
@@ -394,9 +391,7 @@ mod tests {
         };
 
         let transformed = adapter.transform_request(&request);
-        let messages = transformed["messages"]
-            .as_array()
-            .expect("Provider transformation should succeed during test");
+        let messages = transformed["messages"].as_array().unwrap();
         assert!(messages.is_empty());
     }
 
@@ -437,13 +432,9 @@ mod tests {
         };
 
         let transformed = adapter.transform_request(&request);
-        let messages = transformed["messages"]
-            .as_array()
-            .expect("Provider transformation should succeed during test");
+        let messages = transformed["messages"].as_array().unwrap();
         let content = &messages[0]["content"];
-        let parts = content
-            .as_array()
-            .expect("Provider transformation should succeed during test");
+        let parts = content.as_array().unwrap();
         assert_eq!(parts.len(), 2);
         assert_eq!(parts[0]["type"], "text");
         assert_eq!(parts[1]["type"], "image_url");
@@ -627,9 +618,7 @@ mod tests {
         let transformed = adapter.transform_request(&request);
         assert_eq!(transformed["max_tokens"], 2048);
         assert_eq!(transformed["stream"], true);
-        let stop = transformed["stop"]
-            .as_array()
-            .expect("Provider transformation should succeed during test");
+        let stop = transformed["stop"].as_array().unwrap();
         assert_eq!(stop.len(), 2);
     }
 
@@ -654,9 +643,7 @@ mod tests {
             }
         });
 
-        let result = adapter
-            .transform_response(response)
-            .expect("Provider transformation should succeed during test");
+        let result = adapter.transform_response(response).unwrap();
         assert_eq!(result.id, "chatcmpl-123");
         assert_eq!(result.content, "Hello there!");
         assert_eq!(result.usage.total_tokens, 15);
@@ -689,9 +676,7 @@ mod tests {
             "usage": {}
         });
 
-        let result = adapter
-            .transform_response(response)
-            .expect("Provider transformation should succeed during test");
+        let result = adapter.transform_response(response).unwrap();
         assert_eq!(result.id, "unknown");
     }
 
@@ -707,9 +692,7 @@ mod tests {
             "usage": {}
         });
 
-        let result = adapter
-            .transform_response(response)
-            .expect("Provider transformation should succeed during test");
+        let result = adapter.transform_response(response).unwrap();
         assert_eq!(result.model, "unknown");
     }
 
@@ -726,9 +709,7 @@ mod tests {
             "usage": {}
         });
 
-        let result = adapter
-            .transform_response(response)
-            .expect("Provider transformation should succeed during test");
+        let result = adapter.transform_response(response).unwrap();
         assert_eq!(result.content, "");
     }
 
@@ -744,9 +725,7 @@ mod tests {
             "usage": {}
         });
 
-        let result = adapter
-            .transform_response(response)
-            .expect("Provider transformation should succeed during test");
+        let result = adapter.transform_response(response).unwrap();
         assert_eq!(result.finish_reason, "unknown");
     }
 
@@ -762,9 +741,7 @@ mod tests {
             }]
         });
 
-        let result = adapter
-            .transform_response(response)
-            .expect("Provider transformation should succeed during test");
+        let result = adapter.transform_response(response).unwrap();
         assert_eq!(result.usage.prompt_tokens, 0);
         assert_eq!(result.usage.completion_tokens, 0);
         assert_eq!(result.usage.total_tokens, 0);
@@ -793,13 +770,9 @@ mod tests {
             "usage": {}
         });
 
-        let result = adapter
-            .transform_response(response)
-            .expect("Provider transformation should succeed during test");
+        let result = adapter.transform_response(response).unwrap();
         assert!(result.tool_calls.is_some());
-        let tool_calls = result
-            .tool_calls
-            .expect("Provider transformation should succeed during test");
+        let tool_calls = result.tool_calls.unwrap();
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].id, "call_abc123");
         assert_eq!(tool_calls[0].function.name, "get_weather");
@@ -833,12 +806,8 @@ mod tests {
             "usage": {}
         });
 
-        let result = adapter
-            .transform_response(response)
-            .expect("Provider transformation should succeed during test");
-        let tool_calls = result
-            .tool_calls
-            .expect("Provider transformation should succeed during test");
+        let result = adapter.transform_response(response).unwrap();
+        let tool_calls = result.tool_calls.unwrap();
         assert_eq!(tool_calls.len(), 2);
     }
 
@@ -857,9 +826,7 @@ mod tests {
             }
         });
 
-        let result = adapter
-            .transform_response(response)
-            .expect("Provider transformation should succeed during test");
+        let result = adapter.transform_response(response).unwrap();
         assert_eq!(result.usage.prompt_tokens, 10);
         assert_eq!(result.usage.completion_tokens, 0);
         assert_eq!(result.usage.total_tokens, 0);

@@ -7,7 +7,7 @@ use model_registry::{DataSource, ModelCapabilities, ModelInfo, RateLimits};
 fn create_test_model(id: &str, provider: &str, context_window: usize) -> ModelInfo {
     ModelInfo {
         id: id.to_string(),
-        name: format!("Test Model {id}"),
+        name: format!("Test Model {}", id),
         provider: provider.to_string(),
         context_window,
         max_output_tokens: 4096,
@@ -52,7 +52,7 @@ mod creation_and_defaults {
     #[tokio::test]
     async fn test_router_creation() {
         let router = Router::new();
-        let _router2 = router;
+        let _router2 = router.clone();
     }
 
     #[tokio::test]
@@ -141,14 +141,10 @@ mod credential_management {
         let router2 = router1.clone();
 
         // Bandit state is shared via Arc - both see the same recorded result
-        let stats = router2
-            .bandit_policy()
-            .lock()
-            .await
-            .get_stats("cred-1")
-            .cloned();
+        let bandit = router2.bandit_policy().lock().await;
+        let stats = bandit.get_stats("cred-1");
         assert!(stats.is_some(), "Clone should preserve bandit policy state");
-        let s = stats.expect("Route statistics should be available");
+        let s = stats.unwrap();
         assert_eq!(s.pulls, 1);
         assert_eq!(s.last_utility, 0.8);
     }
@@ -161,12 +157,8 @@ mod credential_management {
         router.record_result("cred-1", true, 100.0, 200, 0.8).await;
 
         // Verify bandit policy recorded it
-        let stats = router
-            .bandit_policy()
-            .lock()
-            .await
-            .get_stats("cred-1")
-            .cloned();
+        let bandit = router.bandit_policy().lock().await;
+        let stats = bandit.get_stats("cred-1");
         assert!(stats.is_some());
     }
 
@@ -305,9 +297,7 @@ mod plan_operations {
         let plan = router.plan(&request, auths, None).await;
 
         assert!(plan.primary.is_some());
-        let primary = plan
-            .primary
-            .expect("Execution plan should have a primary route");
+        let primary = plan.primary.unwrap();
         assert_eq!(primary.credential_id, "cred-1");
         assert_eq!(primary.model_id, "laude-3-opus");
         assert_eq!(primary.provider, "anthropic");
@@ -504,7 +494,7 @@ mod edge_cases {
         // Verify metrics were updated
         let metrics = router.metrics().get_metrics("cred-1").await;
         assert!(metrics.is_some(), "Metrics should be recorded");
-        let m = metrics.expect("Metrics should be available");
+        let m = metrics.unwrap();
         assert_eq!(m.total_requests, 1);
         assert_eq!(m.success_count, 1);
         assert_eq!(m.avg_latency_ms, 150.0);
@@ -518,14 +508,10 @@ mod edge_cases {
         );
 
         // Verify bandit policy was updated
-        let stats = router
-            .bandit_policy()
-            .lock()
-            .await
-            .get_stats("cred-1")
-            .cloned();
+        let bandit = router.bandit_policy().lock().await;
+        let stats = bandit.get_stats("cred-1");
         assert!(stats.is_some(), "Bandit stats should be recorded");
-        let s = stats.expect("Route statistics should be available");
+        let s = stats.unwrap();
         assert_eq!(s.pulls, 1);
         assert_eq!(s.last_utility, 0.9);
     }
@@ -581,9 +567,7 @@ mod edge_cases {
             plan.primary.is_some(),
             "Should select route with bandit disabled"
         );
-        let primary = plan
-            .primary
-            .expect("Execution plan should have a primary route");
+        let primary = plan.primary.unwrap();
         // With weighted selection (no bandit), utility determines selection
         assert!(primary.utility >= 0.0);
     }
@@ -747,14 +731,12 @@ mod session_affinity {
             .session_manager()
             .set_provider(session_id.to_string(), "provider-a".to_string())
             .await
-            .expect("Operation should succeed during test");
+            .unwrap();
 
         // Plan with session: should prefer provider-a despite provider-b having higher utility
         let plan = router.plan(&request, auths, Some(session_id)).await;
         assert!(plan.primary.is_some());
-        let primary = plan
-            .primary
-            .expect("Execution plan should have a primary route");
+        let primary = plan.primary.unwrap();
 
         assert_eq!(
             primary.provider, "provider-a",

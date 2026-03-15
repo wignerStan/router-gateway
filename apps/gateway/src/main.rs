@@ -1,7 +1,4 @@
-//! LLM gateway server.
-
 pub mod config;
-/// Provider adapters for LLM APIs.
 pub mod providers;
 pub mod routes;
 pub mod state;
@@ -62,7 +59,7 @@ async fn main() -> anyhow::Result<()> {
     // Get host and port from config before moving state
     let port = state.config.server.port;
     let host = &state.config.server.host;
-    let addr: SocketAddr = format!("{host}:{port}")
+    let addr: SocketAddr = format!("{}:{}", host, port)
         .parse()
         .context("Invalid host/port configuration")?;
     tracing::info!("Gateway listening on {}", addr);
@@ -96,22 +93,27 @@ fn load_config() -> anyhow::Result<GatewayConfig> {
         ["./gateway.yaml", "./config/gateway.yaml", "./gateway.yml"]
             .iter()
             .find(|path| std::path::Path::new(path).exists())
-            .map(std::string::ToString::to_string)
+            .map(|path| path.to_string())
     });
 
-    if let Some(path) = config_path {
-        tracing::info!("Loading configuration from {}", path);
-        match GatewayConfig::from_file(&path) {
-            Ok(config) => Ok(config),
-            Err(e) => {
-                anyhow::bail!(
-                    "Failed to load config from {path}: {e}. Please fix the configuration file."
-                );
-            },
-        }
-    } else {
-        tracing::info!("No configuration file found, using defaults");
-        Ok(GatewayConfig::default())
+    match config_path {
+        Some(path) => {
+            tracing::info!("Loading configuration from {}", path);
+            match GatewayConfig::from_file(&path) {
+                Ok(config) => Ok(config),
+                Err(e) => {
+                    anyhow::bail!(
+                        "Failed to load config from {}: {}. Please fix the configuration file.",
+                        path,
+                        e
+                    );
+                },
+            }
+        },
+        None => {
+            tracing::info!("No configuration file found, using defaults");
+            Ok(GatewayConfig::default())
+        },
     }
 }
 
@@ -217,7 +219,7 @@ mod test_helpers {
 
     /// Configurable fields for customizing test application state.
     /// Fields set to `None` use sensible defaults.
-    pub struct TestOverrides {
+    pub(crate) struct TestOverrides {
         pub auth_tokens: Vec<String>,
         pub credentials: Vec<CredentialConfig>,
         pub rate_limit: Option<u64>,
@@ -235,7 +237,7 @@ mod test_helpers {
 
     /// Builds an [`AppState`] from the given overrides, using sensible defaults
     /// for any field not provided.
-    pub fn create_test_state(overrides: TestOverrides) -> AppState {
+    pub(crate) fn create_test_state(overrides: TestOverrides) -> AppState {
         let mut config = GatewayConfig::default();
         config.server.auth_tokens = overrides.auth_tokens;
         config.credentials = overrides.credentials;
@@ -248,7 +250,7 @@ mod test_helpers {
     ///
     /// Insert [`ConnectInfo<SocketAddr>`] into each test request's extensions
     /// to satisfy the rate limiter's address extractor.
-    pub fn build_full_app(state: AppState) -> Router {
+    pub(crate) fn build_full_app(state: AppState) -> Router {
         build_app_router(state)
     }
 }

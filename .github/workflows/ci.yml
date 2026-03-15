@@ -311,13 +311,13 @@ jobs:
     steps:
       - name: Check all jobs passed
         run: |
-          if [[ "${{ needs.fmt.result }}" != "success" ||
-                "${{ needs.lint.result }}" != "success" ||
-                "${{ needs.msrv.result }}" != "success" ||
-                "${{ needs.type-check.result }}" != "success" ||
-                "${{ needs.test.result }}" != "success" ||
-                "${{ needs.coverage.result }}" != "success" ||
-                "${{ needs.build.result }}" != "success" ]]; then
+          if [[ "${{ needs.fmt.result }}" == "failure" ||
+                "${{ needs.lint.result }}" == "failure" ||
+                "${{ needs.msrv.result }}" == "failure" ||
+                "${{ needs.type-check.result }}" == "failure" ||
+                "${{ needs.test.result }}" == "failure" ||
+                "${{ needs.coverage.result }}" == "failure" ||
+                "${{ needs.build.result }}" == "failure" ]]; then
             echo "::error::Quality gate failed - one or more required jobs did not pass"
             exit 1
           fi

@@ -57,17 +57,17 @@ impl FallbackPlanner {
     }
 
     /// Create a new fallback planner with custom config
-    pub const fn with_config(config: FallbackConfig) -> Self {
+    pub fn with_config(config: FallbackConfig) -> Self {
         Self { config }
     }
 
     /// Get config
-    pub const fn config(&self) -> &FallbackConfig {
+    pub fn config(&self) -> &FallbackConfig {
         &self.config
     }
 
     /// Set config
-    pub const fn set_config(&mut self, config: FallbackConfig) {
+    pub fn set_config(&mut self, config: FallbackConfig) {
         self.config = config;
     }
 }

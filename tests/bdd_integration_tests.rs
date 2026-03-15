@@ -769,7 +769,7 @@ mod bdd_integration {
         let manager = SessionAffinityManager::new();
 
         // Set provider for session
-        manager.set_provider("session-abc".to_string(), "anthropic".to_string()).await.expect("session affinity should be established");
+        manager.set_provider("session-abc".to_string(), "anthropic".to_string()).await.unwrap();
 
         // Should get the same provider
         let provider = manager.get_preferred_provider("session-abc").await;
@@ -782,7 +782,7 @@ mod bdd_integration {
         let manager = SessionAffinityManager::new();
 
         // Set provider for session
-        manager.set_provider("session-xyz".to_string(), "openai".to_string()).await.expect("session affinity should be established");
+        manager.set_provider("session-xyz".to_string(), "openai".to_string()).await.unwrap();
 
         // Get affinity - it should still return openai even if unhealthy
         // The router would handle the unhealthy check separately
@@ -790,7 +790,7 @@ mod bdd_integration {
         assert_eq!(provider, Some("openai".to_string()));
 
         // Update to different provider
-        manager.set_provider("session-xyz".to_string(), "anthropic".to_string()).await.expect("session affinity should be established");
+        manager.set_provider("session-xyz".to_string(), "anthropic".to_string()).await.unwrap();
 
         let provider = manager.get_preferred_provider("session-xyz").await;
         assert_eq!(provider, Some("anthropic".to_string()));
@@ -806,12 +806,13 @@ mod bdd_integration {
 
         // Simulate 5 turns
         for _ in 0..5 {
-            manager.set_provider(session_id.to_string(), provider.to_string()).await.expect("session affinity should be updated");
+            manager.set_provider(session_id.to_string(), provider.to_string()).await.unwrap();
         }
 
-        let affinity = manager.get_affinity(session_id).await.expect("session affinity should be established");
-        assert_eq!(affinity.request_count, 5);
-        assert_eq!(affinity.preferred_provider, provider);
+        let affinity = manager.get_affinity(session_id).await;
+        assert!(affinity.is_some());
+        assert_eq!(affinity.unwrap().request_count, 5);
+        assert_eq!(affinity.unwrap().preferred_provider, provider);
     }
 
     // ============================================================================
@@ -835,7 +836,8 @@ mod bdd_integration {
         metrics.record_result("primary-auth", true, 150.0, 200).await;
 
         let result = metrics.get_metrics("primary-auth").await;
-        assert_eq!(result.expect("metrics for primary-auth should be recorded").success_count, 1);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().success_count, 1);
     }
 
     /// @edge-case Scenario: Primary route timeout triggers fallback
@@ -1048,7 +1050,9 @@ mod bdd_integration {
         metrics.record_result("test-auth", true, 150.0, 200).await;
 
         let result = metrics.get_metrics("test-auth").await;
-        let metrics = result.expect("metrics for test-auth should be recorded");
+        assert!(result.is_some());
+
+        let metrics = result.unwrap();
         assert_eq!(metrics.success_count, 1);
         assert_eq!(metrics.failure_count, 0);
         assert_eq!(metrics.avg_latency_ms, 150.0);
@@ -1067,7 +1071,9 @@ mod bdd_integration {
         metrics.record_result("test-auth", false, 5000.0, 500).await;
 
         let result = metrics.get_metrics("test-auth").await;
-        let metrics = result.expect("metrics for failed test-auth should be recorded");
+        assert!(result.is_some());
+
+        let metrics = result.unwrap();
         assert_eq!(metrics.success_count, 0);
         assert_eq!(metrics.failure_count, 1);
         assert_eq!(metrics.consecutive_failures, 1);
@@ -1089,13 +1095,13 @@ mod bdd_integration {
         let collector = MetricsCollector::new();
         collector.initialize_auth("route-1").await;
 
-        let initial = collector.get_metrics("route-1").await.expect("initial metrics should be recorded");
+        let initial = collector.get_metrics("route-1").await.unwrap();
         assert_eq!(initial.success_count, 0);
 
         // Record successful outcome
         collector.record_result("route-1", true, 100.0, 200).await;
 
-        let updated = collector.get_metrics("route-1").await.expect("updated metrics should be recorded");
+        let updated = collector.get_metrics("route-1").await.unwrap();
         assert_eq!(updated.success_count, 1);
         assert!(updated.last_success_time.is_some());
     }
@@ -1106,13 +1112,13 @@ mod bdd_integration {
         let collector = MetricsCollector::new();
         collector.initialize_auth("route-1").await;
 
-        let initial = collector.get_metrics("route-1").await.expect("initial metrics should be recorded");
+        let initial = collector.get_metrics("route-1").await.unwrap();
         assert_eq!(initial.failure_count, 0);
 
         // Record timeout failure
         collector.record_result("route-1", false, 30000.0, 408).await;
 
-        let updated = collector.get_metrics("route-1").await.expect("updated metrics should be recorded");
+        let updated = collector.get_metrics("route-1").await.unwrap();
         assert_eq!(updated.failure_count, 1);
         assert!(updated.last_failure_time.is_some());
         assert!(updated.avg_latency_ms > 0.0);
@@ -1127,7 +1133,9 @@ mod bdd_integration {
         collector.record_result("new-route", true, 150.0, 200).await;
 
         let stats = collector.get_metrics("new-route").await;
-        let stats = stats.expect("metrics for new route should be created");
+        assert!(stats.is_some());
+
+        let stats = stats.unwrap();
         assert_eq!(stats.total_requests, 1);
         assert_eq!(stats.success_count, 1);
         assert_eq!(stats.failure_count, 0);
@@ -1151,7 +1159,7 @@ mod bdd_integration {
         let collector = MetricsCollector::new();
         collector.record_result("route-1", true, 100.0, 200).await;
 
-        let stats = collector.get_metrics("route-1").await.expect("metrics for route-1 should be recorded");
+        let stats = collector.get_metrics("route-1").await.unwrap();
         assert!(stats.last_request_time <= Utc::now());
     }
 
@@ -1174,7 +1182,7 @@ mod bdd_integration {
         let collector = MetricsCollector::new();
         collector.record_result("route-1", true, 100.0, 200).await;
 
-        let stats = collector.get_metrics("route-1").await.expect("metrics for route-1 should be recorded");
+        let stats = collector.get_metrics("route-1").await.unwrap();
         assert!(stats.last_request_time <= Utc::now());
     }
 
@@ -1193,7 +1201,8 @@ mod bdd_integration {
         let routes = vec!["anthropic-route".to_string()];
         let selected = policy.select_route(&routes);
 
-        assert_eq!(selected.expect("anthropic-route should be selected based on optimistic prior"), "anthropic-route");
+        assert!(selected.is_some());
+        assert_eq!(selected.unwrap(), "anthropic-route");
     }
 
     /// @edge-case Scenario: Tier-based prior when provider unknown
@@ -1228,7 +1237,7 @@ mod bdd_integration {
         assert!(stats.is_some());
 
         // Default priors should be initialized
-        let stats = stats.expect("neutral priors should be initialized for unknown-route");
+        let stats = stats.unwrap();
         assert!(stats.successes > 0.0 || stats.failures > 0.0);
     }
 
@@ -1243,7 +1252,9 @@ mod bdd_integration {
 
         // Get stats
         let stats = policy.get_stats("route-1");
-        let stats = stats.expect("stats for route-1 should be recorded");
+        assert!(stats.is_some());
+
+        let stats = stats.unwrap();
         assert_eq!(stats.pulls, 1);
         assert_eq!(stats.last_utility, 0.85);
     }

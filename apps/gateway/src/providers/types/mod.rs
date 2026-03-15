@@ -43,7 +43,7 @@ impl ProviderRequest {
     }
 }
 
-/// Builder for `ProviderRequest`
+/// Builder for ProviderRequest
 #[derive(Default)]
 pub struct ProviderRequestBuilder {
     messages: Vec<Message>,
@@ -59,49 +59,41 @@ pub struct ProviderRequestBuilder {
 }
 
 impl ProviderRequestBuilder {
-    /// Set the messages for this request.
     pub fn messages(mut self, messages: Vec<Message>) -> Self {
         self.messages = messages;
         self
     }
 
-    /// Set the model identifier.
     pub fn model(mut self, model: impl Into<String>) -> Self {
         self.model = Some(model.into());
         self
     }
 
-    /// Set the maximum tokens to generate.
-    pub const fn max_tokens(mut self, max_tokens: u32) -> Self {
+    pub fn max_tokens(mut self, max_tokens: u32) -> Self {
         self.max_tokens = Some(max_tokens);
         self
     }
 
-    /// Set the sampling temperature (0.0 - 2.0).
-    pub const fn temperature(mut self, temperature: f32) -> Self {
+    pub fn temperature(mut self, temperature: f32) -> Self {
         self.temperature = Some(temperature);
         self
     }
 
-    /// Enable or disable streaming responses.
-    pub const fn stream(mut self, stream: bool) -> Self {
+    pub fn stream(mut self, stream: bool) -> Self {
         self.stream = stream;
         self
     }
 
-    /// Set the system prompt override.
     pub fn system(mut self, system: impl Into<String>) -> Self {
         self.system = Some(system.into());
         self
     }
 
-    /// Set the available tools for this request.
     pub fn tools(mut self, tools: Vec<Tool>) -> Self {
         self.tools = Some(tools);
         self
     }
 
-    /// Build the `ProviderRequest`. Returns an error if the model is not set.
     pub fn build(self) -> Result<ProviderRequest, String> {
         let model = self.model.ok_or("model is required")?;
         Ok(ProviderRequest {
@@ -140,7 +132,10 @@ pub struct ProviderResponse {
 impl ProviderResponse {
     /// Check if this is a tool call response
     pub fn has_tool_calls(&self) -> bool {
-        self.tool_calls.as_ref().is_some_and(|t| !t.is_empty())
+        self.tool_calls
+            .as_ref()
+            .map(|t| !t.is_empty())
+            .unwrap_or(false)
     }
 }
 
@@ -157,7 +152,7 @@ pub struct TokenUsage {
 
 impl TokenUsage {
     /// Create new token usage
-    pub const fn new(prompt: u32, completion: u32) -> Self {
+    pub fn new(prompt: u32, completion: u32) -> Self {
         Self {
             prompt_tokens: prompt,
             completion_tokens: completion,
@@ -244,7 +239,7 @@ mod tests {
             .temperature(0.7)
             .max_tokens(1024)
             .build()
-            .expect("Provider transformation should succeed during test");
+            .unwrap();
 
         assert_eq!(request.model, "gpt-4");
         assert_eq!(request.temperature, Some(0.7));

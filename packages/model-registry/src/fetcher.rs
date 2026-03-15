@@ -4,7 +4,7 @@ use std::sync::{PoisonError, RwLock};
 
 use crate::info::{DataSource, ModelCapabilities, ModelInfo, RateLimits};
 
-/// `ModelFetcher` defines the interface for fetching model information.
+/// ModelFetcher defines the interface for fetching model information.
 #[async_trait]
 pub trait ModelFetcher: Send + Sync {
     /// Fetch retrieves model information for the given model ID.
@@ -17,7 +17,7 @@ pub trait ModelFetcher: Send + Sync {
         model_id: &str,
     ) -> Result<Option<ModelInfo>, Box<dyn std::error::Error + Send + Sync>>;
 
-    /// `FetchMultiple` retrieves model information for multiple model IDs.
+    /// FetchMultiple retrieves model information for multiple model IDs.
     /// Returns a map of model ID to `ModelInfo` for found models.
     ///
     /// # Errors
@@ -27,7 +27,7 @@ pub trait ModelFetcher: Send + Sync {
         model_ids: &[String],
     ) -> Result<HashMap<String, ModelInfo>, Box<dyn std::error::Error + Send + Sync>>;
 
-    /// `ListAll` returns all available models from this fetcher.
+    /// ListAll returns all available models from this fetcher.
     ///
     /// # Errors
     /// Returns an error if the fetch operation fails.
@@ -41,7 +41,7 @@ fn lock_err(e: PoisonError<impl std::fmt::Debug>) -> Box<dyn std::error::Error +
     Box::new(std::io::Error::other(format!("lock poisoned: {e}")))
 }
 
-/// `StaticFetcher` provides hardcoded model data for common models.
+/// StaticFetcher provides hardcoded model data for common models.
 pub struct StaticFetcher {
     models: RwLock<HashMap<String, ModelInfo>>,
 }
@@ -258,26 +258,15 @@ mod tests {
     #[tokio::test]
     async fn test_static_fetcher_fetch() {
         let fetcher = StaticFetcher::new();
-        let model = fetcher
-            .fetch("claude-sonnet-4-20250514")
-            .await
-            .expect("Model registry operation should succeed during test");
+        let model = fetcher.fetch("claude-sonnet-4-20250514").await.unwrap();
         assert!(model.is_some());
-        assert_eq!(
-            model
-                .expect("Model registry operation should succeed during test")
-                .name,
-            "Claude Sonnet 4"
-        );
+        assert_eq!(model.unwrap().name, "Claude Sonnet 4");
     }
 
     #[tokio::test]
     async fn test_static_fetcher_fetch_not_found() {
         let fetcher = StaticFetcher::new();
-        let model = fetcher
-            .fetch("unknown-model")
-            .await
-            .expect("Model registry operation should succeed during test");
+        let model = fetcher.fetch("unknown-model").await.unwrap();
         assert!(model.is_none());
     }
 
@@ -291,7 +280,7 @@ mod tests {
                 "unknown".to_string(),
             ])
             .await
-            .expect("Model registry operation should succeed during test");
+            .unwrap();
 
         assert_eq!(models.len(), 2);
         assert!(models.contains_key("claude-sonnet-4-20250514"));
@@ -301,22 +290,14 @@ mod tests {
     #[tokio::test]
     async fn test_static_fetcher_list_all() {
         let fetcher = StaticFetcher::new();
-        let models = fetcher
-            .list_all()
-            .await
-            .expect("Model registry operation should succeed during test");
+        let models = fetcher.list_all().await.unwrap();
         assert!(models.len() >= 6); // At least the 6 models we initialized
     }
     use std::panic::{self, AssertUnwindSafe};
 
-    // Intentionally panics to poison the RwLock for testing recovery behavior
-    #[allow(clippy::panic)]
     fn poison_lock(fetcher: &StaticFetcher) {
         let _ = panic::catch_unwind(AssertUnwindSafe(|| {
-            let _guard = fetcher
-                .models
-                .write()
-                .expect("Model registry operation should succeed during test");
+            let _guard = fetcher.models.write().unwrap();
             panic!("intentional poison for testing");
         }));
     }
@@ -328,7 +309,8 @@ mod tests {
         let result = fetcher.fetch("test").await;
         assert!(
             result.is_err(),
-            "fetch should return Err on poisoned lock, got {result:?}"
+            "fetch should return Err on poisoned lock, got {:?}",
+            result
         );
     }
 
@@ -339,7 +321,8 @@ mod tests {
         let result = fetcher.fetch_multiple(&["test".to_string()]).await;
         assert!(
             result.is_err(),
-            "fetch_multiple should return Err on poisoned lock, got {result:?}"
+            "fetch_multiple should return Err on poisoned lock, got {:?}",
+            result
         );
     }
 
@@ -350,7 +333,8 @@ mod tests {
         let result = fetcher.list_all().await;
         assert!(
             result.is_err(),
-            "list_all should return Err on poisoned lock, got {result:?}"
+            "list_all should return Err on poisoned lock, got {:?}",
+            result
         );
     }
 }

@@ -16,8 +16,3 @@ This project is part of the workspace. Please refer to the root [AGENTS.md](../.
 - Output formats: text (default), json (`-f/--format`)
 - Verbose mode: `-v/--verbose`
 - Standalone — no internal workspace dependencies
-
-## Known Pitfalls
-
-- CLI communicates with gateway via HTTP (reqwest), not internal crate dependencies
-- Uses `anyhow` for error handling (not a custom Error enum)

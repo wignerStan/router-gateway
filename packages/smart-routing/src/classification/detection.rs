@@ -128,7 +128,7 @@ impl ToolDetector {
     /// Detect if the request requires tool/function calling capability
     ///
     /// Checks for tool definitions in various formats:
-    /// - `OpenAI`: `tools` array with function definitions
+    /// - OpenAI: `tools` array with function definitions
     /// - Anthropic: `tools` array
     /// - Legacy: `functions` array
     ///
@@ -170,7 +170,8 @@ impl ToolDetector {
                 if msg
                     .get("tool_calls")
                     .and_then(|t| t.as_array())
-                    .is_some_and(|a| !a.is_empty())
+                    .map(|a| !a.is_empty())
+                    .unwrap_or(false)
                 {
                     return true;
                 }
@@ -190,7 +191,7 @@ impl ToolDetector {
         false
     }
 
-    /// Check if tools are explicitly disabled (`tool_choice` = "none" or empty array)
+    /// Check if tools are explicitly disabled (tool_choice = "none" or empty array)
     pub fn is_tools_disabled(request: &Value) -> bool {
         if let Some(choice) = request.get("tool_choice") {
             if let Some(choice_str) = choice.as_str() {

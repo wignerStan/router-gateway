@@ -1,4 +1,3 @@
-#![allow(missing_docs)]
 use assert_cmd::Command;
 use std::io::Write;
 use wiremock::matchers::{method, path};
@@ -80,10 +79,7 @@ credentials:
         .arg("json")
         .assert()
         .success()
-        .stdout(
-            predicates::str::is_match(r#""valid"\s*:\s*true"#)
-                .expect("Operation should succeed during test execution"),
-        );
+        .stdout(predicates::str::is_match(r#""valid"\s*:\s*true"#).unwrap());
 }
 
 #[test]
@@ -147,7 +143,7 @@ async fn models_against_test_server_lists_models() {
                     "id": "gpt-4",
                     "provider": "openai",
                     "capabilities": ["chat"],
-                    "context_window": 128_000
+                    "context_window": 128000
                 }
             ],
             "count": 1

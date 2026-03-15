@@ -21,11 +21,11 @@ mod sqlite_tests {
             let store = SQLiteStore::new(config).await;
             assert!(store.is_ok(), "Failed to create SQLite store");
 
-            let store = store.expect("Operation should succeed during test");
+            let store = store.unwrap();
             // Test that we can query the database
             let stats = store.get_history_stats().await;
             assert!(stats.is_ok(), "Failed to get history stats");
-            let (count, _) = stats.expect("Route statistics should be available");
+            let (count, _) = stats.unwrap();
             assert_eq!(count, 0, "History should be empty initially");
         }
 
@@ -38,7 +38,7 @@ mod sqlite_tests {
 
             let store = SQLiteStore::new(config)
                 .await
-                .expect("Operation should succeed during test");
+                .expect("Failed to create store");
 
             // Write metrics
             let metrics = AuthMetrics {
@@ -63,9 +63,9 @@ mod sqlite_tests {
             // Load metrics
             let loaded = store.load_metrics("test-auth").await;
             assert!(loaded.is_ok(), "Failed to load metrics");
-            let loaded = loaded.expect("Operation should succeed during test");
+            let loaded = loaded.unwrap();
             assert!(loaded.is_some(), "No metrics found");
-            let loaded = loaded.expect("Operation should succeed during test");
+            let loaded = loaded.unwrap();
 
             assert_eq!(loaded.total_requests, 100);
             assert_eq!(loaded.success_count, 95);
@@ -83,7 +83,7 @@ mod sqlite_tests {
 
             let store = SQLiteStore::new(config)
                 .await
-                .expect("Operation should succeed during test");
+                .expect("Failed to create store");
 
             // Write health
             let health = AuthHealth {
@@ -102,9 +102,9 @@ mod sqlite_tests {
             // Load health
             let loaded = store.load_health("test-auth").await;
             assert!(loaded.is_ok(), "Failed to load health");
-            let loaded = loaded.expect("Operation should succeed during test");
+            let loaded = loaded.unwrap();
             assert!(loaded.is_some(), "No health found");
-            let loaded = loaded.expect("Operation should succeed during test");
+            let loaded = loaded.unwrap();
 
             assert_eq!(loaded.status, HealthStatus::Healthy);
             assert_eq!(loaded.consecutive_successes, 5);
@@ -120,7 +120,7 @@ mod sqlite_tests {
 
             let store = SQLiteStore::new(config)
                 .await
-                .expect("Operation should succeed during test");
+                .expect("Failed to create store");
 
             // Write status history entries
             let result = store
@@ -136,7 +136,7 @@ mod sqlite_tests {
             // Check stats
             let stats = store.get_history_stats().await;
             assert!(stats.is_ok(), "Failed to get history stats");
-            let (count, _) = stats.expect("Route statistics should be available");
+            let (count, _) = stats.unwrap();
             assert_eq!(count, 2, "Should have 2 history entries");
         }
 
@@ -149,28 +149,22 @@ mod sqlite_tests {
 
             let store = SQLiteStore::new(config)
                 .await
-                .expect("Operation should succeed during test");
+                .expect("Failed to create store");
 
             // Write some history entries
             for i in 0..5 {
                 let result = store
-                    .write_status_history(&format!("auth-{i}"), 200, 100.0, true)
+                    .write_status_history(&format!("auth-{}", i), 200, 100.0, true)
                     .await;
                 assert!(result.is_ok(), "Failed to write status history");
             }
 
             // Verify entries exist
-            let stats = store
-                .get_history_stats()
-                .await
-                .expect("Operation should succeed during test");
+            let stats = store.get_history_stats().await.unwrap();
             assert_eq!(stats.0, 5, "Should have 5 history entries");
 
             // Cleanup old history (with a very short max age)
-            let deleted = store
-                .cleanup_old_history(0)
-                .await
-                .expect("Operation should succeed during test");
+            let deleted = store.cleanup_old_history(0).await.unwrap();
             // The cleanup might not delete everything if timestamps are very recent
             assert!(deleted >= 0, "Cleanup should return non-negative count");
         }
@@ -184,7 +178,7 @@ mod sqlite_tests {
 
             let store = SQLiteStore::new(config)
                 .await
-                .expect("Operation should succeed during test");
+                .expect("Failed to create store");
 
             // Write metrics for multiple auths
             for i in 1..=3 {
@@ -205,22 +199,17 @@ mod sqlite_tests {
                 };
 
                 store
-                    .write_metrics(&format!("auth-{i}"), &metrics)
+                    .write_metrics(&format!("auth-{}", i), &metrics)
                     .await
-                    .expect("Operation should succeed during test");
+                    .unwrap();
             }
 
             // Load all metrics
-            let all_metrics = store
-                .load_all_metrics()
-                .await
-                .expect("Operation should succeed during test");
+            let all_metrics = store.load_all_metrics().await.unwrap();
             assert_eq!(all_metrics.len(), 3, "Should have 3 auth metrics");
 
             // Verify one entry
-            let metrics = all_metrics
-                .get("auth-2")
-                .expect("Operation should succeed during test");
+            let metrics = all_metrics.get("auth-2").unwrap();
             assert_eq!(metrics.total_requests, 20);
             assert_eq!(metrics.success_count, 18);
         }
@@ -238,7 +227,7 @@ mod sqlite_tests {
 
             let store = SQLiteStore::new(config)
                 .await
-                .expect("Operation should succeed during test");
+                .expect("Failed to create store");
             let collector = SQLiteMetricsCollector::new(store);
 
             // Initialize auth
@@ -258,11 +247,66 @@ mod sqlite_tests {
             // Get metrics
             let metrics = collector.get_metrics("test-auth").await;
             assert!(metrics.is_some(), "Should have metrics");
-            let metrics = metrics.expect("Metrics should be available");
+            let metrics = metrics.unwrap();
 
             assert_eq!(metrics.total_requests, 3);
             assert_eq!(metrics.success_count, 2);
             assert_eq!(metrics.failure_count, 1);
+        }
+
+        #[tokio::test]
+        async fn test_metrics_collector_flush_and_load() {
+            let config = SQLiteConfig {
+                database_path: ":memory:".to_string(),
+                ..Default::default()
+            };
+
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("Failed to create store");
+            let collector = SQLiteMetricsCollector::new(store.clone());
+
+            collector.initialize_auth("test-auth-flush").await;
+            collector
+                .record_request("test-auth-flush", 100.0, true, 200)
+                .await;
+
+            // Database should not have it yet
+            let db_metrics = store
+                .load_metrics("test-auth-flush")
+                .await
+                .expect("Failed to load metrics");
+            assert!(db_metrics.is_none(), "Metrics should not be in DB yet");
+
+            // Flush
+            collector.flush().await.expect("Failed to flush");
+
+            // DB should now have it
+            let db_metrics = store
+                .load_metrics("test-auth-flush")
+                .await
+                .expect("Failed to load metrics");
+            assert!(db_metrics.is_some(), "Metrics should be in DB after flush");
+            let db_metrics = db_metrics.expect("Metrics not found");
+            assert_eq!(db_metrics.total_requests, 1);
+            assert_eq!(db_metrics.success_count, 1);
+
+            // Create a new collector and load from DB
+            let new_collector = SQLiteMetricsCollector::new(store);
+            let mem_metrics = new_collector.get_metrics("test-auth-flush").await;
+            assert!(
+                mem_metrics.is_none(),
+                "New collector should be empty initially"
+            );
+
+            new_collector
+                .load_from_db()
+                .await
+                .expect("Failed to load from db");
+
+            let loaded_metrics = new_collector.get_metrics("test-auth-flush").await;
+            assert!(loaded_metrics.is_some(), "Should have loaded metrics");
+            assert_eq!(loaded_metrics.expect("Metrics not found").total_requests, 1);
         }
 
         #[tokio::test]
@@ -274,7 +318,7 @@ mod sqlite_tests {
 
             let store = SQLiteStore::new(config)
                 .await
-                .expect("Operation should succeed during test");
+                .expect("Failed to create store");
             let manager = SQLiteHealthManager::new(store);
 
             // Record successes
@@ -299,6 +343,60 @@ mod sqlite_tests {
             let available = manager.is_available("test-auth").await;
             assert!(!available, "Should be unavailable during cooldown");
         }
+
+        #[tokio::test]
+        async fn test_health_manager_flush_and_load() {
+            let config = SQLiteConfig {
+                database_path: ":memory:".to_string(),
+                ..Default::default()
+            };
+
+            let store = SQLiteStore::new(config)
+                .await
+                .expect("Failed to create store");
+            let manager = SQLiteHealthManager::new(store.clone());
+
+            manager.record_success("test-auth-health-flush").await;
+
+            // Database should not have it yet
+            let db_health = store
+                .load_health("test-auth-health-flush")
+                .await
+                .expect("Failed to load health");
+            assert!(db_health.is_none(), "Health should not be in DB yet");
+
+            // Flush
+            manager.flush().await.expect("Failed to flush health");
+
+            // DB should now have it
+            let db_health = store
+                .load_health("test-auth-health-flush")
+                .await
+                .expect("Failed to load health");
+            assert!(db_health.is_some(), "Health should be in DB after flush");
+            let db_health = db_health.expect("Health not found");
+            assert_eq!(db_health.status, HealthStatus::Healthy);
+
+            // Create a new manager and load from DB
+            let new_manager = SQLiteHealthManager::new(store);
+            let mem_health = new_manager.get_health("test-auth-health-flush").await;
+            assert!(
+                mem_health.is_none(),
+                "New manager should be empty initially"
+            );
+
+            new_manager
+                .load_from_db()
+                .await
+                .expect("Failed to load health from db");
+
+            let loaded_health = new_manager.get_health("test-auth-health-flush").await;
+            assert!(loaded_health.is_some(), "Should have loaded health");
+            assert_eq!(
+                loaded_health.expect("Health not found").status,
+                HealthStatus::Healthy
+            );
+        }
     }
 
     mod selector_basic {
@@ -317,7 +415,7 @@ mod sqlite_tests {
 
             let store = SQLiteStore::new(config)
                 .await
-                .expect("Operation should succeed during test");
+                .expect("Failed to create store");
 
             let routing_config = SmartRoutingConfig::default();
             let selector = SQLiteSelector::new(store, routing_config);
@@ -343,7 +441,7 @@ mod sqlite_tests {
             let selected = selector.pick(auths).await;
             assert!(selected.is_some(), "Should select an auth when available");
 
-            let selected_id = selected.expect("Operation should succeed during test");
+            let selected_id = selected.unwrap();
             assert!(
                 selected_id == "auth1" || selected_id == "auth2",
                 "Should select one of the provided auths"
@@ -362,7 +460,7 @@ mod sqlite_tests {
 
             let store = SQLiteStore::new(config)
                 .await
-                .expect("Operation should succeed during test");
+                .expect("Failed to create store");
             let routing_config = SmartRoutingConfig::default();
             let selector = SQLiteSelector::new(store, routing_config);
 
@@ -388,7 +486,7 @@ mod sqlite_tests {
 
             let store = SQLiteStore::new(config)
                 .await
-                .expect("Operation should succeed during test");
+                .expect("Failed to create store");
             let routing_config = SmartRoutingConfig::default();
             let selector = SQLiteSelector::new(store, routing_config);
 
@@ -429,7 +527,7 @@ mod sqlite_tests {
 
             let store = SQLiteStore::new(config)
                 .await
-                .expect("Operation should succeed during test");
+                .expect("Failed to create store");
 
             // Create selector with smart routing disabled
             let routing_config = SmartRoutingConfig {
@@ -460,7 +558,7 @@ mod sqlite_tests {
             let selected = selector.pick(auths).await;
             assert!(selected.is_some());
 
-            let selected_id = selected.expect("Operation should succeed during test");
+            let selected_id = selected.unwrap();
             assert_eq!(
                 selected_id, "auth2",
                 "With routing disabled, should return the first auth"
@@ -486,7 +584,7 @@ mod sqlite_tests {
 
             let store = SQLiteStore::new(config)
                 .await
-                .expect("Operation should succeed during test");
+                .expect("Failed to create store");
 
             // Setup metrics for auth1 (good performance)
             let metrics1 = AuthMetrics {
@@ -505,10 +603,7 @@ mod sqlite_tests {
                 last_failure_time: None,
             };
 
-            store
-                .write_metrics("auth1", &metrics1)
-                .await
-                .expect("Operation should succeed during test");
+            store.write_metrics("auth1", &metrics1).await.unwrap();
 
             // Setup metrics for auth2 (poor performance)
             let metrics2 = AuthMetrics {
@@ -527,10 +622,7 @@ mod sqlite_tests {
                 last_failure_time: Some(Utc::now()),
             };
 
-            store
-                .write_metrics("auth2", &metrics2)
-                .await
-                .expect("Operation should succeed during test");
+            store.write_metrics("auth2", &metrics2).await.unwrap();
 
             let routing_config = SmartRoutingConfig::default();
             let selector = SQLiteSelector::new(store, routing_config);
@@ -562,15 +654,11 @@ mod sqlite_tests {
                 let selected = selector.pick(auths_clone).await;
                 assert!(selected.is_some());
 
-                let selected_id = selected.expect("Operation should succeed during test");
-                assert!(
-                    matches!(selected_id.as_str(), "auth1" | "auth2"),
-                    "Unexpected auth selected: {selected_id}"
-                );
-                if selected_id == "auth1" {
-                    auth1_count += 1;
-                } else {
-                    auth2_count += 1;
+                let selected_id = selected.unwrap();
+                match selected_id.as_str() {
+                    "auth1" => auth1_count += 1,
+                    "auth2" => auth2_count += 1,
+                    _ => panic!("Unexpected auth selected: {}", selected_id),
                 }
             }
 
@@ -604,7 +692,7 @@ mod sqlite_tests {
 
             let store = SQLiteStore::new(config)
                 .await
-                .expect("Operation should succeed during test");
+                .expect("Failed to create store");
             let routing_config = SmartRoutingConfig::default();
             let selector = std::sync::Arc::new(SQLiteSelector::new(store, routing_config));
 
@@ -636,14 +724,15 @@ mod sqlite_tests {
 
             // Spawn 10 concurrent selection tasks
             for i in 0..10 {
-                let selector_clone = std::sync::Arc::clone(&selector);
+                let selector_clone = selector.clone();
                 let auths = auths_template.clone();
 
                 join_set.spawn(async move {
                     let selected: Option<String> = selector_clone.pick(auths).await;
                     assert!(
                         selected.is_some(),
-                        "Task {i} should successfully select an auth"
+                        "Task {} should successfully select an auth",
+                        i
                     );
                     selected
                 });
@@ -652,20 +741,23 @@ mod sqlite_tests {
             // Wait for all tasks to complete
             let mut results: Vec<Option<String>> = Vec::new();
             while let Some(result) = join_set.join_next().await {
-                results.push(result.expect("Operation should succeed during test"));
+                results.push(result.unwrap());
             }
 
             assert_eq!(results.len(), 10, "All concurrent tasks should complete");
 
             // Verify all selections are valid
             for (i, selected) in results.iter().enumerate() {
-                assert!(selected.is_some(), "Task {i} should have a valid selection");
-                let id = selected
-                    .as_ref()
-                    .expect("Operation should succeed during test");
+                assert!(
+                    selected.is_some(),
+                    "Task {} should have a valid selection",
+                    i
+                );
+                let id = selected.as_ref().unwrap();
                 assert!(
                     id == "auth1" || id == "auth2" || id == "auth3",
-                    "Task {i} should select a valid auth ID"
+                    "Task {} should select a valid auth ID",
+                    i
                 );
             }
         }
@@ -682,7 +774,7 @@ mod sqlite_tests {
 
             let store = SQLiteStore::new(config)
                 .await
-                .expect("Operation should succeed during test");
+                .expect("Failed to create store");
             let routing_config = SmartRoutingConfig::default();
             let selector = SQLiteSelector::new(store, routing_config);
 
@@ -699,11 +791,11 @@ mod sqlite_tests {
             )
             .await;
 
-            // Timeout is acceptable for empty database; inner error indicates a bug
-            assert!(
-                result.as_ref().map_or(true, Result::is_ok),
-                "precompute_weights should not fail: {result:?}"
-            );
+            match result {
+                Ok(Ok(_)) => {}, // Success
+                Ok(Err(e)) => panic!("Failed to precompute weights: {}", e),
+                Err(_) => {}, // Timeout - acceptable for empty database
+            }
 
             // Get stats to verify operation was tracked
             let stats = selector.get_stats();
@@ -732,7 +824,7 @@ mod sqlite_tests {
 
             let store = SQLiteStore::new(config)
                 .await
-                .expect("Operation should succeed during test");
+                .expect("Failed to create store");
 
             // Setup good metrics for auth1
             let metrics1 = AuthMetrics {
@@ -751,10 +843,7 @@ mod sqlite_tests {
                 last_failure_time: None,
             };
 
-            store
-                .write_metrics("auth1", &metrics1)
-                .await
-                .expect("Operation should succeed during test");
+            store.write_metrics("auth1", &metrics1).await.unwrap();
 
             // Setup good metrics for auth2
             let metrics2 = AuthMetrics {
@@ -773,10 +862,7 @@ mod sqlite_tests {
                 last_failure_time: None,
             };
 
-            store
-                .write_metrics("auth2", &metrics2)
-                .await
-                .expect("Operation should succeed during test");
+            store.write_metrics("auth2", &metrics2).await.unwrap();
 
             let routing_config = SmartRoutingConfig::default();
             let selector = SQLiteSelector::new(store, routing_config);
@@ -808,22 +894,20 @@ mod sqlite_tests {
                 let selected = selector.pick(auths_clone).await;
                 assert!(selected.is_some());
 
-                let selected_id = selected.expect("Operation should succeed during test");
-                assert!(
-                    matches!(selected_id.as_str(), "auth1" | "auth2"),
-                    "Unexpected auth selected: {selected_id}"
-                );
-                if selected_id == "auth1" {
-                    auth1_count += 1;
-                } else {
-                    auth2_count += 1;
+                let selected_id = selected.unwrap();
+                match selected_id.as_str() {
+                    "auth1" => auth1_count += 1,
+                    "auth2" => auth2_count += 1,
+                    _ => panic!("Unexpected auth selected: {}", selected_id),
                 }
             }
 
             // auth2 should be selected more often due to quota availability
             assert!(
                 auth2_count > auth1_count,
-                "auth2 (no quota) should be selected more often than auth1 (quota exceeded) (auth1: {auth1_count}, auth2: {auth2_count})"
+                "auth2 (no quota) should be selected more often than auth1 (quota exceeded) (auth1: {}, auth2: {})",
+                auth1_count,
+                auth2_count
             );
         }
 
@@ -840,7 +924,7 @@ mod sqlite_tests {
 
             let store = SQLiteStore::new(config)
                 .await
-                .expect("Operation should succeed during test");
+                .expect("Failed to create store");
 
             // Use a config where priority has a much higher weight
             let routing_config = SmartRoutingConfig {
@@ -886,15 +970,11 @@ mod sqlite_tests {
                 let selected = selector.pick(auths_clone).await;
                 assert!(selected.is_some());
 
-                let selected_id = selected.expect("Operation should succeed during test");
-                assert!(
-                    matches!(selected_id.as_str(), "auth1" | "auth2"),
-                    "Unexpected auth selected: {selected_id}"
-                );
-                if selected_id == "auth1" {
-                    auth1_count += 1;
-                } else {
-                    auth2_count += 1;
+                let selected_id = selected.unwrap();
+                match selected_id.as_str() {
+                    "auth1" => auth1_count += 1,
+                    "auth2" => auth2_count += 1,
+                    _ => panic!("Unexpected auth selected: {}", selected_id),
                 }
             }
 
@@ -902,7 +982,9 @@ mod sqlite_tests {
             // With high priority weight and 200 iterations, this should be reliable
             assert!(
                 auth1_count > auth2_count,
-                "auth1 (high priority) should be selected more often than auth2 (low priority) (auth1: {auth1_count}, auth2: {auth2_count})"
+                "auth1 (high priority) should be selected more often than auth2 (low priority) (auth1: {}, auth2: {})",
+                auth1_count,
+                auth2_count
             );
         }
 
@@ -919,7 +1001,7 @@ mod sqlite_tests {
 
             let store = SQLiteStore::new(config)
                 .await
-                .expect("Operation should succeed during test");
+                .expect("Failed to create store");
             let routing_config = SmartRoutingConfig::default();
             let selector = SQLiteSelector::new(store, routing_config);
 

@@ -131,12 +131,8 @@ impl RateLimiter {
 
     /// Check whether a request from the given IP should be allowed.
     /// Returns `true` if under the limit, `false` if rate limited.
-    #[allow(clippy::significant_drop_tightening)]
     pub(crate) fn check(&self, ip: &str) -> bool {
-        let mut buckets = self
-            .buckets
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut buckets = self.buckets.lock().unwrap_or_else(|p| p.into_inner());
         let now = Instant::now();
 
         let (count, window_start) = buckets.entry(ip.to_string()).or_insert((0, now));

@@ -25,7 +25,7 @@ const DEFAULT_PRIORITY_WEIGHT: f64 = 0.05;
 pub struct SmartRoutingConfig {
     /// Whether smart routing is enabled
     pub enabled: bool,
-    /// Routing strategy: weighted, `time_aware`, `quota_aware`, adaptive, `policy_aware`
+    /// Routing strategy: weighted, time_aware, quota_aware, adaptive, policy_aware
     pub strategy: String,
     /// Weight configuration
     pub weight: WeightConfig,
@@ -62,7 +62,7 @@ pub struct PolicyConfig {
     pub cache_enabled: bool,
 }
 
-const fn default_cache_enabled() -> bool {
+fn default_cache_enabled() -> bool {
     true
 }
 
@@ -179,13 +179,13 @@ impl SmartRoutingConfig {
         default: f64,
         warnings: &mut Vec<String>,
     ) -> f64 {
-        if (0.0..=1.0).contains(&value) {
-            value
-        } else {
+        if !(0.0..=1.0).contains(&value) {
             warnings.push(format!(
                 "{name} {value} out of range [0, 1], reset to {default}"
             ));
             default
+        } else {
+            value
         }
     }
 
@@ -328,9 +328,7 @@ mod tests {
             ..Default::default()
         };
         let mut config = config;
-        config
-            .validate()
-            .expect("Operation should succeed during test");
+        config.validate().unwrap();
         assert_eq!(config.strategy, "weighted");
     }
 
@@ -570,9 +568,7 @@ mod tests {
             },
             ..Default::default()
         };
-        config
-            .validate()
-            .expect("Operation should succeed during test");
+        config.validate().unwrap();
         assert!(
             (config.time_aware.off_peak_factor - 1.2).abs() < 0.01,
             "Invalid off_peak_factor should be reset to default 1.2"
@@ -594,9 +590,7 @@ mod tests {
             },
             ..Default::default()
         };
-        config
-            .validate()
-            .expect("Operation should succeed during test");
+        config.validate().unwrap();
         let slot = &config.time_aware.peak_hours[0];
         assert_eq!(slot.start_hour, 0);
         assert_eq!(slot.end_hour, 23);
@@ -626,9 +620,7 @@ mod tests {
             },
             ..Default::default()
         };
-        config
-            .validate()
-            .expect("Operation should succeed during test");
+        config.validate().unwrap();
         assert_eq!(config.quota_aware.quota_balance_strategy, "least_used");
     }
 
@@ -642,9 +634,7 @@ mod tests {
             },
             ..Default::default()
         };
-        config
-            .validate()
-            .expect("Operation should succeed during test");
+        config.validate().unwrap();
         assert_eq!(config.quota_aware.quota_balance_strategy, "round_robin");
     }
 
@@ -658,9 +648,7 @@ mod tests {
             },
             ..Default::default()
         };
-        config
-            .validate()
-            .expect("Operation should succeed during test");
+        config.validate().unwrap();
         assert_eq!(config.quota_aware.quota_balance_strategy, "adaptive");
     }
 
@@ -674,9 +662,7 @@ mod tests {
             },
             ..Default::default()
         };
-        config
-            .validate()
-            .expect("Operation should succeed during test");
+        config.validate().unwrap();
         assert_eq!(
             config.quota_aware.quota_balance_strategy, "adaptive",
             "Invalid strategy should reset to adaptive"
@@ -777,9 +763,7 @@ mod tests {
                 strategy: strategy.to_string(),
                 ..Default::default()
             };
-            config
-                .validate()
-                .expect("Operation should succeed during test");
+            config.validate().unwrap();
             assert_eq!(
                 config.strategy, strategy,
                 "Strategy '{strategy}' should be preserved after validation"
@@ -793,9 +777,7 @@ mod tests {
             strategy: "unknown_strategy".to_string(),
             ..Default::default()
         };
-        config
-            .validate()
-            .expect("Operation should succeed during test");
+        config.validate().unwrap();
         assert_eq!(config.strategy, "weighted");
     }
 
@@ -814,9 +796,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let warnings = config
-            .validate()
-            .expect("Operation should succeed during test");
+        let warnings = config.validate().unwrap();
         assert!(
             !warnings.is_empty(),
             "validate() should return warnings for corrected values"
@@ -840,12 +820,11 @@ mod tests {
     #[test]
     fn test_validate_no_warnings_for_valid_config() {
         let mut config = SmartRoutingConfig::default();
-        let warnings = config
-            .validate()
-            .expect("Operation should succeed during test");
+        let warnings = config.validate().unwrap();
         assert!(
             warnings.is_empty(),
-            "Valid config should produce no warnings, got: {warnings:?}"
+            "Valid config should produce no warnings, got: {:?}",
+            warnings
         );
     }
 

@@ -1,11 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// Content type detection for LLM requests.
 pub mod detection;
-/// Request format and protocol detection.
 pub mod format;
-/// Token estimation for LLM requests.
 pub mod token;
 
 pub use detection::{ContentTypeDetector, StreamingExtractor, ToolDetector};
@@ -19,7 +16,7 @@ pub trait RequestClassifier: Send + Sync {
 }
 
 /// Result of classifying a request, containing all routing-relevant information
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ClassifiedRequest {
     /// Required capabilities for this request
     pub required_capabilities: RequiredCapabilities,

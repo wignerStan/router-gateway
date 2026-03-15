@@ -15,14 +15,14 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 
-/// `CachedModelInfo` holds model info with expiration time.
+/// CachedModelInfo holds model info with expiration time.
 #[derive(Clone)]
 struct CachedModelInfo {
     info: ModelInfo,
     expires_at: DateTime<Utc>,
 }
 
-/// `RegistryConfig` defines model registry configuration.
+/// RegistryConfig defines model registry configuration.
 pub struct RegistryConfig {
     /// Fetcher is the underlying model fetcher
     pub fetcher: Arc<dyn ModelFetcher>,
@@ -30,10 +30,10 @@ pub struct RegistryConfig {
     /// TTL is how long to cache model info (default: 1 hour)
     pub ttl: chrono::Duration,
 
-    /// `EnableBackgroundRefresh` enables periodic cache refresh (default: false)
+    /// EnableBackgroundRefresh enables periodic cache refresh (default: false)
     pub enable_background_refresh: bool,
 
-    /// `RefreshInterval` is how often to refresh the cache (default: TTL/2)
+    /// RefreshInterval is how often to refresh the cache (default: TTL/2)
     pub refresh_interval: chrono::Duration,
 }
 
@@ -52,7 +52,7 @@ impl Default for RegistryConfig {
 /// Result of a model fetch operation
 type FetchResult = Result<Option<ModelInfo>, String>;
 
-/// `ModelRegistry` provides thread-safe access to model information.
+/// ModelRegistry provides thread-safe access to model information.
 pub struct Registry {
     fetcher: Arc<dyn ModelFetcher>,
     cache: Arc<RwLock<HashMap<String, CachedModelInfo>>>,

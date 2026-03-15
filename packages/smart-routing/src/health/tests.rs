@@ -54,33 +54,12 @@ mod basic_tracking {
         manager.update_from_result("test-auth", false, 503).await;
         manager.update_from_result("test-auth", false, 429).await;
 
-        let health = manager
-            .get_health("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let health = manager.get_health("test-auth").await.unwrap();
 
         // Verify error counts
-        assert_eq!(
-            *health
-                .error_counts
-                .get(&500)
-                .expect("Operation should succeed during test"),
-            2
-        );
-        assert_eq!(
-            *health
-                .error_counts
-                .get(&503)
-                .expect("Operation should succeed during test"),
-            1
-        );
-        assert_eq!(
-            *health
-                .error_counts
-                .get(&429)
-                .expect("Operation should succeed during test"),
-            1
-        );
+        assert_eq!(*health.error_counts.get(&500).unwrap(), 2);
+        assert_eq!(*health.error_counts.get(&503).unwrap(), 1);
+        assert_eq!(*health.error_counts.get(&429).unwrap(), 1);
     }
 }
 
@@ -113,13 +92,7 @@ mod availability_and_cooldown {
         // Still unhealthy but cooldown expired
         let health = manager.get_health("test-auth").await;
         assert!(health.is_some());
-        assert!(
-            health
-                .expect("Operation should succeed during test")
-                .unavailable_until
-                .expect("Operation should succeed during test")
-                < Utc::now()
-        );
+        assert!(health.unwrap().unavailable_until.unwrap() < Utc::now());
     }
 
     #[tokio::test]
@@ -141,10 +114,7 @@ mod availability_and_cooldown {
         );
 
         // Check unavailable_until is set
-        let health = manager
-            .get_health("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let health = manager.get_health("test-auth").await.unwrap();
         assert!(health.unavailable_until.is_some());
 
         // Should be unavailable
@@ -173,10 +143,7 @@ mod availability_and_cooldown {
         );
         assert!(!manager.is_available("test-auth").await);
 
-        let health = manager
-            .get_health("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let health = manager.get_health("test-auth").await.unwrap();
         assert!(health.unavailable_until.is_some());
     }
 
@@ -305,10 +272,7 @@ mod status_transitions {
         // Exactly 3 successes for recovery
         manager.update_from_result("test-auth", true, 200).await;
         manager.update_from_result("test-auth", true, 200).await;
-        let health = manager
-            .get_health("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let health = manager.get_health("test-auth").await.unwrap();
         assert_eq!(
             health.consecutive_successes, 2,
             "Should have 2 consecutive successes"
@@ -387,18 +351,12 @@ mod status_transitions {
         // With zero threshold, even 0 consecutive failures meets threshold
         // First success should immediately make healthy
         manager.update_from_result("test-auth", true, 200).await;
-        let health = manager
-            .get_health("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let health = manager.get_health("test-auth").await.unwrap();
         assert_eq!(health.consecutive_successes, 1);
 
         // First failure should immediately make unhealthy with threshold 0
         manager.update_from_result("test-auth2", false, 500).await;
-        let health2 = manager
-            .get_health("test-auth2")
-            .await
-            .expect("Operation should succeed during test");
+        let health2 = manager.get_health("test-auth2").await.unwrap();
         assert_eq!(health2.consecutive_failures, 1);
         // With threshold 0, consecutive_failures >= 0 is always true
         assert_eq!(
@@ -422,10 +380,7 @@ mod status_transitions {
             manager.update_from_result("test-auth", true, 200).await;
         }
 
-        let health = manager
-            .get_health("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let health = manager.get_health("test-auth").await.unwrap();
         assert_eq!(health.consecutive_successes, 100);
         assert_eq!(health.consecutive_failures, 0);
         assert_eq!(manager.get_status("test-auth").await, HealthStatus::Healthy);
@@ -435,10 +390,7 @@ mod status_transitions {
             manager.update_from_result("test-auth", false, 500).await;
         }
 
-        let health = manager
-            .get_health("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let health = manager.get_health("test-auth").await.unwrap();
         assert_eq!(health.consecutive_successes, 0);
         assert_eq!(health.consecutive_failures, 100);
         assert_eq!(
@@ -547,20 +499,14 @@ mod state_management {
 
         // Initial status
         manager.update_from_result("test-auth", true, 200).await;
-        let health1 = manager
-            .get_health("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let health1 = manager.get_health("test-auth").await.unwrap();
         let first_change = health1.last_status_change;
 
         // Status changes to unhealthy
         manager.update_from_result("test-auth", false, 500).await;
         manager.update_from_result("test-auth", false, 500).await;
 
-        let health2 = manager
-            .get_health("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let health2 = manager.get_health("test-auth").await.unwrap();
         assert!(health2.last_status_change > first_change);
     }
 
@@ -582,10 +528,7 @@ mod state_management {
         manager.reset("test-auth").await;
 
         // Should be healthy again
-        let health = manager
-            .get_health("test-auth")
-            .await
-            .expect("Operation should succeed during test");
+        let health = manager.get_health("test-auth").await.unwrap();
         assert_eq!(health.status, HealthStatus::Healthy);
         assert_eq!(health.consecutive_failures, 0);
         assert_eq!(health.consecutive_successes, 0);
@@ -693,7 +636,7 @@ mod counting_and_cleanup {
         // Add entries to exceed the limit
         for i in 0..10 {
             manager
-                .update_from_result(&format!("auth-{i}"), true, 200)
+                .update_from_result(&format!("auth-{}", i), true, 200)
                 .await;
         }
 
@@ -703,7 +646,10 @@ mod counting_and_cleanup {
         }
 
         // After enough operations, cleanup should have been triggered
-        assert!(manager.health.read().await.len() <= 10); // Should not have grown unbounded
+        let all_health = manager.health.read().await;
+        // Cleanup removes oldest entries when over limit
+        // The exact count depends on when cleanup triggers
+        assert!(all_health.len() <= 10); // Should not have grown unbounded
     }
 }
 

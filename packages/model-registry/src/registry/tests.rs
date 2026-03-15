@@ -6,20 +6,14 @@ mod basic_get_and_cache {
     #[tokio::test]
     async fn test_registry_get() {
         let registry = Registry::new();
-        let model = registry
-            .get("gpt-4o")
-            .await
-            .expect("Model registry operation should succeed during test");
+        let model = registry.get("gpt-4o").await.unwrap();
         assert!(model.is_some());
     }
 
     #[tokio::test]
     async fn test_registry_get_not_found() {
         let registry = Registry::new();
-        let model = registry
-            .get("unknown-model")
-            .await
-            .expect("Model registry operation should succeed during test");
+        let model = registry.get("unknown-model").await.unwrap();
         assert!(model.is_none());
     }
 
@@ -33,7 +27,7 @@ mod basic_get_and_cache {
                 "unknown".to_string(),
             ])
             .await
-            .expect("Model registry operation should succeed during test");
+            .unwrap();
 
         assert_eq!(models.len(), 2);
         assert!(models.contains_key("gpt-4o"));
@@ -46,12 +40,7 @@ mod basic_get_and_cache {
 
         let result = registry.get_multiple(&[]).await;
         assert!(result.is_ok());
-        assert_eq!(
-            result
-                .expect("Model registry operation should succeed during test")
-                .len(),
-            0
-        );
+        assert_eq!(result.unwrap().len(), 0);
     }
 
     #[tokio::test]
@@ -68,7 +57,7 @@ mod basic_get_and_cache {
             .await;
 
         assert!(result.is_ok());
-        let models = result.expect("Model registry operation should succeed during test");
+        let models = result.unwrap();
         // Should only have the valid models
         assert!(models.contains_key("gpt-4o"));
         assert!(models.contains_key("gemini-2.5-flash"));
@@ -132,10 +121,7 @@ mod cache_management {
         let registry = Registry::with_config(config);
 
         // Fetch and cache
-        let model1 = registry
-            .get("gpt-4o")
-            .await
-            .expect("Model registry operation should succeed during test");
+        let model1 = registry.get("gpt-4o").await.unwrap();
         assert!(model1.is_some());
 
         // Should still be cached
@@ -189,7 +175,7 @@ mod cache_management {
 
         // Spawn multiple concurrent readers
         for i in 0..10 {
-            let registry_clone = Arc::clone(&registry);
+            let registry_clone = registry.clone();
             let handle = tokio::spawn(async move {
                 let model_id = if i % 2 == 0 {
                     "gpt-4o"
@@ -203,9 +189,7 @@ mod cache_management {
 
         // All should succeed
         for handle in handles {
-            let result = handle
-                .await
-                .expect("Model registry operation should succeed during test");
+            let result = handle.await.unwrap();
             assert!(result.is_ok());
         }
 
@@ -510,11 +494,9 @@ mod find_best_fit {
         // Populate cache
         let _ = registry.get("gpt-4o").await;
 
-        let best = registry.find_best_fit(100_000).await;
+        let best = registry.find_best_fit(100000).await;
         assert!(best.is_some());
-        assert!(best
-            .expect("Model registry operation should succeed during test")
-            .can_fit_context(100_000));
+        assert!(best.unwrap().can_fit_context(100000));
     }
 
     #[tokio::test]
@@ -569,7 +551,7 @@ mod find_best_fit {
         assert!(best.is_some(), "Should find a model that fits");
 
         // The returned model should fit the context
-        let model = best.expect("Model registry operation should succeed during test");
+        let model = best.unwrap();
         assert!(model.can_fit_context(50000));
     }
 
@@ -582,12 +564,12 @@ mod find_best_fit {
         let _ = registry.get("claude-sonnet-4-20250514").await; // Cheaper
 
         // Both can fit 100K tokens, should prefer the cheaper one
-        let best = registry.find_best_fit(100_000).await;
+        let best = registry.find_best_fit(100000).await;
         assert!(best.is_some());
 
         if let Some(model) = best {
             // Gemini Flash is cheaper
-            assert!(model.can_fit_context(100_000));
+            assert!(model.can_fit_context(100000));
         }
     }
 
@@ -597,11 +579,11 @@ mod find_best_fit {
         let _ = registry.get("gpt-4o").await; // 128K context
 
         // Request exactly at context boundary
-        let best = registry.find_best_fit(128_000).await;
+        let best = registry.find_best_fit(128000).await;
         assert!(best.is_some(), "Should find model at exact boundary");
 
         // Request just over boundary
-        let best = registry.find_best_fit(128_001).await;
+        let best = registry.find_best_fit(128001).await;
         // Depends on whether other models with larger context are available
         // Just verify it doesn't panic
         drop(best);
@@ -673,9 +655,7 @@ mod cost_estimation {
         let costs = registry.estimate_costs(&["gpt-4o".to_string()], 0, 0).await;
 
         assert!(costs.contains_key("gpt-4o"));
-        let cost = costs
-            .get("gpt-4o")
-            .expect("Model registry operation should succeed during test");
+        let cost = costs.get("gpt-4o").unwrap();
         assert!((cost - 0.0).abs() < 0.001, "Zero tokens should cost zero");
     }
 }
@@ -733,7 +713,7 @@ mod refresh_and_config {
         let result = registry.get("").await;
         assert!(result.is_err());
         assert!(result
-            .expect_err("expected error should be present")
+            .unwrap_err()
             .to_string()
             .contains("model ID cannot be empty"));
     }

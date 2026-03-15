@@ -63,11 +63,7 @@ This project enforces production-level code style using `rustfmt` and `clippy`. 
 ### Error Handling
 
 - **Result over Panic**: Prefer returning `Result` and avoid `panic!`.
-- **Avoid unwraps**: `unwrap()` is denied by clippy in ALL code (including tests). Never use bare `.unwrap()`.
-- **Prefer `expect()`**: Use `.expect("context message")` instead of `.unwrap()`. The message explains _why_ the value must be present and what went wrong.
-- **When `unwrap` is truly needed**: Use `#[allow(clippy::unwrap_used)]` with a comment explaining why `unwrap` is preferred over `expect` for that specific case. Valid reasons include:
-  - Test-only code where panic is the desired behavior for brevity and the test name provides sufficient context
-  - Logic where the compiler cannot prove safety, but the condition is guaranteed by invariants (must include a "SAFETY:" comment)
+- **Avoid unwraps**: Do not use `unwrap()` or `expect()` in production code. Handle errors gracefully.
 - **Error Types**: Use `thiserror` for library/crate level errors and reserve `anyhow` strictly for binaries/applications.
 - **Error Bubbling**: Use the `?` operator to bubble errors up.
 

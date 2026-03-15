@@ -22,29 +22,32 @@ pub enum ErrorClass {
 
 impl ErrorClass {
     /// Classify HTTP status code into error class
-    pub const fn from_status_code(status_code: i32) -> Option<Self> {
+    pub fn from_status_code(status_code: i32) -> Option<Self> {
         match status_code {
-            401 | 403 => Some(Self::Auth),
-            429 => Some(Self::RateLimit),
-            500 | 502 | 503 | 504 => Some(Self::ServerError),
-            408 => Some(Self::Timeout),
-            400 | 404 | 413 | 422 => Some(Self::ClientError),
-            _ if status_code >= 400 => Some(Self::Other),
+            401 | 403 => Some(ErrorClass::Auth),
+            429 => Some(ErrorClass::RateLimit),
+            500 | 502 | 503 | 504 => Some(ErrorClass::ServerError),
+            408 => Some(ErrorClass::Timeout),
+            400 | 404 | 413 | 422 => Some(ErrorClass::ClientError),
+            _ if status_code >= 400 => Some(ErrorClass::Other),
             _ => None, // Success status codes
         }
     }
 
     /// Check if error is retryable
-    pub const fn is_retryable(&self) -> bool {
+    pub fn is_retryable(&self) -> bool {
         matches!(
             self,
-            Self::RateLimit | Self::ServerError | Self::Timeout | Self::Network
+            ErrorClass::RateLimit
+                | ErrorClass::ServerError
+                | ErrorClass::Timeout
+                | ErrorClass::Network
         )
     }
 
     /// Check if error indicates credential issues
-    pub const fn is_credential_error(&self) -> bool {
-        matches!(self, Self::Auth)
+    pub fn is_credential_error(&self) -> bool {
+        matches!(self, ErrorClass::Auth)
     }
 }
 
@@ -176,7 +179,7 @@ pub struct OutcomeRecorder {
 
 impl OutcomeRecorder {
     /// Create a new outcome recorder
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             outcomes: Vec::new(),
             max_outcomes: 10_000,
@@ -184,7 +187,7 @@ impl OutcomeRecorder {
     }
 
     /// Create an outcome recorder with a limit
-    pub const fn with_limit(max_outcomes: usize) -> Self {
+    pub fn with_limit(max_outcomes: usize) -> Self {
         Self {
             outcomes: Vec::new(),
             max_outcomes: if max_outcomes > 0 {
@@ -432,7 +435,7 @@ mod tests {
         let mut recorder = OutcomeRecorder::new();
 
         for i in 0..10 {
-            recorder.record_success(format!("route-{i}"), 100.0, 10, 5, 200);
+            recorder.record_success(format!("route-{}", i), 100.0, 10, 5, 200);
         }
 
         let recent = recorder.get_recent_outcomes(5);
@@ -444,7 +447,7 @@ mod tests {
         let mut recorder = OutcomeRecorder::with_limit(5);
 
         for i in 0..10 {
-            recorder.record_success(format!("route-{i}"), 100.0, 10, 5, 200);
+            recorder.record_success(format!("route-{}", i), 100.0, 10, 5, 200);
         }
 
         // Should only keep the last 5

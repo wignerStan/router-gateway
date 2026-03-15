@@ -73,11 +73,7 @@ pub struct RouteExecutor {
 
 impl RouteExecutor {
     /// Create a new route executor
-    pub const fn new(
-        config: ExecutorConfig,
-        metrics: MetricsCollector,
-        health: HealthManager,
-    ) -> Self {
+    pub fn new(config: ExecutorConfig, metrics: MetricsCollector, health: HealthManager) -> Self {
         Self {
             config,
             metrics,
@@ -315,7 +311,7 @@ impl RouteExecutor {
                     AttemptResult::RetryableError {
                         status_code,
                         latency,
-                        error: format!("HTTP {status_code}"),
+                        error: format!("HTTP {}", status_code),
                     }
                 }
             },
@@ -349,17 +345,17 @@ impl RouteExecutor {
     }
 
     /// Get config
-    pub const fn config(&self) -> &ExecutorConfig {
+    pub fn config(&self) -> &ExecutorConfig {
         &self.config
     }
 
     /// Get metrics collector
-    pub const fn metrics(&self) -> &MetricsCollector {
+    pub fn metrics(&self) -> &MetricsCollector {
         &self.metrics
     }
 
     /// Get health manager
-    pub const fn health(&self) -> &HealthManager {
+    pub fn health(&self) -> &HealthManager {
         &self.health
     }
 }
@@ -551,9 +547,9 @@ mod tests {
 
         let result = executor
             .execute(primary, fallbacks, {
-                let cc = std::sync::Arc::clone(&call_count);
+                let cc = call_count.clone();
                 move |_route| {
-                    let cc2 = std::sync::Arc::clone(&cc);
+                    let cc2 = cc.clone();
                     async move {
                         let count = cc2.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         if count == 0 {
@@ -573,8 +569,6 @@ mod tests {
     }
 
     #[tokio::test]
-    // Intentional sentinel: panics if executor reaches this credential (should be skipped)
-    #[allow(clippy::panic)]
     async fn test_loop_guard_provider_diversity() {
         // Scenario: Same provider triggers diversity enforcement
         let config = ExecutorConfig {
@@ -613,8 +607,6 @@ mod tests {
     }
 
     #[tokio::test]
-    // Intentional sentinel: panics if executor retries beyond the success point
-    #[allow(clippy::panic)]
     async fn test_success_within_budget_stops_retrying() {
         // Scenario: Success within budget stops retrying
         let config = ExecutorConfig {

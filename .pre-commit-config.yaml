@@ -89,7 +89,7 @@ repos:
 
       - id: cargo-clippy
         name: cargo clippy (strict)
-        entry: cargo clippy --all-targets --all-features -- -D warnings -A missing_docs
+        entry: cargo clippy --all-targets --all-features -- -D warnings -D clippy::all
         language: system
         types: [rust]
         pass_filenames: false

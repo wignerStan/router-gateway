@@ -96,32 +96,30 @@ impl SessionAffinityManager {
             return Err("Provider cannot be empty".to_string());
         }
 
-        {
-            let mut sessions = self.sessions.write().await;
+        let mut sessions = self.sessions.write().await;
 
-            use std::collections::hash_map::Entry;
-            match sessions.entry(session_id) {
-                Entry::Occupied(mut entry) => {
-                    let affinity = entry.get_mut();
-                    affinity.preferred_provider = provider;
-                    affinity.last_access = Utc::now();
-                    affinity.request_count += 1;
-                },
-                Entry::Vacant(entry) => {
-                    let session_id = entry.key().clone();
-                    entry.insert(SessionAffinity {
-                        session_id,
-                        preferred_provider: provider,
-                        last_access: Utc::now(),
-                        request_count: 1,
-                    });
-                },
-            }
+        use std::collections::hash_map::Entry;
+        match sessions.entry(session_id) {
+            Entry::Occupied(mut entry) => {
+                let affinity = entry.get_mut();
+                affinity.preferred_provider = provider;
+                affinity.last_access = Utc::now();
+                affinity.request_count += 1;
+            },
+            Entry::Vacant(entry) => {
+                let session_id = entry.key().clone();
+                entry.insert(SessionAffinity {
+                    session_id,
+                    preferred_provider: provider,
+                    last_access: Utc::now(),
+                    request_count: 1,
+                });
+            },
+        }
 
-            // Cleanup if over limit
-            if sessions.len() > self.max_sessions {
-                self.cleanup_expired(&mut sessions);
-            }
+        // Cleanup if over limit
+        if sessions.len() > self.max_sessions {
+            self.cleanup_expired(&mut sessions);
         }
 
         Ok(())
@@ -263,7 +261,7 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Operation should succeed during test");
+            .unwrap();
 
         // Get preferred provider
         let provider = manager.get_preferred_provider("session-1").await;
@@ -287,22 +285,17 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Operation should succeed during test");
+            .unwrap();
 
         // Update with same provider
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Operation should succeed during test");
+            .unwrap();
 
         let affinity = manager.get_affinity("session-1").await;
         assert!(affinity.is_some());
-        assert_eq!(
-            affinity
-                .expect("Operation should succeed during test")
-                .preferred_provider,
-            "provider-a"
-        );
+        assert_eq!(affinity.unwrap().preferred_provider, "provider-a");
     }
 
     #[tokio::test]
@@ -313,13 +306,13 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Operation should succeed during test");
+            .unwrap();
 
         // Update to different provider
         manager
             .set_provider("session-1".to_string(), "provider-b".to_string())
             .await
-            .expect("Operation should succeed during test");
+            .unwrap();
 
         let provider = manager.get_preferred_provider("session-1").await;
         assert_eq!(provider, Some("provider-b".to_string()));
@@ -337,26 +330,16 @@ mod tests {
             manager
                 .set_provider(session_id.to_string(), provider.to_string())
                 .await
-                .expect("Operation should succeed during test");
+                .unwrap();
 
             let affinity = manager.get_affinity(session_id).await;
             assert!(affinity.is_some());
-            assert_eq!(
-                affinity
-                    .expect("Operation should succeed during test")
-                    .request_count,
-                (i + 1) as u64
-            );
+            assert_eq!(affinity.unwrap().request_count, (i + 1) as u64);
         }
 
         // Final check
         let final_affinity = manager.get_affinity(session_id).await;
-        assert_eq!(
-            final_affinity
-                .expect("Operation should succeed during test")
-                .request_count,
-            5
-        );
+        assert_eq!(final_affinity.unwrap().request_count, 5);
     }
 
     #[tokio::test]
@@ -367,7 +350,7 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Operation should succeed during test");
+            .unwrap();
 
         // Remove session
         assert!(manager.remove_session("session-1").await);
@@ -384,9 +367,9 @@ mod tests {
         // Add multiple sessions
         for i in 0..5 {
             manager
-                .set_provider(format!("session-{i}"), "provider-a".to_string())
+                .set_provider(format!("session-{}", i), "provider-a".to_string())
                 .await
-                .expect("Operation should succeed during test");
+                .unwrap();
         }
 
         assert_eq!(manager.session_count().await, 5);
@@ -437,11 +420,11 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Operation should succeed during test");
+            .unwrap();
         manager
             .set_provider("session-2".to_string(), "provider-b".to_string())
             .await
-            .expect("Operation should succeed during test");
+            .unwrap();
 
         let sessions = manager.list_sessions().await;
         assert_eq!(sessions.len(), 2);
@@ -456,15 +439,15 @@ mod tests {
         // Add sessions with multiple providers
         for i in 0..3 {
             manager
-                .set_provider(format!("session-{i}"), "provider-a".to_string())
+                .set_provider(format!("session-{}", i), "provider-a".to_string())
                 .await
-                .expect("Operation should succeed during test");
+                .unwrap();
         }
         for i in 3..5 {
             manager
-                .set_provider(format!("session-{i}"), "provider-b".to_string())
+                .set_provider(format!("session-{}", i), "provider-b".to_string())
                 .await
-                .expect("Operation should succeed during test");
+                .unwrap();
         }
 
         let stats = manager.get_stats().await;
@@ -482,7 +465,7 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Operation should succeed during test");
+            .unwrap();
 
         // Wait for TTL to expire
         tokio::time::sleep(tokio::time::Duration::from_millis(1100)).await;
@@ -501,9 +484,9 @@ mod tests {
         // Add more sessions than limit
         for i in 0..5 {
             manager
-                .set_provider(format!("session-{i}"), "provider-a".to_string())
+                .set_provider(format!("session-{}", i), "provider-a".to_string())
                 .await
-                .expect("Operation should succeed during test");
+                .unwrap();
 
             // Small delay to ensure different timestamps
             tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
@@ -521,7 +504,7 @@ mod tests {
         manager1
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Operation should succeed during test");
+            .unwrap();
 
         let manager2 = manager1.clone();
 
@@ -538,29 +521,19 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Operation should succeed during test");
+            .unwrap();
 
         let affinity = manager.get_affinity("session-1").await;
-        assert_eq!(
-            affinity
-                .expect("Operation should succeed during test")
-                .request_count,
-            1
-        );
+        assert_eq!(affinity.unwrap().request_count, 1);
 
         // Second request
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Operation should succeed during test");
+            .unwrap();
 
         let affinity = manager.get_affinity("session-1").await;
-        assert_eq!(
-            affinity
-                .expect("Operation should succeed during test")
-                .request_count,
-            2
-        );
+        assert_eq!(affinity.unwrap().request_count, 2);
     }
 
     #[tokio::test]
@@ -570,11 +543,11 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Operation should succeed during test");
+            .unwrap();
 
         let affinity = manager.get_affinity("session-1").await;
         assert!(affinity.is_some());
-        let details = affinity.expect("Operation should succeed during test");
+        let details = affinity.unwrap();
         assert_eq!(details.session_id, "session-1");
         assert_eq!(details.preferred_provider, "provider-a");
         assert_eq!(details.request_count, 1);
@@ -589,24 +562,24 @@ mod tests {
         manager
             .set_provider("session-1".to_string(), "provider-a".to_string())
             .await
-            .expect("Operation should succeed during test");
+            .unwrap();
         manager
             .set_provider("session-2".to_string(), "provider-a".to_string())
             .await
-            .expect("Operation should succeed during test");
+            .unwrap();
         manager
             .set_provider("session-3".to_string(), "provider-a".to_string())
             .await
-            .expect("Operation should succeed during test");
+            .unwrap();
 
         manager
             .set_provider("session-4".to_string(), "provider-b".to_string())
             .await
-            .expect("Operation should succeed during test");
+            .unwrap();
         manager
             .set_provider("session-5".to_string(), "provider-b".to_string())
             .await
-            .expect("Operation should succeed during test");
+            .unwrap();
 
         let stats = manager.get_stats().await;
         assert_eq!(stats.providers_distribution.get("provider-a"), Some(&3));

@@ -126,7 +126,7 @@ mod tests {
         // Add 5 traces
         for i in 1..=5 {
             let trace = TraceSpan::new(
-                format!("req-{i}"),
+                format!("req-{}", i),
                 "openai".to_string(),
                 "gpt-4".to_string(),
                 None,
@@ -168,10 +168,10 @@ mod tests {
 
         // Spawn 10 concurrent tasks recording traces
         for i in 0..10 {
-            let collector = Arc::clone(&collector);
+            let collector = collector.clone();
             let handle = tokio::spawn(async move {
                 let trace = TraceSpan::new(
-                    format!("req-{i}"),
+                    format!("req-{}", i),
                     "openai".to_string(),
                     "gpt-4".to_string(),
                     None,
@@ -183,9 +183,7 @@ mod tests {
 
         // Wait for all tasks
         for handle in handles {
-            handle
-                .await
-                .expect("Tracing operation should succeed during test");
+            handle.await.unwrap();
         }
 
         assert_eq!(collector.trace_count().await, 10);
@@ -217,7 +215,7 @@ mod tests {
 
         for i in 0..100 {
             let trace = TraceSpan::new(
-                format!("req-{i}"),
+                format!("req-{}", i),
                 "openai".to_string(),
                 "gpt-4".to_string(),
                 None,
@@ -260,14 +258,14 @@ mod tests {
 
         // Spawn 100 concurrent tasks, each recording 10 traces
         for task_id in 0..100 {
-            let collector = Arc::clone(&collector);
+            let collector = collector.clone();
             let handle = tokio::spawn(async move {
                 for i in 0..10 {
                     let trace = TraceSpan::new(
-                        format!("task-{task_id}-req-{i}"),
+                        format!("task-{}-req-{}", task_id, i),
                         "openai".to_string(),
                         "gpt-4".to_string(),
-                        Some(format!("user-{task_id}")),
+                        Some(format!("user-{}", task_id)),
                     );
                     collector.record_trace(trace).await;
                 }
@@ -277,9 +275,7 @@ mod tests {
 
         // Wait for all tasks
         for handle in handles {
-            handle
-                .await
-                .expect("Tracing operation should succeed during test");
+            handle.await.unwrap();
         }
 
         // Should have 1000 traces (or capped at max_size)
@@ -293,7 +289,7 @@ mod tests {
         // Add 10 traces to a buffer of size 5
         for i in 0..10 {
             let trace = TraceSpan::new(
-                format!("req-{i}"),
+                format!("req-{}", i),
                 "openai".to_string(),
                 "gpt-4".to_string(),
                 None,
