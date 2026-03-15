@@ -66,7 +66,7 @@ fn is_private_ip(ip: &IpAddr) -> bool {
         IpAddr::V6(v6) => {
             // IPv4-mapped IPv6 (::ffff:x.x.x.x) — e.g. ::ffff:127.0.0.1 bypasses
             // pure-IPv4 checks, so we unwrap the embedded IPv4 address and re-check.
-            if let Some(mapped) = is_ipv4_mapped(v6) {
+            if let Some(mapped) = v6.to_ipv4_mapped() {
                 return is_private_ip(&IpAddr::V4(mapped));
             }
 
@@ -91,25 +91,10 @@ fn is_private_ip(ip: &IpAddr) -> bool {
     }
 }
 
-/// Extract the embedded IPv4 address from an IPv4-mapped IPv6 address
-/// (`::ffff:x.x.x.x`).
-fn is_ipv4_mapped(v6: &std::net::Ipv6Addr) -> Option<std::net::Ipv4Addr> {
-    let segments = v6.segments();
-    if segments[0..6] == [0, 0, 0, 0, 0, 0xffff] {
-        Some(std::net::Ipv4Addr::new(
-            (segments[6] >> 8) as u8,
-            segments[6] as u8,
-            (segments[7] >> 8) as u8,
-            segments[7] as u8,
-        ))
-    } else {
-        None
-    }
-}
-
 /// Extract the embedded IPv4 address from an IPv4-compatible IPv6 address
 /// (`::x.x.x.x`).
-/// Only extracts when the low 32 bits are non-zero (i.e., not the unspecified address ::).
+///
+/// Only extracts when the low 32 bits are non-zero (i.e., not the unspecified address `::`).
 fn ipv6_to_v4_compat(v6: &std::net::Ipv6Addr) -> Option<std::net::Ipv4Addr> {
     let segments = v6.segments();
     if segments[0..6] == [0, 0, 0, 0, 0, 0] && (segments[6] != 0 || segments[7] != 0) {
