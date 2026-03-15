@@ -325,4 +325,66 @@ mod tests {
         assert_eq!(collector1.trace_count().await, 1);
         assert_eq!(collector2.trace_count().await, 1);
     }
+
+    #[tokio::test]
+    async fn test_memory_collector_with_default_size() {
+        let collector = MemoryTraceCollector::with_default_size();
+        assert_eq!(collector.max_size, 1000);
+    }
+
+    #[tokio::test]
+    async fn test_memory_collector_get_empty() {
+        let collector = MemoryTraceCollector::new(10);
+        assert_eq!(collector.trace_count().await, 0);
+        let traces = collector.get_traces().await;
+        assert!(traces.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_memory_collector_exact_capacity() {
+        const CAPACITY: usize = 2;
+        let collector = MemoryTraceCollector::new(CAPACITY);
+
+        for i in 1..=CAPACITY {
+            collector
+                .record_trace(TraceSpan::new(
+                    format!("req-{i}"),
+                    "openai".to_string(),
+                    "gpt-4".to_string(),
+                    None,
+                ))
+                .await;
+        }
+
+        assert_eq!(collector.trace_count().await, CAPACITY);
+        let traces = collector.get_traces().await;
+        assert_eq!(traces.len(), CAPACITY);
+        for (i, trace) in traces.iter().enumerate() {
+            assert_eq!(trace.request_id, format!("req-{}", i + 1));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_memory_collector_exceed_capacity() {
+        const CAPACITY: usize = 2;
+        let collector = MemoryTraceCollector::new(CAPACITY);
+
+        for i in 1..=(CAPACITY + 1) {
+            collector
+                .record_trace(TraceSpan::new(
+                    format!("req-{i}"),
+                    "openai".to_string(),
+                    "gpt-4".to_string(),
+                    None,
+                ))
+                .await;
+        }
+
+        assert_eq!(collector.trace_count().await, CAPACITY);
+        let traces = collector.get_traces().await;
+        assert_eq!(traces.len(), CAPACITY);
+        for (i, trace) in traces.iter().enumerate() {
+            assert_eq!(trace.request_id, format!("req-{}", i + 2));
+        }
+    }
 }
