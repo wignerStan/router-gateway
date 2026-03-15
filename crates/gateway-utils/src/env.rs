@@ -1,6 +1,7 @@
 /// Expand environment variable references in a string.
-/// Supports `${VAR_NAME}`, `${VAR_NAME:-default}`, and embedded references
-/// e.g., "Bearer ${AUTH_KEY}" or "${HOST:-localhost}:${PORT}"
+///
+/// Supports `${VAR_NAME}`, `${VAR_NAME:-default}`, and embedded references,
+/// e.g., `"Bearer ${AUTH_KEY}"` or `"${HOST:-localhost}:${PORT}"`.
 pub fn expand_env_var(value: &str) -> String {
     let mut result = String::with_capacity(value.len());
     let mut rest = value;
