@@ -1,5 +1,10 @@
 //! SQLite store read/write operations.
 
+// ALLOW: Mutex/RwLock poisoning is an acceptable panic — propagates failure for
+// inconsistent shared state. All `.expect()` calls below are on cache locks that
+// poison when a holder panics, indicating data corruption.
+#![allow(clippy::expect_used)]
+
 use super::super::error::{Result, SqliteError};
 use super::{CacheEntry, SQLiteStore};
 use crate::health::{AuthHealth, HealthStatus};

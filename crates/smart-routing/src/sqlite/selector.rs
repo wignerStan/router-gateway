@@ -214,6 +214,8 @@ impl SQLiteSelector {
     }
 
     /// Select auth by weighted random choice
+    // ALLOW: Each expect is guarded by a prior length/index check that guarantees the element exists.
+    #[allow(clippy::expect_used)]
     fn select_by_weight(&self, available: Vec<WeightedAuth>) -> String {
         if available.len() == 1 {
             return available
