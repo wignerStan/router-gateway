@@ -406,8 +406,8 @@ async fn main() -> Result<()> {
 /// Validates the content of a gateway configuration file
 fn validate_config_content(
     content: &str,
-) -> Result<(GatewayConfigYaml, Vec<String>, Vec<String>), serde_yaml::Error> {
-    let config_value: GatewayConfigYaml = serde_yaml::from_str(content)?;
+) -> Result<(GatewayConfigYaml, Vec<String>, Vec<String>), serde_yaml_ng::Error> {
+    let config_value: GatewayConfigYaml = serde_yaml_ng::from_str(content)?;
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
 

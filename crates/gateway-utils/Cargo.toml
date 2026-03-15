@@ -1,0 +1,10 @@
+[package]
+name = "gateway-utils"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+subtle = "2.6"
+url = "2.5"
+thiserror = "1.0"
