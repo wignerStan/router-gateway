@@ -300,8 +300,7 @@ mod sqlite_tests {
                 .load_metrics("test-auth-flush")
                 .await
                 .expect("Operation should succeed during test");
-            assert!(db_metrics.is_some(), "Metrics should be in DB after flush");
-            let db_metrics = db_metrics.expect("Metrics should exist after flush");
+            let db_metrics = db_metrics.expect("Metrics should be in DB after flush");
             assert_eq!(db_metrics.total_requests, 1);
             assert_eq!(db_metrics.success_count, 1);
 
@@ -319,13 +318,8 @@ mod sqlite_tests {
                 .expect("Load from DB should succeed during test");
 
             let loaded_metrics = new_collector.get_metrics("test-auth-flush").await;
-            assert!(loaded_metrics.is_some(), "Should have loaded metrics");
-            assert_eq!(
-                loaded_metrics
-                    .expect("Loaded metrics should exist")
-                    .total_requests,
-                1
-            );
+            let loaded_metrics = loaded_metrics.expect("Should have loaded metrics");
+            assert_eq!(loaded_metrics.total_requests, 1);
         }
 
         #[tokio::test]
@@ -395,8 +389,7 @@ mod sqlite_tests {
                 .load_health("test-auth-health-flush")
                 .await
                 .expect("Operation should succeed during test");
-            assert!(db_health.is_some(), "Health should be in DB after flush");
-            let db_health = db_health.expect("Health should exist after flush");
+            let db_health = db_health.expect("Health should be in DB after flush");
             assert_eq!(db_health.status, HealthStatus::Healthy);
 
             // Create a new manager and load from DB
@@ -413,11 +406,8 @@ mod sqlite_tests {
                 .expect("Load from DB should succeed during test");
 
             let loaded_health = new_manager.get_health("test-auth-health-flush").await;
-            assert!(loaded_health.is_some(), "Should have loaded health");
-            assert_eq!(
-                loaded_health.expect("Loaded health should exist").status,
-                HealthStatus::Healthy
-            );
+            let loaded_health = loaded_health.expect("Should have loaded health");
+            assert_eq!(loaded_health.status, HealthStatus::Healthy);
         }
     }
 
