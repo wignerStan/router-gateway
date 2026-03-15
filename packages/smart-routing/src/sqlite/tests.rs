@@ -254,7 +254,6 @@ mod sqlite_tests {
             assert_eq!(metrics.failure_count, 1);
         }
 
-
         #[tokio::test]
         async fn test_metrics_collector_flush() {
             let config = SQLiteConfig {

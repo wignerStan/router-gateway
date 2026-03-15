@@ -216,7 +216,11 @@ impl SQLiteSelector {
     /// Select auth by weighted random choice
     fn select_by_weight(&self, available: Vec<WeightedAuth>) -> String {
         if available.len() == 1 {
-            return available.into_iter().next().expect("unwrapping valid test data").id;
+            return available
+                .into_iter()
+                .next()
+                .expect("unwrapping valid test data")
+                .id;
         }
 
         // Calculate total weight
@@ -225,11 +229,18 @@ impl SQLiteSelector {
         if total_weight <= 0.0 {
             // All weights are zero, select randomly
             let idx = rand::thread_rng().gen_range(0..available.len());
-            return available.into_iter().nth(idx).expect("unwrapping valid test data").id;
+            return available
+                .into_iter()
+                .nth(idx)
+                .expect("unwrapping valid test data")
+                .id;
         }
 
         // Save last element as fallback for floating-point edge cases
-        let fallback = available.last().map(|a| a.id.clone()).expect("unwrapping valid test data");
+        let fallback = available
+            .last()
+            .map(|a| a.id.clone())
+            .expect("unwrapping valid test data");
 
         // Weighted random selection
         let r = rand::thread_rng().gen::<f64>() * total_weight;
@@ -255,79 +266,84 @@ impl SQLiteSelector {
         let json_array = serde_json::to_string(&auth_ids)
             .map_err(|e| SqliteError::Serialization(e.to_string()))?;
 
-        // Get database connection
-        let db = self.store.get_db().await;
-        let db = db.lock().await;
+        // Query existing metrics and health, then release the lock
+        // before calling update_weights (which acquires its own lock).
+        let weights = {
+            let db = self.store.get_db().await;
+            let db = db.lock().await;
 
-        // Execute SQL query
-        let query = r#"
-            SELECT
-                ids.auth_id,
-                COALESCE(m.success_rate, 1.0),
-                COALESCE(m.avg_latency_ms, 0),
-                CASE
-                    WHEN h.status = 'Healthy' THEN 1.0
-                    WHEN h.status = 'Degraded' THEN 0.5
-                    ELSE 0.01
-                END,
-                CASE
-                    WHEN h.unavailable_until IS NOT NULL AND datetime(h.unavailable_until) > datetime('now') THEN 0
-                    ELSE 1
-                END
-            FROM (SELECT value as auth_id FROM json_each(?1)) as ids
-            LEFT JOIN auth_metrics m ON m.auth_id = ids.auth_id
-            LEFT JOIN auth_health h ON h.auth_id = ids.auth_id
-        "#;
+            let query = r#"
+                SELECT
+                    ids.auth_id,
+                    COALESCE(m.success_rate, 1.0),
+                    COALESCE(m.avg_latency_ms, 0),
+                    CASE
+                        WHEN h.status = 'Healthy' THEN 1.0
+                        WHEN h.status = 'Degraded' THEN 0.5
+                        ELSE 0.01
+                    END,
+                    CASE
+                        WHEN h.unavailable_until IS NOT NULL AND datetime(h.unavailable_until) > datetime('now') THEN 0
+                        ELSE 1
+                    END
+                FROM (SELECT value as auth_id FROM json_each(?1)) as ids
+                LEFT JOIN auth_metrics m ON m.auth_id = ids.auth_id
+                LEFT JOIN auth_health h ON h.auth_id = ids.auth_id
+            "#;
 
-        let mut stmt = db
-            .prepare(query)
-            .map_err(|e| SqliteError::query("prepare_weight_query", e))?;
+            let mut stmt = db
+                .prepare(query)
+                .map_err(|e| SqliteError::query("prepare_weight_query", e))?;
 
-        let mut rows = stmt
-            .query([&json_array])
-            .map_err(|e| SqliteError::query("query_weights", e))?;
+            let mut rows = stmt
+                .query([&json_array])
+                .map_err(|e| SqliteError::query("query_weights", e))?;
 
-        let mut weights = HashMap::new();
+            let mut weights = HashMap::new();
 
-        while let Some(row) = rows
-            .next()
-            .map_err(|e| SqliteError::query("read_weight_row", e))?
-        {
-            let auth_id: String = row
-                .get(0)
-                .map_err(|e| SqliteError::query("get_weight_auth_id", e))?;
-            let success_rate: f64 = row
-                .get(1)
-                .map_err(|e| SqliteError::query("get_weight_success_rate", e))?;
-            let latency: f64 = row
-                .get(2)
-                .map_err(|e| SqliteError::query("get_weight_latency", e))?;
-            let health_factor: f64 = row
-                .get(3)
-                .map_err(|e| SqliteError::query("get_weight_health_factor", e))?;
-            let available: i32 = row
-                .get(4)
-                .map_err(|e| SqliteError::query("get_weight_available", e))?;
+            while let Some(row) = rows
+                .next()
+                .map_err(|e| SqliteError::query("read_weight_row", e))?
+            {
+                let auth_id: String = row
+                    .get(0)
+                    .map_err(|e| SqliteError::query("get_weight_auth_id", e))?;
+                let success_rate: f64 = row
+                    .get(1)
+                    .map_err(|e| SqliteError::query("get_weight_success_rate", e))?;
+                let latency: f64 = row
+                    .get(2)
+                    .map_err(|e| SqliteError::query("get_weight_latency", e))?;
+                let health_factor: f64 = row
+                    .get(3)
+                    .map_err(|e| SqliteError::query("get_weight_health_factor", e))?;
+                let available: i32 = row
+                    .get(4)
+                    .map_err(|e| SqliteError::query("get_weight_available", e))?;
 
-            if available == 0 {
-                weights.insert(auth_id.clone(), 0.0);
-                continue;
+                if available == 0 {
+                    weights.insert(auth_id.clone(), 0.0);
+                    continue;
+                }
+
+                // Create dummy auth info for weight calculation
+                let auth = AuthInfo {
+                    id: auth_id.clone(),
+                    priority: None,
+                    quota_exceeded: false,
+                    unavailable: false,
+                    model_states: Vec::new(),
+                };
+
+                let weight = self.calculate_weight(success_rate, latency, health_factor, &auth);
+                weights.insert(auth_id, weight);
             }
 
-            // Create dummy auth info for weight calculation
-            let auth = AuthInfo {
-                id: auth_id.clone(),
-                priority: None,
-                quota_exceeded: false,
-                unavailable: false,
-                model_states: Vec::new(),
-            };
+            // Lock is released here when `db` goes out of scope
+            weights
+        };
 
-            let weight = self.calculate_weight(success_rate, latency, health_factor, &auth);
-            weights.insert(auth_id, weight);
-        }
-
-        // Update weights table
+        // Update weights table (acquires its own lock)
         self.update_weights(weights).await?;
 
         Ok(())
@@ -425,7 +441,9 @@ mod tests {
     #[tokio::test]
     async fn test_sqlite_selector_pick() {
         let config = SQLiteConfig::default();
-        let store = SQLiteStore::new(config).await.expect("unwrapping valid test data");
+        let store = SQLiteStore::new(config)
+            .await
+            .expect("unwrapping valid test data");
 
         let config = SmartRoutingConfig::default();
         let selector = SQLiteSelector::new(store, config);
@@ -455,7 +473,9 @@ mod tests {
     #[tokio::test]
     async fn test_precompute_weights() {
         let config = SQLiteConfig::default();
-        let store = SQLiteStore::new(config).await.expect("unwrapping valid test data");
+        let store = SQLiteStore::new(config)
+            .await
+            .expect("unwrapping valid test data");
 
         let config = SmartRoutingConfig::default();
         let selector = SQLiteSelector::new(store, config);
@@ -481,7 +501,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_stats() {
         let config = SQLiteConfig::default();
-        let store = SQLiteStore::new(config).await.expect("unwrapping valid test data");
+        let store = SQLiteStore::new(config)
+            .await
+            .expect("unwrapping valid test data");
 
         let config = SmartRoutingConfig::default();
         let selector = SQLiteSelector::new(store, config);
@@ -491,14 +513,16 @@ mod tests {
         assert_eq!(stats.cache_hits, 0);
         assert_eq!(stats.db_queries, 0);
     }
-    use crate::metrics::AuthMetrics;
     use crate::health::{AuthHealth, HealthStatus};
+    use crate::metrics::AuthMetrics;
     use chrono::Utc;
 
     #[tokio::test]
     async fn test_precompute_and_get_top_auths() {
         let config = SQLiteConfig::default();
-        let store = SQLiteStore::new(config).await.expect("unwrapping valid test data");
+        let store = SQLiteStore::new(config)
+            .await
+            .expect("unwrapping valid test data");
         let config = SmartRoutingConfig::default();
         let selector = SQLiteSelector::new(store.clone(), config);
 
@@ -518,7 +542,10 @@ mod tests {
             last_success_time: Some(Utc::now()),
             last_failure_time: None,
         };
-        store.write_metrics("auth1", &metrics1).await.expect("unwrapping valid test data");
+        store
+            .write_metrics("auth1", &metrics1)
+            .await
+            .expect("unwrapping valid test data");
 
         let health1 = AuthHealth {
             status: HealthStatus::Healthy,
@@ -529,7 +556,10 @@ mod tests {
             unavailable_until: None,
             error_counts: std::collections::HashMap::new(),
         };
-        store.write_health("auth1", &health1).await.expect("unwrapping valid test data");
+        store
+            .write_health("auth1", &health1)
+            .await
+            .expect("unwrapping valid test data");
 
         // Add health and metrics for auth2 (Degraded, bad metrics)
         let metrics2 = AuthMetrics {
@@ -547,7 +577,10 @@ mod tests {
             last_success_time: Some(Utc::now()),
             last_failure_time: Some(Utc::now()),
         };
-        store.write_metrics("auth2", &metrics2).await.expect("unwrapping valid test data");
+        store
+            .write_metrics("auth2", &metrics2)
+            .await
+            .expect("unwrapping valid test data");
 
         let health2 = AuthHealth {
             status: HealthStatus::Degraded,
@@ -558,14 +591,23 @@ mod tests {
             unavailable_until: None,
             error_counts: std::collections::HashMap::new(),
         };
-        store.write_health("auth2", &health2).await.expect("unwrapping valid test data");
+        store
+            .write_health("auth2", &health2)
+            .await
+            .expect("unwrapping valid test data");
 
         // Precompute weights
         let auth_ids = vec!["auth1".to_string(), "auth2".to_string()];
-        selector.precompute_weights(auth_ids).await.expect("unwrapping valid test data");
+        selector
+            .precompute_weights(auth_ids)
+            .await
+            .expect("unwrapping valid test data");
 
         // Get top auths
-        let top_auths = selector.get_top_auths(2).await.expect("unwrapping valid test data");
+        let top_auths = selector
+            .get_top_auths(2)
+            .await
+            .expect("unwrapping valid test data");
 
         assert_eq!(top_auths.len(), 2);
         // auth1 should have a higher weight because of better metrics and health
@@ -576,16 +618,28 @@ mod tests {
     #[tokio::test]
     async fn test_get_top_auths_limit() {
         let config = SQLiteConfig::default();
-        let store = SQLiteStore::new(config).await.expect("unwrapping valid test data");
+        let store = SQLiteStore::new(config)
+            .await
+            .expect("unwrapping valid test data");
         let config = SmartRoutingConfig::default();
         let selector = SQLiteSelector::new(store.clone(), config);
 
         // Precompute weights
-        let auth_ids = vec!["auth1".to_string(), "auth2".to_string(), "auth3".to_string()];
-        selector.precompute_weights(auth_ids).await.expect("unwrapping valid test data");
+        let auth_ids = vec![
+            "auth1".to_string(),
+            "auth2".to_string(),
+            "auth3".to_string(),
+        ];
+        selector
+            .precompute_weights(auth_ids)
+            .await
+            .expect("unwrapping valid test data");
 
         // Get top auths with limit 2
-        let top_auths = selector.get_top_auths(2).await.expect("unwrapping valid test data");
+        let top_auths = selector
+            .get_top_auths(2)
+            .await
+            .expect("unwrapping valid test data");
 
         assert_eq!(top_auths.len(), 2);
     }

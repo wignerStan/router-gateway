@@ -590,7 +590,12 @@ mod integration_tests {
         let app = Router::new().route("/", get(root));
 
         let response = app
-            .oneshot(Request::builder().uri("/").body(Body::empty()).expect("time went backwards"))
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .body(Body::empty())
+                    .expect("time went backwards"),
+            )
             .await
             .expect("time went backwards");
 
@@ -696,14 +701,24 @@ mod integration_tests {
 
         let headers = response.headers();
 
-        assert_eq!(headers.get("X-Content-Type-Options").expect("time went backwards"), "nosniff");
-        assert_eq!(headers.get("X-Frame-Options").expect("time went backwards"), "DENY");
+        assert_eq!(
+            headers
+                .get("X-Content-Type-Options")
+                .expect("time went backwards"),
+            "nosniff"
+        );
+        assert_eq!(
+            headers.get("X-Frame-Options").expect("time went backwards"),
+            "DENY"
+        );
         assert_eq!(
             headers.get("Referrer-Policy").expect("time went backwards"),
             "strict-origin-when-cross-origin"
         );
         assert_eq!(
-            headers.get("Content-Security-Policy").expect("time went backwards"),
+            headers
+                .get("Content-Security-Policy")
+                .expect("time went backwards"),
             "default-src 'none'; frame-ancestors 'none'"
         );
     }
@@ -731,7 +746,11 @@ mod integration_tests {
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
-            let response = app.clone().oneshot(request).await.expect("time went backwards");
+            let response = app
+                .clone()
+                .oneshot(request)
+                .await
+                .expect("time went backwards");
             assert_eq!(response.status(), StatusCode::OK);
         }
 
@@ -830,7 +849,10 @@ mod integration_tests {
             let app = build_full_app(state);
             let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-            let mut request = Request::builder().uri("/").body(Body::empty()).expect("time went backwards");
+            let mut request = Request::builder()
+                .uri("/")
+                .body(Body::empty())
+                .expect("time went backwards");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
@@ -964,11 +986,18 @@ mod integration_tests {
             let app = build_full_app(state);
             let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-            let mut request = Request::builder().uri("/").body(Body::empty()).expect("time went backwards");
+            let mut request = Request::builder()
+                .uri("/")
+                .body(Body::empty())
+                .expect("time went backwards");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
-            let response = app.clone().oneshot(request).await.expect("time went backwards");
+            let response = app
+                .clone()
+                .oneshot(request)
+                .await
+                .expect("time went backwards");
             assert_eq!(response.status(), StatusCode::OK);
 
             let mut request = Request::builder()
@@ -1146,7 +1175,11 @@ mod integration_tests {
                 request
                     .extensions_mut()
                     .insert(axum::extract::ConnectInfo(test_addr));
-                let response = app.clone().oneshot(request).await.expect("time went backwards");
+                let response = app
+                    .clone()
+                    .oneshot(request)
+                    .await
+                    .expect("time went backwards");
                 assert_eq!(response.status(), StatusCode::OK);
             }
         }
@@ -1205,7 +1238,11 @@ mod integration_tests {
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(addr_a));
-            let response = app.clone().oneshot(request).await.expect("time went backwards");
+            let response = app
+                .clone()
+                .oneshot(request)
+                .await
+                .expect("time went backwards");
             assert_eq!(response.status(), StatusCode::OK);
 
             let mut request = Request::builder()
@@ -1215,7 +1252,11 @@ mod integration_tests {
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(addr_a));
-            let response = app.clone().oneshot(request).await.expect("time went backwards");
+            let response = app
+                .clone()
+                .oneshot(request)
+                .await
+                .expect("time went backwards");
             assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 
             let mut request = Request::builder()
@@ -1277,10 +1318,17 @@ mod integration_tests {
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
-            let response = app.clone().oneshot(request).await.expect("time went backwards");
+            let response = app
+                .clone()
+                .oneshot(request)
+                .await
+                .expect("time went backwards");
             assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 
-            let mut request = Request::builder().uri("/").body(Body::empty()).expect("time went backwards");
+            let mut request = Request::builder()
+                .uri("/")
+                .body(Body::empty())
+                .expect("time went backwards");
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
@@ -1388,7 +1436,10 @@ mod integration_tests {
             let value = read_json_body::<serde_json::Value>(response).await;
 
             assert!(value["models"].is_array());
-            assert!(!value["models"].as_array().expect("time went backwards").is_empty());
+            assert!(!value["models"]
+                .as_array()
+                .expect("time went backwards")
+                .is_empty());
             assert_eq!(value["count"], 1);
         }
     }
@@ -1444,7 +1495,10 @@ mod integration_tests {
             let app = build_full_app(state);
             let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-            let response = app.oneshot(make_chat_request(test_addr)).await.expect("time went backwards");
+            let response = app
+                .oneshot(make_chat_request(test_addr))
+                .await
+                .expect("time went backwards");
             assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -1464,7 +1518,10 @@ mod integration_tests {
             let app = build_full_app(state);
             let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-            let response = app.oneshot(make_chat_request(test_addr)).await.expect("time went backwards");
+            let response = app
+                .oneshot(make_chat_request(test_addr))
+                .await
+                .expect("time went backwards");
             assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -1488,7 +1545,10 @@ mod integration_tests {
             let app = build_full_app(state);
             let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-            let response = app.oneshot(make_chat_request(test_addr)).await.expect("time went backwards");
+            let response = app
+                .oneshot(make_chat_request(test_addr))
+                .await
+                .expect("time went backwards");
             assert_eq!(response.status(), StatusCode::OK);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -1524,7 +1584,10 @@ mod integration_tests {
             let app = build_full_app(state);
             let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-            let response = app.oneshot(make_chat_request(test_addr)).await.expect("time went backwards");
+            let response = app
+                .oneshot(make_chat_request(test_addr))
+                .await
+                .expect("time went backwards");
             assert_eq!(response.status(), StatusCode::OK);
 
             let value = read_json_body::<serde_json::Value>(response).await;
@@ -1545,14 +1608,24 @@ mod integration_tests {
         use tower::ServiceExt;
 
         fn check_security_headers(headers: &axum::http::HeaderMap) {
-            assert_eq!(headers.get("X-Content-Type-Options").expect("time went backwards"), "nosniff");
-            assert_eq!(headers.get("X-Frame-Options").expect("time went backwards"), "DENY");
+            assert_eq!(
+                headers
+                    .get("X-Content-Type-Options")
+                    .expect("time went backwards"),
+                "nosniff"
+            );
+            assert_eq!(
+                headers.get("X-Frame-Options").expect("time went backwards"),
+                "DENY"
+            );
             assert_eq!(
                 headers.get("Referrer-Policy").expect("time went backwards"),
                 "strict-origin-when-cross-origin"
             );
             assert_eq!(
-                headers.get("Content-Security-Policy").expect("time went backwards"),
+                headers
+                    .get("Content-Security-Policy")
+                    .expect("time went backwards"),
                 "default-src 'none'; frame-ancestors 'none'"
             );
         }
@@ -1570,7 +1643,11 @@ mod integration_tests {
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
-            let response = app.clone().oneshot(request).await.expect("time went backwards");
+            let response = app
+                .clone()
+                .oneshot(request)
+                .await
+                .expect("time went backwards");
             check_security_headers(response.headers());
 
             let mut request = Request::builder()
@@ -1640,7 +1717,11 @@ mod integration_tests {
             request
                 .extensions_mut()
                 .insert(axum::extract::ConnectInfo(test_addr));
-            let response = app.clone().oneshot(request).await.expect("time went backwards");
+            let response = app
+                .clone()
+                .oneshot(request)
+                .await
+                .expect("time went backwards");
             assert_eq!(response.status(), StatusCode::OK);
 
             // No auth header — if auth ran before rate-limit, this would
