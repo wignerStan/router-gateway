@@ -254,6 +254,54 @@ mod sqlite_tests {
             assert_eq!(metrics.failure_count, 1);
         }
 
+
+        #[tokio::test]
+        async fn test_metrics_collector_flush() {
+            let config = SQLiteConfig {
+                database_path: ":memory:".to_string(),
+                ..Default::default()
+            };
+
+            let store = SQLiteStore::new(config).await.unwrap();
+            let collector = SQLiteMetricsCollector::new(store.clone());
+
+            collector.initialize_auth("test-auth-flush").await;
+            collector
+                .record_request("test-auth-flush", 100.0, true, 200)
+                .await;
+
+            // Wait briefly to ensure any async operations settle (though flush should be manual)
+            // Call flush
+            let flush_res = collector.flush().await;
+            assert!(flush_res.is_ok(), "Flush should succeed");
+
+            // Verify it was written to the store
+            let loaded = store.load_metrics("test-auth-flush").await.unwrap();
+            assert!(loaded.is_some(), "Metrics should be persisted to DB");
+            assert_eq!(loaded.unwrap().total_requests, 1);
+        }
+
+        #[tokio::test]
+        async fn test_health_manager_flush() {
+            let config = SQLiteConfig {
+                database_path: ":memory:".to_string(),
+                ..Default::default()
+            };
+
+            let store = SQLiteStore::new(config).await.unwrap();
+            let manager = SQLiteHealthManager::new(store.clone());
+
+            manager.record_failure("test-auth-flush", 500).await;
+
+            // Call flush
+            let flush_res = manager.flush().await;
+            assert!(flush_res.is_ok(), "Flush should succeed");
+
+            // Verify it was written to the store
+            let loaded = store.load_health("test-auth-flush").await.unwrap();
+            assert!(loaded.is_some(), "Health should be persisted to DB");
+            assert_eq!(loaded.unwrap().consecutive_failures, 1);
+        }
         #[tokio::test]
         async fn test_metrics_collector_flush_and_load() {
             let config = SQLiteConfig {
