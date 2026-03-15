@@ -3,10 +3,13 @@ use std::net::IpAddr;
 /// Errors returned by SSRF protection checks.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// The URL could not be parsed.
     #[error("invalid URL: {0}")]
     InvalidUrl(String),
+    /// The URL has no host component.
     #[error("URL has no host: {0}")]
     NoHost(String),
+    /// The URL points to a private, loopback, or reserved IP address.
     #[error(
         "URL points to a private/internal IP address ({0}), which is not allowed (SSRF protection)"
     )]
@@ -88,7 +91,8 @@ fn is_private_ip(ip: &IpAddr) -> bool {
     }
 }
 
-/// Extract the embedded IPv4 address from an IPv4-mapped IPv6 address (::ffff:x.x.x.x).
+/// Extract the embedded IPv4 address from an IPv4-mapped IPv6 address
+/// (`::ffff:x.x.x.x`).
 fn is_ipv4_mapped(v6: &std::net::Ipv6Addr) -> Option<std::net::Ipv4Addr> {
     let segments = v6.segments();
     if segments[0..6] == [0, 0, 0, 0, 0, 0xffff] {
@@ -103,7 +107,8 @@ fn is_ipv4_mapped(v6: &std::net::Ipv6Addr) -> Option<std::net::Ipv4Addr> {
     }
 }
 
-/// Extract the embedded IPv4 address from an IPv4-compatible IPv6 address (::x.x.x.x).
+/// Extract the embedded IPv4 address from an IPv4-compatible IPv6 address
+/// (`::x.x.x.x`).
 /// Only extracts when the low 32 bits are non-zero (i.e., not the unspecified address ::).
 fn ipv6_to_v4_compat(v6: &std::net::Ipv6Addr) -> Option<std::net::Ipv4Addr> {
     let segments = v6.segments();

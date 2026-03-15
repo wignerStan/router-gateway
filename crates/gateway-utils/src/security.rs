@@ -3,13 +3,15 @@ use subtle::ConstantTimeEq;
 /// Constant-time comparison of two token strings to prevent timing attacks.
 /// Returns `true` if tokens are byte-equal, always comparing the full length
 /// of both strings regardless of where they differ.
-pub fn constant_time_token_eq(a: &str, b: &str) -> bool {
+#[cfg(test)]
+fn constant_time_token_eq(a: &str, b: &str) -> bool {
     let a_bytes = a.as_bytes();
     let b_bytes = b.as_bytes();
     a_bytes.ct_eq(b_bytes).into()
 }
 
 /// Constant-time check whether `token` matches any entry in `configured_tokens`.
+///
 /// Iterates over all configured tokens regardless of where a match occurs,
 /// preventing timing side-channels from leaking token ordering or count.
 pub fn constant_time_token_matches(token: &str, configured_tokens: &[String]) -> bool {
