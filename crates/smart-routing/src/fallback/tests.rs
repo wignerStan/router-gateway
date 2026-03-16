@@ -1,4 +1,3 @@
-#![allow(clippy::option_if_let_else)]
 use super::*;
 use crate::config::WeightConfig;
 use crate::health::HealthManager;
@@ -8,12 +7,7 @@ use crate::weight::DefaultWeightCalculator;
 use std::collections::HashSet;
 
 fn create_test_auth(id: &str, provider: Option<&str>) -> AuthInfo {
-    // If provider is specified, format the ID as "provider-key"
-    let id = if let Some(p) = provider {
-        format!("{p}-{id}")
-    } else {
-        id.to_string()
-    };
+    let id = provider.map_or_else(|| id.to_string(), |p| format!("{p}-{id}"));
 
     AuthInfo {
         id,

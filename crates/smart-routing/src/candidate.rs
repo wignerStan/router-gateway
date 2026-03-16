@@ -1,4 +1,4 @@
-#![allow(clippy::unreadable_literal, clippy::must_use_candidate)]
+#![allow(clippy::unreadable_literal)]
 //! Route candidate construction for intelligent routing
 //!
 //! This module builds route candidates from available credentials and models,

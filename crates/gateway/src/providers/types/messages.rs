@@ -1,4 +1,3 @@
-#![allow(clippy::panic, clippy::match_wildcard_for_single_variants)]
 //! Message types for provider adapters
 //!
 //! Defines normalized message, content, image, tool, and function types.
@@ -168,6 +167,7 @@ pub enum ToolChoice {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::match_wildcard_for_single_variants, clippy::panic)]
     use super::*;
     use serde_json::json;
 
@@ -324,7 +324,7 @@ mod tests {
                 assert_eq!(parts[0].part_type, "text");
                 assert_eq!(parts[1].part_type, "image_url");
             },
-            _ => panic!("Expected Parts variant"),
+            MessageContent::Text(_) => panic!("Expected Parts variant"),
         }
     }
 
@@ -333,7 +333,7 @@ mod tests {
         let content = MessageContent::Text("Hello world".to_string());
         match content {
             MessageContent::Text(text) => assert_eq!(text, "Hello world"),
-            _ => panic!("Expected Text variant"),
+            MessageContent::Parts(_) => panic!("Expected Text variant"),
         }
     }
 
