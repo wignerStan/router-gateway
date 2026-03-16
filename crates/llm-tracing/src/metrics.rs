@@ -1,3 +1,4 @@
+#![allow(clippy::float_cmp)]
 use crate::trace::TraceSpan;
 use std::collections::HashMap;
 

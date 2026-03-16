@@ -1,3 +1,4 @@
+#![allow(clippy::option_if_let_else)]
 use super::*;
 use crate::config::WeightConfig;
 use crate::health::HealthManager;

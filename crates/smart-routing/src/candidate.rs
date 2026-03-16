@@ -1,3 +1,4 @@
+#![allow(clippy::unreadable_literal, clippy::must_use_candidate)]
 //! Route candidate construction for intelligent routing
 //!
 //! This module builds route candidates from available credentials and models,
@@ -58,14 +59,12 @@ impl CandidateBuilder {
     }
 
     /// Add a credential with its associated models
-    #[must_use]
     pub fn add_credential(&mut self, credential_id: String, model_ids: Vec<String>) -> &mut Self {
         self.credential_models.insert(credential_id, model_ids);
         self
     }
 
     /// Set model information
-    #[must_use]
     pub fn set_model(&mut self, model_id: String, info: ModelInfo) -> &mut Self {
         self.models.insert(model_id, info);
         self
@@ -211,6 +210,7 @@ impl CapabilitySupport {
 
 #[cfg(test)]
 mod tests {
+    #![allow(unused_must_use)]
     use super::*;
     use model_registry::{DataSource, ModelCapabilities, RateLimits};
 

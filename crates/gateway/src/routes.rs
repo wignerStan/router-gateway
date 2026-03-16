@@ -329,7 +329,20 @@ pub async fn route_request(State(state): State<AppState>) -> Json<Value> {
     }))
 }
 
-/// POST /v1/chat/completions - Proxy endpoint for chat completion requests
+/// Proxies a chat completion request to the optimal provider.
+///
+/// Classifies the request, plans routes via the smart router, selects a provider
+/// adapter, and returns a mock response. In production, this would execute the
+/// upstream HTTP call.
+///
+/// # Errors
+///
+/// Returns `503 Service Unavailable` if no suitable route is found.
+/// Returns `500 Internal Server Error` if the matched credential is missing from configuration.
+///
+/// # Panics
+///
+/// Panics if system clock is before UNIX epoch (impossible in practice).
 pub async fn chat_completions(
     State(state): State<AppState>,
     Json(request): Json<Value>,
@@ -351,50 +364,42 @@ pub async fn chat_completions(
     let route_plan = state.router.plan(&classified, auths, session_id).await;
 
     // Step 4: Get primary route
-    let primary = match &route_plan.primary {
-        Some(p) => p,
-        None => {
-            return Err((
-                axum::http::StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({
-                    "error": {
-                        "type": "no_route_available",
-                        "message": "No suitable routes found. Configure credentials in gateway.yaml"
-                    }
-                })),
-            ));
-        },
+    let Some(primary) = &route_plan.primary else {
+        return Err((
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({
+                "error": {
+                    "type": "no_route_available",
+                    "message": "No suitable routes found. Configure credentials in gateway.yaml"
+                }
+            })),
+        ));
     };
 
     // Step 5: Find credential config for this route
-    let credential = match state
+    let Some(credential) = state
         .config
         .credentials
         .iter()
         .find(|c| c.id == primary.credential_id)
-    {
-        Some(cred) => cred,
-        None => {
-            return Err((
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "error": {
-                        "type": "credential_not_found",
-                        "message": format!("Credential {} not found in configuration", primary.credential_id)
-                    }
-                })),
-            ));
-        },
+    else {
+        return Err((
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": {
+                    "type": "credential_not_found",
+                    "message": format!("Credential {} not found in configuration", primary.credential_id)
+                }
+            })),
+        ));
     };
 
     // Step 6: Select provider adapter
     let provider = &primary.provider;
-    let adapter: Box<dyn ProviderAdapter> = match provider.as_str() {
-        "openai" | "azure-openai" => Box::new(providers::OpenAIAdapter::new()),
-        "google" => Box::new(providers::GoogleAdapter::new()),
-        "deepseek" => Box::new(providers::OpenAIAdapter::new()),
-        "mistral" | "mistral-large" => Box::new(providers::OpenAIAdapter::new()),
-        _ => Box::new(providers::OpenAIAdapter::new()), // Default to OpenAI format
+    let adapter: Box<dyn ProviderAdapter> = if provider == "google" {
+        Box::new(providers::GoogleAdapter::new())
+    } else {
+        Box::new(providers::OpenAIAdapter::new())
     };
 
     // Step 7: Transform request for provider

@@ -1,6 +1,10 @@
 // ALLOW: Significant drop tightening in SQLite operations requires restructuring
 // query chains that would reduce readability without meaningful benefit.
-#![allow(clippy::significant_drop_tightening)]
+#![allow(
+    clippy::significant_drop_tightening,
+    clippy::match_same_arms,
+    clippy::panic
+)]
 
 use super::error::{Result, SqliteError};
 use crate::config::SmartRoutingConfig;

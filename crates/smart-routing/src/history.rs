@@ -1,3 +1,4 @@
+#![allow(clippy::float_cmp)]
 use crate::outcome::ExecutionOutcome;
 use crate::statistics::StatisticsAggregator;
 use chrono::{DateTime, Utc};

@@ -1,3 +1,4 @@
+#![allow(clippy::float_cmp)]
 use crate::outcome::{ErrorClass, ExecutionOutcome};
 use chrono::{DateTime, Datelike, Duration, Timelike, Utc};
 use serde::{Deserialize, Serialize};

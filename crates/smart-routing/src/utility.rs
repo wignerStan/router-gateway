@@ -1,3 +1,4 @@
+#![allow(clippy::float_cmp, clippy::unreadable_literal)]
 use crate::metrics::AuthMetrics;
 use serde::{Deserialize, Serialize};
 

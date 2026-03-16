@@ -1,3 +1,8 @@
+#![allow(
+    clippy::float_cmp,
+    clippy::unreadable_literal,
+    clippy::significant_drop_tightening
+)]
 use super::*;
 use crate::classification::{
     ClassifiedRequest, QualityPreference, RequestFormat, RequiredCapabilities,

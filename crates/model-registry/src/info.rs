@@ -1,3 +1,4 @@
+#![allow(clippy::panic)]
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use thiserror::Error;

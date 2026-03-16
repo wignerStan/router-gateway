@@ -169,7 +169,8 @@ pub struct TokenUsage {
 }
 
 impl TokenUsage {
-    /// Create new token usage
+    /// Create new token usage.
+    #[must_use]
     pub const fn new(prompt: u32, completion: u32) -> Self {
         Self {
             prompt_tokens: prompt,
@@ -229,7 +230,11 @@ pub trait ProviderAdapter: Send + Sync {
     /// Transform a normalized request to provider-specific format
     fn transform_request(&self, request: &ProviderRequest) -> Value;
 
-    /// Transform a provider-specific response to normalized format
+    /// Transform a provider-specific response to normalized format.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the response cannot be parsed or normalized.
     fn transform_response(&self, response: Value) -> anyhow::Result<ProviderResponse>;
 
     /// Get the API endpoint URL for a model

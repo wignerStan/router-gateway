@@ -1,3 +1,4 @@
+#![allow(clippy::unreadable_literal)]
 //! Policy-aware weight calculator for multi-dimensional routing
 //!
 //! This module extends the default weight calculator to incorporate

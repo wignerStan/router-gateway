@@ -1,3 +1,4 @@
+#![allow(clippy::unreadable_literal, clippy::clone_on_ref_ptr)]
 use super::*;
 
 mod basic_get_and_cache {

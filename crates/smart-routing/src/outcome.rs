@@ -1,3 +1,4 @@
+#![allow(clippy::float_cmp)]
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 

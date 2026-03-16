@@ -96,20 +96,30 @@ impl RequestClassifier for DefaultRequestClassifier {
 /// Health status response
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HealthStatus {
+    /// Overall health status string.
     pub status: String,
+    /// Seconds since the gateway started.
     pub uptime_secs: u64,
+    /// Total number of configured credentials.
     pub credential_count: usize,
+    /// Number of credentials reporting healthy status.
     pub healthy_count: usize,
+    /// Number of credentials reporting degraded status.
     pub degraded_count: usize,
+    /// Number of credentials reporting unhealthy status.
     pub unhealthy_count: usize,
 }
 
 /// Model information for API response
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ModelInfo {
+    /// Unique model identifier.
     pub id: String,
+    /// Provider name (e.g. "openai", "google").
     pub provider: String,
+    /// List of capability tags for this model.
     pub capabilities: Vec<String>,
+    /// Maximum context window size in tokens.
     pub context_window: usize,
 }
 
@@ -118,10 +128,13 @@ pub struct ModelInfo {
 pub struct RateLimiter {
     /// IP address -> (request count, window start time)
     buckets: Arc<Mutex<HashMap<String, (u64, Instant)>>>,
+    /// Maximum requests allowed per window.
     max_requests: u64,
 }
 
 impl RateLimiter {
+    /// Create a new rate limiter with the given maximum requests per window.
+    #[must_use]
     pub fn new(max_requests: u64) -> Self {
         Self {
             buckets: Arc::new(Mutex::new(HashMap::new())),
@@ -129,14 +142,15 @@ impl RateLimiter {
         }
     }
 
-    /// Check whether a request from the given IP should be allowed.
-    /// Returns `true` if under the limit, `false` if rate limited.
+    /// Returns `true` if a request from `ip` is under the rate limit, `false` otherwise.
+    #[must_use]
+    #[allow(clippy::significant_drop_tightening)]
     pub fn check(&self, ip: &str) -> bool {
+        let now = Instant::now();
         let mut buckets = self
             .buckets
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let now = Instant::now();
 
         let (count, window_start) = buckets.entry(ip.to_string()).or_insert((0, now));
 
@@ -147,11 +161,11 @@ impl RateLimiter {
         }
 
         if *count >= self.max_requests {
-            return false;
+            false
+        } else {
+            *count += 1;
+            true
         }
-
-        *count += 1;
-        true
     }
 
     /// Remove expired rate-limit entries to bound memory growth.

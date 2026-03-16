@@ -1,3 +1,9 @@
+#![allow(
+    clippy::significant_drop_tightening,
+    clippy::match_same_arms,
+    clippy::clone_on_ref_ptr,
+    clippy::panic
+)]
 #[cfg(test)]
 mod sqlite_tests {
     use crate::health::{AuthHealth, HealthStatus};

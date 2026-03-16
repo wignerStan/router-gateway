@@ -205,7 +205,6 @@ mod tests {
             None,
         );
         span.complete(200);
-        let _first_end_time = span.end_time;
         let first_latency = span.latency_ms;
 
         // Small delay to ensure time difference

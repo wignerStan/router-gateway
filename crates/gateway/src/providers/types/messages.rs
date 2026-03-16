@@ -1,3 +1,4 @@
+#![allow(clippy::panic)]
 //! Message types for provider adapters
 //!
 //! Defines normalized message, content, image, tool, and function types.

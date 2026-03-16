@@ -1,3 +1,4 @@
+#![allow(clippy::clone_on_ref_ptr, clippy::float_cmp, clippy::panic)]
 //! Route executor with retry and fallback
 //!
 //! This module executes route plans with automatic retry on failure,

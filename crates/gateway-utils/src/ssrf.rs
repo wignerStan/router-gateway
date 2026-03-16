@@ -105,9 +105,9 @@ fn ipv6_to_v4_compat(v6: &std::net::Ipv6Addr) -> Option<std::net::Ipv4Addr> {
     let segments = v6.segments();
     if segments[0..6] == [0, 0, 0, 0, 0, 0] && (segments[6] != 0 || segments[7] != 0) {
         let high = u8::try_from(segments[6] >> 8).ok()?;
-        let low = u8::try_from(segments[6]).ok()?;
+        let low = u8::try_from(segments[6] & 0xFF).ok()?;
         let high2 = u8::try_from(segments[7] >> 8).ok()?;
-        let low2 = u8::try_from(segments[7]).ok()?;
+        let low2 = u8::try_from(segments[7] & 0xFF).ok()?;
         Some(std::net::Ipv4Addr::new(high, low, high2, low2))
     } else {
         None

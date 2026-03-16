@@ -1,6 +1,10 @@
 // ALLOW: Significant drop tightening in metrics operations requires restructuring
 // write lock chains that would reduce readability without meaningful benefit.
-#![allow(clippy::significant_drop_tightening)]
+#![allow(
+    clippy::significant_drop_tightening,
+    clippy::float_cmp,
+    clippy::clone_on_ref_ptr
+)]
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

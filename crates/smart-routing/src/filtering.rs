@@ -1,3 +1,4 @@
+#![allow(clippy::unreadable_literal, clippy::single_match_else)]
 //! Hard constraint filtering for route candidates
 //!
 //! This module filters route candidates through hard constraints including
@@ -267,7 +268,7 @@ mod tests {
         assert!(!result.is_accepted());
         let reason = match &result {
             FilterResult::Rejected { reason } => reason.as_str(),
-            _ => "",
+            FilterResult::Accepted => "",
         };
         assert!(reason.contains("capability mismatch"));
     }
@@ -293,7 +294,7 @@ mod tests {
         assert!(!result.is_accepted());
         let reason = match &result {
             FilterResult::Rejected { reason } => reason.as_str(),
-            _ => "",
+            FilterResult::Accepted => "",
         };
         assert!(reason.contains("context overflow"));
     }
@@ -320,7 +321,7 @@ mod tests {
         assert!(!result.is_accepted());
         let reason = match &result {
             FilterResult::Rejected { reason } => reason.as_str(),
-            _ => "",
+            FilterResult::Accepted => "",
         };
         assert!(reason.contains("provider disabled"));
     }

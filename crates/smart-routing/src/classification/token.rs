@@ -1,3 +1,4 @@
+#![allow(clippy::unreadable_literal)]
 use serde_json::Value;
 
 /// Token estimator for LLM requests

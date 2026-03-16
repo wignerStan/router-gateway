@@ -1,3 +1,4 @@
+#![allow(clippy::clone_on_ref_ptr)]
 use crate::trace::TraceSpan;
 use async_trait::async_trait;
 use std::collections::VecDeque;

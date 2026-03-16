@@ -148,7 +148,7 @@ impl ProviderAdapter for GoogleAdapter {
                     json!({
                         "name": t.function.name,
                         "description": t.function.description,
-                        "parameters": t.function.parameters.as_ref().unwrap_or_else(|| &json!({}))
+                        "parameters": t.function.parameters.clone().unwrap_or_else(|| json!({}))
                     })
                 })
                 .collect();
