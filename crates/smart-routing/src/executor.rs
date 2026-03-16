@@ -1,4 +1,4 @@
-#![allow(clippy::clone_on_ref_ptr, clippy::float_cmp, clippy::panic)]
+#![allow(clippy::clone_on_ref_ptr, clippy::float_cmp)]
 //! Route executor with retry and fallback
 //!
 //! This module executes route plans with automatic retry on failure,
@@ -384,6 +384,7 @@ enum AttemptResult {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::panic)]
     use super::*;
     use crate::config::HealthConfig;
 

@@ -1,4 +1,4 @@
-#![allow(clippy::unreadable_literal, clippy::single_match_else)]
+#![allow(clippy::unreadable_literal)]
 //! Hard constraint filtering for route candidates
 //!
 //! This module filters route candidates through hard constraints including

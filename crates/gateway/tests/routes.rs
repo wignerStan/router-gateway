@@ -1,8 +1,8 @@
 #![allow(
     missing_docs,
     clippy::expect_used,
-    clippy::panic,
-    clippy::needless_pass_by_value
+    clippy::needless_pass_by_value,
+    clippy::panic
 )]
 use axum::{
     body::Body,
@@ -106,7 +106,7 @@ fn build_full_app(state: AppState) -> Router {
 
 fn register_models_in_state(
     state: &mut AppState,
-    caps: smart_routing::classification::RequiredCapabilities,
+    caps: &smart_routing::classification::RequiredCapabilities,
 ) {
     for cred in &state.config.credentials {
         for model_id in &cred.allowed_models {
@@ -140,7 +140,7 @@ fn register_models_in_state(
 fn register_models_in_state_all(state: &mut AppState) {
     register_models_in_state(
         state,
-        smart_routing::classification::RequiredCapabilities {
+        &smart_routing::classification::RequiredCapabilities {
             vision: true,
             tools: true,
             streaming: true,
