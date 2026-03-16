@@ -20,3 +20,6 @@ thiserror = "1.0"
 rusqlite = { version = "0.31", features = ["bundled"] }
 model-registry = { path = "../model-registry", version = "0.1.0" }
 futures = "0.3.32"
+
+[lints]
+workspace = true

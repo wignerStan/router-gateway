@@ -1,3 +1,4 @@
+#![allow(clippy::unreadable_literal, clippy::single_match_else)]
 //! Hard constraint filtering for route candidates
 //!
 //! This module filters route candidates through hard constraints including
@@ -6,6 +7,7 @@
 use crate::candidate::{check_capability_support, RouteCandidate, TokenFitStatus};
 use crate::classification::ClassifiedRequest;
 use model_registry::{PolicyContext, PolicyMatcher};
+use std::collections::HashMap;
 use std::fmt;
 
 /// Filter result with reason for rejection
@@ -14,7 +16,10 @@ pub enum FilterResult {
     /// Candidate passed all filters
     Accepted,
     /// Candidate was rejected
-    Rejected { reason: String },
+    Rejected {
+        /// Human-readable reason for rejection
+        reason: String,
+    },
 }
 
 impl fmt::Display for FilterResult {
@@ -28,6 +33,7 @@ impl fmt::Display for FilterResult {
 
 impl FilterResult {
     /// Check if candidate was accepted
+    #[must_use]
     pub const fn is_accepted(&self) -> bool {
         matches!(self, Self::Accepted)
     }
@@ -46,6 +52,7 @@ pub struct ConstraintFilter {
 
 impl ConstraintFilter {
     /// Create a new constraint filter
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             disabled_providers: Vec::new(),
@@ -79,6 +86,7 @@ impl ConstraintFilter {
     /// - Context overflow: Reject
     /// - Provider disabled: Reject
     /// - Policy violation: Reject
+    #[must_use]
     pub fn filter(
         &self,
         candidates: Vec<RouteCandidate>,
@@ -94,6 +102,7 @@ impl ConstraintFilter {
     }
 
     /// Check constraints for a single candidate
+    #[must_use]
     pub fn check_constraints(
         &self,
         candidate: &RouteCandidate,
@@ -153,7 +162,7 @@ impl ConstraintFilter {
             hour_of_day: None,
             day_of_week: None,
             model_family: None,
-            metadata: Default::default(),
+            metadata: HashMap::default(),
         };
 
         // Check if any policy blocks this candidate
@@ -259,7 +268,7 @@ mod tests {
         assert!(!result.is_accepted());
         let reason = match &result {
             FilterResult::Rejected { reason } => reason.as_str(),
-            _ => "",
+            FilterResult::Accepted => "",
         };
         assert!(reason.contains("capability mismatch"));
     }
@@ -285,7 +294,7 @@ mod tests {
         assert!(!result.is_accepted());
         let reason = match &result {
             FilterResult::Rejected { reason } => reason.as_str(),
-            _ => "",
+            FilterResult::Accepted => "",
         };
         assert!(reason.contains("context overflow"));
     }
@@ -312,7 +321,7 @@ mod tests {
         assert!(!result.is_accepted());
         let reason = match &result {
             FilterResult::Rejected { reason } => reason.as_str(),
-            _ => "",
+            FilterResult::Accepted => "",
         };
         assert!(reason.contains("provider disabled"));
     }

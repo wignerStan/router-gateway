@@ -9,12 +9,17 @@ pub enum SqliteError {
     /// Prepared statement execution, row read, or generic query failure.
     #[error("cannot execute {operation}: {source}")]
     Query {
+        /// Name of the operation that failed
         operation: &'static str,
+        /// Underlying rusqlite error
         source: rusqlite::Error,
     },
     /// Schema migration: CREATE TABLE, CREATE INDEX, PRAGMA.
     #[error("cannot apply schema migration: {source}")]
-    Schema { source: rusqlite::Error },
+    Schema {
+        /// Underlying rusqlite error
+        source: rusqlite::Error,
+    },
     /// Serde serialization/deserialization failure.
     #[error("cannot serialize data: {0}")]
     Serialization(String),
@@ -22,9 +27,11 @@ pub enum SqliteError {
 
 impl SqliteError {
     /// Convenience constructor for query errors.
+    #[must_use]
     pub const fn query(operation: &'static str, source: rusqlite::Error) -> Self {
         Self::Query { operation, source }
     }
 }
 
+/// Result type for `SQLite` operations.
 pub type Result<T> = std::result::Result<T, SqliteError>;

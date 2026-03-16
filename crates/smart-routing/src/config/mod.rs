@@ -189,11 +189,12 @@ impl SmartRoutingConfig {
         }
     }
 
-    /// Validate configuration, returning warnings for any values that were corrected
+    /// Validate configuration, returning warnings for any values that were corrected.
+    ///
+    /// # Errors
+    ///
+    /// This method always returns `Ok`. The `Result` type is kept for API compatibility.
     pub fn validate(&mut self) -> Result<Vec<String>, String> {
-        let mut warnings = Vec::new();
-
-        // Validate strategy
         const VALID_STRATEGIES: &[&str] = &[
             "weighted",
             "time_aware",
@@ -201,6 +202,11 @@ impl SmartRoutingConfig {
             "adaptive",
             "policy_aware",
         ];
+        const VALID_QUOTA_STRATEGIES: &[&str] = &["least_used", "round_robin", "adaptive"];
+
+        let mut warnings = Vec::new();
+
+        // Validate strategy
         if !VALID_STRATEGIES.contains(&self.strategy.as_str()) {
             warnings.push(format!(
                 "Invalid strategy '{}', reset to 'weighted'. Valid options: {:?}",
@@ -256,7 +262,6 @@ impl SmartRoutingConfig {
         }
 
         // Validate quota balance strategy
-        const VALID_QUOTA_STRATEGIES: &[&str] = &["least_used", "round_robin", "adaptive"];
         if !VALID_QUOTA_STRATEGIES.contains(&self.quota_aware.quota_balance_strategy.as_str()) {
             warnings.push(format!(
                 "Invalid quota_balance_strategy '{}', reset to 'adaptive'. Valid options: {:?}",
@@ -269,7 +274,8 @@ impl SmartRoutingConfig {
         Ok(warnings)
     }
 
-    /// Create a deep copy of the configuration
+    /// Create a deep copy of the configuration.
+    #[must_use = "cloning the configuration is typically intentional; ignoring the return value is likely a mistake"]
     pub fn clone_config(&self) -> Self {
         Self {
             enabled: self.enabled,

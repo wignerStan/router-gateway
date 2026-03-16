@@ -7,9 +7,9 @@ use std::collections::HashSet;
 
 use super::{FallbackPlanner, FallbackRoute};
 
-/// Internal struct for weighted auth with provider info
+/// Internal struct for weighted auth with provider info.
 #[derive(Debug, Clone)]
-struct WeightedAuth {
+pub(super) struct WeightedAuth {
     id: String,
     weight: f64,
     provider: Option<String>,
@@ -94,7 +94,7 @@ impl FallbackPlanner {
 
         // Ensure primary is first (if specified)
         let fallbacks = if let Some(primary) = primary_id {
-            self.ensure_primary_first(weighted_auths, &primary)
+            Self::ensure_primary_first(weighted_auths, &primary)
         } else {
             weighted_auths
         };
@@ -151,7 +151,7 @@ impl FallbackPlanner {
             let weight = calculator.calculate(&auth, auth_metrics.as_ref(), auth_health);
 
             // Extract provider from auth ID (format: "provider-key" or "provider-name-key")
-            let provider = self.extract_provider(&auth.id);
+            let provider = Self::extract_provider(&auth.id);
 
             weighted_auths.push(WeightedAuth {
                 id: auth.id,
@@ -194,28 +194,29 @@ impl FallbackPlanner {
         diversified
     }
 
-    /// Ensure the primary auth is first in the list
-    fn ensure_primary_first(
-        &self,
-        mut auths: Vec<WeightedAuth>,
+    /// Ensure the primary auth is first in the list.
+    pub(super) fn ensure_primary_first(
+        mut weighted_auths: Vec<WeightedAuth>,
         primary_id: &str,
     ) -> Vec<WeightedAuth> {
         // Find and remove primary
-        let primary_pos = auths.iter().position(|w| w.id == primary_id);
+        let primary_pos = weighted_auths.iter().position(|w| w.id == primary_id);
 
         if let Some(pos) = primary_pos {
-            let primary = auths.remove(pos);
+            let primary = weighted_auths.remove(pos);
+            let mut auths = weighted_auths;
             auths.insert(0, primary);
+            return auths;
         }
 
-        auths
+        weighted_auths
     }
 
     /// Extract provider from auth ID using known provider patterns.
     ///
     /// Matches against a known provider list (longest prefix first).
     /// Falls back to first-segment heuristic for unrecognized providers.
-    pub(crate) fn extract_provider(&self, auth_id: &str) -> Option<String> {
+    pub(crate) fn extract_provider(auth_id: &str) -> Option<String> {
         if auth_id.is_empty() {
             return None;
         }

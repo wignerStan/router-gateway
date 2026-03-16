@@ -1,3 +1,4 @@
+#![allow(clippy::panic, clippy::match_wildcard_for_single_variants)]
 //! Message types for provider adapters
 //!
 //! Defines normalized message, content, image, tool, and function types.
@@ -33,7 +34,8 @@ impl MessageContent {
         Self::Text(text.into())
     }
 
-    /// Get text if this is text-only content
+    /// Returns the text content if this is text-only.
+    #[must_use]
     pub fn as_text(&self) -> Option<&str> {
         match self {
             Self::Text(t) => Some(t),
@@ -126,7 +128,8 @@ impl Tool {
         }
     }
 
-    /// Add parameters schema
+    /// Set the parameters schema for this tool's function.
+    #[must_use]
     pub fn with_parameters(mut self, parameters: Value) -> Self {
         self.function.parameters = Some(parameters);
         self
@@ -156,8 +159,11 @@ pub enum ToolChoice {
     None,
     /// Must use a tool
     Required,
-    /// Use a specific function
-    Function { name: String },
+    /// Use a specific function.
+    Function {
+        /// Name of the function to call.
+        name: String,
+    },
 }
 
 #[cfg(test)]

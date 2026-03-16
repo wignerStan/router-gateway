@@ -1,3 +1,4 @@
+#![allow(clippy::clone_on_ref_ptr, clippy::items_after_statements)]
 //! Integration tests for the llm-tracing package
 //!
 //! These tests verify end-to-end functionality across multiple components.

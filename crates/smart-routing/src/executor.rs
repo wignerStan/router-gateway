@@ -1,3 +1,4 @@
+#![allow(clippy::clone_on_ref_ptr, clippy::float_cmp, clippy::panic)]
 //! Route executor with retry and fallback
 //!
 //! This module executes route plans with automatic retry on failure,
@@ -72,7 +73,8 @@ pub struct RouteExecutor {
 }
 
 impl RouteExecutor {
-    /// Create a new route executor
+    /// Create a new route executor.
+    #[must_use]
     pub const fn new(
         config: ExecutorConfig,
         metrics: MetricsCollector,
@@ -348,17 +350,20 @@ impl RouteExecutor {
         self.config.retryable_status_codes.contains(&status_code)
     }
 
-    /// Get config
+    /// Get config.
+    #[must_use]
     pub const fn config(&self) -> &ExecutorConfig {
         &self.config
     }
 
-    /// Get metrics collector
+    /// Get metrics collector.
+    #[must_use]
     pub const fn metrics(&self) -> &MetricsCollector {
         &self.metrics
     }
 
-    /// Get health manager
+    /// Get health manager.
+    #[must_use]
     pub const fn health(&self) -> &HealthManager {
         &self.health
     }

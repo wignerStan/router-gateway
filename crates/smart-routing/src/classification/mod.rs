@@ -1,8 +1,13 @@
+//! Request classification for routing decisions.
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+/// Content type detection and extraction.
 pub mod detection;
+/// Format/protocol detection (`OpenAI`, `Anthropic`, `Gemini`).
 pub mod format;
+/// Token count estimation.
 pub mod token;
 
 pub use detection::{ContentTypeDetector, StreamingExtractor, ToolDetector};

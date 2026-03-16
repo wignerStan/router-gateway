@@ -37,7 +37,8 @@ pub struct ProviderRequest {
 }
 
 impl ProviderRequest {
-    /// Create a new request builder
+    /// Create a new request builder.
+    #[must_use]
     pub fn builder() -> ProviderRequestBuilder {
         ProviderRequestBuilder::default()
     }
@@ -59,41 +60,60 @@ pub struct ProviderRequestBuilder {
 }
 
 impl ProviderRequestBuilder {
+    /// Set the messages for this request.
+    #[must_use]
     pub fn messages(mut self, messages: Vec<Message>) -> Self {
         self.messages = messages;
         self
     }
 
+    /// Set the model for this request.
+    #[must_use]
     pub fn model(mut self, model: impl Into<String>) -> Self {
         self.model = Some(model.into());
         self
     }
 
+    /// Set the maximum tokens to generate.
+    #[must_use]
     pub const fn max_tokens(mut self, max_tokens: u32) -> Self {
         self.max_tokens = Some(max_tokens);
         self
     }
 
+    /// Set the temperature for sampling.
+    #[must_use]
     pub const fn temperature(mut self, temperature: f32) -> Self {
         self.temperature = Some(temperature);
         self
     }
 
+    /// Set whether to stream the response.
+    #[must_use]
     pub const fn stream(mut self, stream: bool) -> Self {
         self.stream = stream;
         self
     }
 
+    /// Set the system prompt.
+    #[must_use]
     pub fn system(mut self, system: impl Into<String>) -> Self {
         self.system = Some(system.into());
         self
     }
 
+    /// Set the tools available for this request.
+    #[must_use]
     pub fn tools(mut self, tools: Vec<Tool>) -> Self {
         self.tools = Some(tools);
         self
     }
 
+    /// Build the `ProviderRequest`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `model` was not set.
     pub fn build(self) -> Result<ProviderRequest, String> {
         let model = self.model.ok_or("model is required")?;
         Ok(ProviderRequest {
@@ -130,7 +150,8 @@ pub struct ProviderResponse {
 }
 
 impl ProviderResponse {
-    /// Check if this is a tool call response
+    /// Returns `true` if this response contains tool calls.
+    #[must_use]
     pub fn has_tool_calls(&self) -> bool {
         self.tool_calls.as_ref().is_some_and(|t| !t.is_empty())
     }
@@ -148,7 +169,8 @@ pub struct TokenUsage {
 }
 
 impl TokenUsage {
-    /// Create new token usage
+    /// Create new token usage.
+    #[must_use]
     pub const fn new(prompt: u32, completion: u32) -> Self {
         Self {
             prompt_tokens: prompt,
@@ -208,7 +230,11 @@ pub trait ProviderAdapter: Send + Sync {
     /// Transform a normalized request to provider-specific format
     fn transform_request(&self, request: &ProviderRequest) -> Value;
 
-    /// Transform a provider-specific response to normalized format
+    /// Transform a provider-specific response to normalized format.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the response cannot be parsed or normalized.
     fn transform_response(&self, response: Value) -> anyhow::Result<ProviderResponse>;
 
     /// Get the API endpoint URL for a model

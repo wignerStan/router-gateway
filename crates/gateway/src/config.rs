@@ -188,7 +188,12 @@ pub struct ProviderConfig {
 }
 
 impl GatewayConfig {
-    /// Load configuration from a YAML file
+    /// Load configuration from a YAML file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or the YAML content
+    /// is invalid (including failed env-var expansion or validation).
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let content = std::fs::read_to_string(path.as_ref())
             .with_context(|| "Failed to read configuration file")?;
@@ -196,13 +201,18 @@ impl GatewayConfig {
         Self::from_yaml(&content)
     }
 
-    /// Parse configuration from YAML string
+    /// Parse configuration from a YAML string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the YAML is malformed, environment variable
+    /// expansion fails, or configuration validation fails.
     pub fn from_yaml(yaml: &str) -> Result<Self> {
         let mut config: Self =
             serde_yaml_ng::from_str(yaml).with_context(|| "Failed to parse YAML configuration")?;
 
         // Expand environment variables in secrets
-        config.expand_env_vars()?;
+        config.expand_env_vars();
 
         // Validate configuration
         config.validate()?;
@@ -210,8 +220,8 @@ impl GatewayConfig {
         Ok(config)
     }
 
-    /// Expand environment variable references in secrets
-    fn expand_env_vars(&mut self) -> Result<()> {
+    /// Expand environment variable references in secrets.
+    fn expand_env_vars(&mut self) {
         for cred in &mut self.credentials {
             cred.api_key = expand_env_var(&cred.api_key);
             if let Some(ref mut base_url) = cred.base_url {
@@ -226,10 +236,15 @@ impl GatewayConfig {
                 *value = expand_env_var(value);
             }
         }
-        Ok(())
     }
 
-    /// Validate the configuration
+    /// Validate the configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if credential IDs are duplicated, API keys or
+    /// providers are empty, base URLs point to private hosts, or the
+    /// routing strategy is not one of the recognized values.
     pub fn validate(&self) -> Result<()> {
         // Check for duplicate credential IDs
         let mut seen_ids = std::collections::HashSet::new();
@@ -275,7 +290,8 @@ impl GatewayConfig {
         Ok(())
     }
 
-    /// Get credentials for a specific provider
+    /// Get credentials for a specific provider.
+    #[must_use]
     pub fn credentials_for_provider(&self, provider: &str) -> Vec<&CredentialConfig> {
         self.credentials
             .iter()
@@ -283,12 +299,14 @@ impl GatewayConfig {
             .collect()
     }
 
-    /// Check if a provider is enabled
+    /// Check if a provider is enabled.
+    #[must_use]
     pub fn is_provider_enabled(&self, provider: &str) -> bool {
         self.providers.get(provider).is_none_or(|p| p.enabled) // Enabled by default if not configured
     }
 
-    /// Check if authentication is enabled (at least one auth token configured)
+    /// Check if authentication is enabled (at least one auth token configured).
+    #[must_use]
     pub fn is_auth_enabled(&self) -> bool {
         !self.server.auth_tokens.is_empty()
     }

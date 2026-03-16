@@ -1,3 +1,8 @@
+//! Local LLM gateway with intelligent request routing.
+//!
+//! Routes LLM requests to optimal credentials based on health, latency,
+//! and success rate.
+
 pub mod config;
 pub mod providers;
 pub mod routes;
@@ -29,6 +34,11 @@ use routes::{
 use state::{AppState, DefaultRequestClassifier, RateLimiter, DEFAULT_RATE_LIMIT};
 
 /// Build and run the gateway server.
+///
+/// # Errors
+///
+/// Returns an error if configuration loading fails, the configured
+/// host/port is invalid, or the TCP listener cannot bind.
 pub async fn run() -> anyhow::Result<()> {
     // Initialize tracing
     tracing_subscriber::registry()
@@ -86,7 +96,12 @@ pub async fn run() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Load configuration from file or environment
+/// Load configuration from file or environment.
+///
+/// # Errors
+///
+/// Returns an error if the configuration file exists but cannot be read
+/// or parsed, or if validation fails.
 pub fn load_config() -> anyhow::Result<GatewayConfig> {
     // Try to load from GATEWAY_CONFIG env var or default paths
     let config_path = std::env::var("GATEWAY_CONFIG").ok().or_else(|| {
@@ -117,6 +132,7 @@ pub fn load_config() -> anyhow::Result<GatewayConfig> {
 /// Shared by [`run()`] and test helpers to ensure production and test setups
 /// stay in sync. The `rate_limit` parameter overrides the default when
 /// provided.
+#[must_use]
 pub fn build_app_state(config: GatewayConfig, rate_limit: Option<u64>) -> AppState {
     let smart_router = config
         .credentials

@@ -10,3 +10,4 @@ too-many-lines-threshold = 500
 too-many-arguments-threshold = 7
 
 allow-expect-in-tests = true
+allow-unwrap-in-tests = true

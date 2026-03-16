@@ -1,3 +1,4 @@
+#![allow(clippy::float_cmp, clippy::unreadable_literal)]
 use crate::metrics::AuthMetrics;
 use serde::{Deserialize, Serialize};
 
@@ -48,6 +49,7 @@ impl Default for UtilityEstimator {
 
 impl UtilityEstimator {
     /// Create a new utility estimator with default config
+    #[must_use]
     pub fn new() -> Self {
         Self {
             config: UtilityConfig::default(),
@@ -55,6 +57,7 @@ impl UtilityEstimator {
     }
 
     /// Create a new utility estimator with custom config
+    #[must_use]
     pub const fn with_config(config: UtilityConfig) -> Self {
         Self { config }
     }
@@ -62,6 +65,7 @@ impl UtilityEstimator {
     /// Estimate utility from metrics
     ///
     /// Higher utility = better route. Returns value in [0, 1].
+    #[must_use]
     pub fn estimate_utility(&self, metrics: Option<&AuthMetrics>) -> f64 {
         match metrics {
             None => self.config.min_utility,
@@ -70,9 +74,9 @@ impl UtilityEstimator {
                     return self.config.min_utility;
                 }
 
-                let success_utility = self.estimate_success_utility(m);
+                let success_utility = Self::estimate_success_utility(m);
                 let latency_utility = self.estimate_latency_utility(m);
-                let cost_utility = self.estimate_cost_utility(m);
+                let cost_utility = Self::estimate_cost_utility(m);
 
                 // Weighted combination
                 let utility = cost_utility.mul_add(
@@ -89,6 +93,7 @@ impl UtilityEstimator {
     }
 
     /// Estimate utility with explicit cost parameter
+    #[must_use]
     pub fn estimate_utility_with_cost(
         &self,
         metrics: Option<&AuthMetrics>,
@@ -101,7 +106,7 @@ impl UtilityEstimator {
                     return self.config.min_utility;
                 }
 
-                let success_utility = self.estimate_success_utility(m);
+                let success_utility = Self::estimate_success_utility(m);
                 let latency_utility = self.estimate_latency_utility(m);
                 let cost_utility = self.estimate_cost_utility_with_cost(cost_per_million);
 
@@ -121,7 +126,8 @@ impl UtilityEstimator {
 
     /// Estimate success utility (0-1)
     /// High success rate -> high utility
-    const fn estimate_success_utility(&self, metrics: &AuthMetrics) -> f64 {
+    #[must_use]
+    const fn estimate_success_utility(metrics: &AuthMetrics) -> f64 {
         // Use success_rate directly (it's already EWMA smoothed)
         metrics.success_rate.clamp(0.0, 1.0)
     }
@@ -154,19 +160,23 @@ impl UtilityEstimator {
 
     /// Estimate cost utility (0-1)
     /// Low cost -> high utility (not used if cost not available)
-    const fn estimate_cost_utility(&self, _metrics: &AuthMetrics) -> f64 {
+    #[must_use]
+    const fn estimate_cost_utility(_metrics: &AuthMetrics) -> f64 {
         // Default cost utility when cost not available
         1.0
     }
 
     /// Get config
+    #[must_use]
     pub const fn config(&self) -> &UtilityConfig {
         &self.config
     }
 
     /// Set config
-    pub const fn set_config(&mut self, config: UtilityConfig) {
+    #[must_use = "this method returns the updated estimator"]
+    pub const fn set_config(mut self, config: UtilityConfig) -> Self {
         self.config = config;
+        self
     }
 }
 

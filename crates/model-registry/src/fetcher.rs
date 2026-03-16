@@ -1,47 +1,58 @@
+#![allow(clippy::panic)]
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::sync::{PoisonError, RwLock};
+use std::sync::RwLock;
 
 use crate::info::{DataSource, ModelCapabilities, ModelInfo, RateLimits};
 
-/// `ModelFetcher` defines the interface for fetching model information.
+/// Interface for fetching model information from a data source.
 #[async_trait]
 pub trait ModelFetcher: Send + Sync {
-    /// Fetch retrieves model information for the given model ID.
+    /// Retrieves model information for the given model ID.
+    ///
     /// Returns `None` if the model is not found.
     ///
     /// # Errors
+    ///
     /// Returns an error if the fetch operation fails.
     async fn fetch(
         &self,
         model_id: &str,
     ) -> Result<Option<ModelInfo>, Box<dyn std::error::Error + Send + Sync>>;
 
-    /// `FetchMultiple` retrieves model information for multiple model IDs.
-    /// Returns a map of model ID to `ModelInfo` for found models.
+    /// Retrieves model information for multiple model IDs.
+    ///
+    /// Returns a map of model ID to [`ModelInfo`] for found models.
     ///
     /// # Errors
+    ///
     /// Returns an error if the fetch operation fails.
     async fn fetch_multiple(
         &self,
         model_ids: &[String],
     ) -> Result<HashMap<String, ModelInfo>, Box<dyn std::error::Error + Send + Sync>>;
 
-    /// `ListAll` returns all available models from this fetcher.
+    /// Returns all available models from this fetcher.
     ///
     /// # Errors
+    ///
     /// Returns an error if the fetch operation fails.
     async fn list_all(
         &self,
     ) -> Result<HashMap<String, ModelInfo>, Box<dyn std::error::Error + Send + Sync>>;
 }
 
-/// Converts a `PoisonError` into a boxed error suitable for the trait return type.
-fn lock_err(e: PoisonError<impl std::fmt::Debug>) -> Box<dyn std::error::Error + Send + Sync> {
-    Box::new(std::io::Error::other(format!("lock poisoned: {e}")))
+/// Creates a boxed error from a poisoned lock.
+macro_rules! lock_err {
+    () => {
+        |e| {
+            Box::new(std::io::Error::other(format!("lock poisoned: {e}")))
+                as Box<dyn std::error::Error + Send + Sync>
+        }
+    };
 }
 
-/// `StaticFetcher` provides hardcoded model data for common models.
+/// Fetcher backed by hardcoded model data for common models.
 pub struct StaticFetcher {
     models: RwLock<HashMap<String, ModelInfo>>,
 }
@@ -225,7 +236,7 @@ impl ModelFetcher for StaticFetcher {
         &self,
         model_id: &str,
     ) -> Result<Option<ModelInfo>, Box<dyn std::error::Error + Send + Sync>> {
-        let models = self.models.read().map_err(lock_err)?;
+        let models = self.models.read().map_err(lock_err!())?;
         Ok(models.get(model_id).cloned())
     }
 
@@ -233,7 +244,7 @@ impl ModelFetcher for StaticFetcher {
         &self,
         model_ids: &[String],
     ) -> Result<HashMap<String, ModelInfo>, Box<dyn std::error::Error + Send + Sync>> {
-        let models = self.models.read().map_err(lock_err)?;
+        let models = self.models.read().map_err(lock_err!())?;
         let mut result = HashMap::new();
         for model_id in model_ids {
             if let Some(model) = models.get(model_id) {
@@ -246,14 +257,23 @@ impl ModelFetcher for StaticFetcher {
     async fn list_all(
         &self,
     ) -> Result<HashMap<String, ModelInfo>, Box<dyn std::error::Error + Send + Sync>> {
-        let models = self.models.read().map_err(lock_err)?;
+        let models = self.models.read().map_err(lock_err!())?;
         Ok(models.clone())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::panic::{self, AssertUnwindSafe};
+
     use super::*;
+
+    fn poison_lock(fetcher: &StaticFetcher) {
+        let _ = panic::catch_unwind(AssertUnwindSafe(|| {
+            let _guard = fetcher.models.write().unwrap();
+            panic!("intentional poison for testing");
+        }));
+    }
 
     #[tokio::test]
     async fn test_static_fetcher_fetch() {
@@ -292,14 +312,6 @@ mod tests {
         let fetcher = StaticFetcher::new();
         let models = fetcher.list_all().await.unwrap();
         assert!(models.len() >= 6); // At least the 6 models we initialized
-    }
-    use std::panic::{self, AssertUnwindSafe};
-
-    fn poison_lock(fetcher: &StaticFetcher) {
-        let _ = panic::catch_unwind(AssertUnwindSafe(|| {
-            let _guard = fetcher.models.write().unwrap();
-            panic!("intentional poison for testing");
-        }));
     }
 
     #[tokio::test]

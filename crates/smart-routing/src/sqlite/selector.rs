@@ -1,3 +1,11 @@
+// ALLOW: Significant drop tightening in SQLite operations requires restructuring
+// query chains that would reduce readability without meaningful benefit.
+#![allow(
+    clippy::significant_drop_tightening,
+    clippy::match_same_arms,
+    clippy::panic
+)]
+
 use super::error::{Result, SqliteError};
 use crate::config::SmartRoutingConfig;
 use crate::sqlite::store::SQLiteStore;
@@ -18,8 +26,11 @@ struct WeightedAuth {
 /// Selector statistics
 #[derive(Debug, Clone)]
 pub struct SelectorStats {
+    /// Total number of credential selections
     pub select_count: i64,
+    /// Number of cache hits
     pub cache_hits: i64,
+    /// Number of database queries
     pub db_queries: i64,
 }
 
@@ -46,6 +57,7 @@ struct WeightCache {
 
 impl SQLiteSelector {
     /// Create a new `SQLite` selector
+    #[must_use]
     pub fn new(store: SQLiteStore, config: SmartRoutingConfig) -> Self {
         Self {
             store,
@@ -79,7 +91,7 @@ impl SQLiteSelector {
         }
 
         // Select by weight
-        Some(self.select_by_weight(available))
+        Some(Self::select_by_weight(available))
     }
 
     /// Query available auths and their weights using SQL
@@ -106,7 +118,7 @@ impl SQLiteSelector {
         let json_array = serde_json::to_string(&auth_ids).ok()?;
 
         // Get database connection
-        let db = self.store.get_db().await;
+        let db = self.store.get_db();
         let db = db.lock().await;
 
         // Execute SQL query with weight calculation
@@ -161,6 +173,7 @@ impl SQLiteSelector {
             }
         }
 
+        // Lock guard dropped here along with stmt and rows
         Some(available)
     }
 
@@ -222,7 +235,7 @@ impl SQLiteSelector {
     /// Select auth by weighted random choice
     // ALLOW: Each expect is guarded by a prior length/index check that guarantees the element exists.
     #[allow(clippy::expect_used)]
-    fn select_by_weight(&self, available: Vec<WeightedAuth>) -> String {
+    fn select_by_weight(available: Vec<WeightedAuth>) -> String {
         if available.len() == 1 {
             return available
                 .into_iter()
@@ -265,6 +278,11 @@ impl SQLiteSelector {
     }
 
     /// Precompute weights for batch operations
+    ///
+    /// # Errors
+    ///
+    /// Returns `SqliteError` if serialization fails, database queries fail,
+    /// or weight updates cannot be committed.
     pub async fn precompute_weights(&self, auth_ids: Vec<String>) -> Result<()> {
         if auth_ids.is_empty() {
             return Ok(());
@@ -277,7 +295,7 @@ impl SQLiteSelector {
         // Query existing metrics and health, then release the lock
         // before calling update_weights (which acquires its own lock).
         let weights = {
-            let db = self.store.get_db().await;
+            let db = self.store.get_db();
             let db = db.lock().await;
 
             let query = r"
@@ -347,7 +365,6 @@ impl SQLiteSelector {
                 weights.insert(auth_id, weight);
             }
 
-            // Lock is released here when `db` goes out of scope
             weights
         };
 
@@ -358,8 +375,13 @@ impl SQLiteSelector {
     }
 
     /// Update weights in database
+    ///
+    /// # Errors
+    ///
+    /// Returns `SqliteError` if the transaction cannot be started,
+    /// statements fail to prepare or execute, or the commit fails.
     async fn update_weights(&self, weights: HashMap<String, f64>) -> Result<()> {
-        let db = self.store.get_db().await;
+        let db = self.store.get_db();
         let db = db.lock().await;
 
         // Begin transaction
@@ -394,8 +416,12 @@ impl SQLiteSelector {
     }
 
     /// Get top N auths by weight
+    ///
+    /// # Errors
+    ///
+    /// Returns `SqliteError` if the query fails to prepare, execute, or read rows.
     pub async fn get_top_auths(&self, limit: usize) -> Result<Vec<String>> {
-        let db = self.store.get_db().await;
+        let db = self.store.get_db();
         let db = db.lock().await;
 
         let query = format!(
@@ -431,6 +457,7 @@ impl SQLiteSelector {
     }
 
     /// Get selector statistics
+    #[must_use]
     pub fn get_stats(&self) -> SelectorStats {
         SelectorStats {
             select_count: self.stats.select_count.load(Ordering::Relaxed),

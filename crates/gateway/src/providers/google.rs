@@ -20,10 +20,14 @@ impl Default for GoogleAdapter {
 }
 
 impl GoogleAdapter {
+    /// Create a new Google adapter.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Create a Google adapter with a custom base URL.
+    #[must_use]
     pub const fn with_base_url(base_url: String) -> Self {
         Self {
             default_base_url: base_url,
@@ -127,11 +131,12 @@ impl ProviderAdapter for GoogleAdapter {
         });
 
         // Add system instruction if present
-        if let Some(sys) = system_instruction.or(request
-            .system
-            .as_ref()
-            .map(|s| json!({"parts": [{"text": s}]})))
-        {
+        if let Some(sys) = system_instruction.or_else(|| {
+            request
+                .system
+                .as_ref()
+                .map(|s| json!({"parts": [{"text": s}]}))
+        }) {
             gemini_request["systemInstruction"] = sys;
         }
 
@@ -143,7 +148,7 @@ impl ProviderAdapter for GoogleAdapter {
                     json!({
                         "name": t.function.name,
                         "description": t.function.description,
-                        "parameters": t.function.parameters.as_ref().unwrap_or(&json!({}))
+                        "parameters": t.function.parameters.clone().unwrap_or_else(|| json!({}))
                     })
                 })
                 .collect();

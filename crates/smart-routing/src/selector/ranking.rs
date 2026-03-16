@@ -21,7 +21,7 @@ impl SmartSelector {
             return None;
         }
 
-        Some(self.select_by_weight(available))
+        Some(Self::select_by_weight(available))
     }
 
     /// Pick the best auth with policy-aware selection
@@ -50,7 +50,7 @@ impl SmartSelector {
             return None;
         }
 
-        Some(self.select_by_weight(available))
+        Some(Self::select_by_weight(available))
     }
 
     /// Filter available auths and calculate weights (without policy)
@@ -119,23 +119,23 @@ impl SmartSelector {
                 continue;
             }
 
-            let weight = if let Some(policy_calc) = self
+            let weight = self
                 .calculator
                 .as_any()
                 .downcast_ref::<PolicyAwareWeightCalculator>()
-            {
-                let (_, _, final_weight) = policy_calc.calculate_with_policy(
-                    &auth,
-                    metrics.as_ref(),
-                    health,
-                    model,
-                    context,
+                .map_or_else(
+                    || self.calculator.calculate(&auth, metrics.as_ref(), health) * policy_factor,
+                    |policy_calc| {
+                        let (_, _, final_weight) = policy_calc.calculate_with_policy(
+                            &auth,
+                            metrics.as_ref(),
+                            health,
+                            model,
+                            context,
+                        );
+                        final_weight
+                    },
                 );
-                final_weight
-            } else {
-                let base_weight = self.calculator.calculate(&auth, metrics.as_ref(), health);
-                base_weight * policy_factor
-            };
 
             if weight > 0.0 {
                 available.push(WeightedAuth {
@@ -148,10 +148,10 @@ impl SmartSelector {
         available
     }
 
-    /// Select auth by weighted random choice
+    /// Select auth by weighted random choice.
     // ALLOW: Each expect is guarded by a prior length/index check that guarantees the element exists.
     #[allow(clippy::expect_used)]
-    fn select_by_weight(&self, available: Vec<WeightedAuth>) -> String {
+    fn select_by_weight(available: Vec<WeightedAuth>) -> String {
         if available.len() == 1 {
             return available
                 .into_iter()

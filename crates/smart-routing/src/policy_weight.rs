@@ -1,3 +1,4 @@
+#![allow(clippy::unreadable_literal)]
 //! Policy-aware weight calculator for multi-dimensional routing
 //!
 //! This module extends the default weight calculator to incorporate
@@ -26,6 +27,7 @@ pub struct PolicyAwareWeightCalculator {
 
 impl PolicyAwareWeightCalculator {
     /// Create a new policy-aware weight calculator
+    #[must_use]
     pub fn new(config: WeightConfig, matcher: Arc<PolicyMatcher>) -> Self {
         let base_calculator = DefaultWeightCalculator::new(config.clone());
         Self {
@@ -39,6 +41,7 @@ impl PolicyAwareWeightCalculator {
     ///
     /// This method evaluates all policies against the model and combines
     /// their scores into a single multiplicative factor.
+    #[must_use]
     pub fn calculate_policy_factor(&self, model: &ModelInfo, context: &PolicyContext) -> f64 {
         // Check if model is blocked by any policy
         if self.matcher.is_blocked(model, context) {
@@ -52,6 +55,7 @@ impl PolicyAwareWeightCalculator {
     /// Calculate full weight including policy factor
     ///
     /// Returns (`base_weight`, `policy_factor`, `final_weight`)
+    #[must_use]
     pub fn calculate_with_policy(
         &self,
         auth: &AuthInfo,
@@ -68,11 +72,13 @@ impl PolicyAwareWeightCalculator {
     }
 
     /// Get reference to the underlying policy matcher
+    #[must_use]
     pub fn matcher(&self) -> &PolicyMatcher {
         &self.matcher
     }
 
     /// Get reference to the weight configuration
+    #[must_use]
     pub const fn config(&self) -> &WeightConfig {
         &self.config
     }
@@ -128,6 +134,7 @@ pub struct WeightCalculatorFactory;
 
 impl WeightCalculatorFactory {
     /// Create a weight calculator for the given strategy
+    #[must_use]
     pub fn create(
         strategy: &str,
         config: WeightConfig,
@@ -143,6 +150,7 @@ impl WeightCalculatorFactory {
     }
 
     /// Create a policy-aware weight calculator
+    #[must_use]
     pub fn create_policy_aware(
         config: WeightConfig,
         matcher: Arc<PolicyMatcher>,

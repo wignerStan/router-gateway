@@ -1,3 +1,4 @@
+#![allow(clippy::float_cmp)]
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -22,6 +23,7 @@ pub enum ErrorClass {
 
 impl ErrorClass {
     /// Classify HTTP status code into error class
+    #[must_use]
     pub const fn from_status_code(status_code: i32) -> Option<Self> {
         match status_code {
             401 | 403 => Some(Self::Auth),
@@ -30,11 +32,12 @@ impl ErrorClass {
             408 => Some(Self::Timeout),
             400 | 404 | 413 | 422 => Some(Self::ClientError),
             _ if status_code >= 400 => Some(Self::Other),
-            _ => None, // Success status codes
+            _ => None,
         }
     }
 
     /// Check if error is retryable
+    #[must_use]
     pub const fn is_retryable(&self) -> bool {
         matches!(
             self,
@@ -43,6 +46,7 @@ impl ErrorClass {
     }
 
     /// Check if error indicates credential issues
+    #[must_use]
     pub const fn is_credential_error(&self) -> bool {
         matches!(self, Self::Auth)
     }
@@ -77,6 +81,7 @@ pub struct ExecutionOutcome {
 
 impl ExecutionOutcome {
     /// Create a successful outcome
+    #[must_use]
     pub fn success(
         route_id: String,
         latency_ms: f64,
@@ -100,6 +105,7 @@ impl ExecutionOutcome {
     }
 
     /// Create a failed outcome
+    #[must_use]
     pub fn failure(
         route_id: String,
         latency_ms: f64,
@@ -125,6 +131,7 @@ impl ExecutionOutcome {
     }
 
     /// Create a timeout outcome
+    #[must_use]
     pub fn timeout(route_id: String, latency_ms: f64) -> Self {
         Self {
             route_id,
@@ -142,6 +149,7 @@ impl ExecutionOutcome {
     }
 
     /// Create a network error outcome
+    #[must_use]
     pub fn network_error(route_id: String, latency_ms: f64) -> Self {
         Self {
             route_id,
@@ -159,6 +167,7 @@ impl ExecutionOutcome {
     }
 
     /// Get the effective route (original if fallback was used)
+    #[must_use]
     pub fn effective_route(&self) -> &str {
         if self.used_fallback {
             self.original_route_id.as_deref().unwrap_or(&self.route_id)
@@ -176,6 +185,7 @@ pub struct OutcomeRecorder {
 
 impl OutcomeRecorder {
     /// Create a new outcome recorder
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             outcomes: Vec::new(),
@@ -184,6 +194,7 @@ impl OutcomeRecorder {
     }
 
     /// Create an outcome recorder with a limit
+    #[must_use]
     pub const fn with_limit(max_outcomes: usize) -> Self {
         Self {
             outcomes: Vec::new(),
@@ -199,7 +210,6 @@ impl OutcomeRecorder {
     pub fn record(&mut self, outcome: ExecutionOutcome) {
         self.outcomes.push(outcome);
 
-        // Keep only the most recent outcomes
         if self.outcomes.len() > self.max_outcomes {
             let remove_count = self.outcomes.len() - self.max_outcomes;
             self.outcomes.drain(0..remove_count);
@@ -253,6 +263,7 @@ impl OutcomeRecorder {
     }
 
     /// Get all outcomes for a specific route
+    #[must_use]
     pub fn get_outcomes_for_route(&self, route_id: &str) -> Vec<&ExecutionOutcome> {
         self.outcomes
             .iter()
@@ -261,6 +272,7 @@ impl OutcomeRecorder {
     }
 
     /// Get recent outcomes (last N)
+    #[must_use]
     pub fn get_recent_outcomes(&self, n: usize) -> Vec<&ExecutionOutcome> {
         let start = if self.outcomes.len() > n {
             self.outcomes.len() - n
@@ -271,6 +283,7 @@ impl OutcomeRecorder {
     }
 
     /// Get all outcomes
+    #[must_use]
     pub fn get_all_outcomes(&self) -> &[ExecutionOutcome] {
         &self.outcomes
     }
@@ -281,11 +294,13 @@ impl OutcomeRecorder {
     }
 
     /// Get the number of recorded outcomes
+    #[must_use]
     pub fn len(&self) -> usize {
         self.outcomes.len()
     }
 
     /// Check if empty
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.outcomes.is_empty()
     }
@@ -447,10 +462,8 @@ mod tests {
             recorder.record_success(format!("route-{i}"), 100.0, 10, 5, 200);
         }
 
-        // Should only keep the last 5
         assert_eq!(recorder.len(), 5);
 
-        // First 5 should be removed
         assert!(recorder.get_outcomes_for_route("route-0").is_empty());
         assert!(recorder.get_outcomes_for_route("route-4").is_empty());
         assert!(!recorder.get_outcomes_for_route("route-5").is_empty());
@@ -476,7 +489,6 @@ mod tests {
         let mut recorder2 = recorder1.clone();
         recorder2.record_success("route-2".to_string(), 150.0, 20, 10, 200);
 
-        // recorder1 should not be affected by recorder2
         assert_eq!(recorder1.len(), 1);
         assert_eq!(recorder2.len(), 2);
     }

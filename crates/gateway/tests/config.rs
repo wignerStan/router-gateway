@@ -1,3 +1,4 @@
+#![allow(missing_docs, clippy::expect_used)]
 use gateway::config::GatewayConfig;
 use std::io::Write;
 use tempfile::NamedTempFile;

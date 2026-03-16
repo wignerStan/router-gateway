@@ -1,3 +1,9 @@
+#![allow(
+    missing_docs,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::needless_pass_by_value
+)]
 use axum::{
     body::Body,
     http::{Request, StatusCode},

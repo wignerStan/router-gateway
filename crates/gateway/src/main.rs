@@ -1,3 +1,5 @@
+//! Gateway binary entrypoint.
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     gateway::run().await

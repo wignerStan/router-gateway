@@ -124,7 +124,7 @@ impl Default for TierPriors {
 }
 
 impl TierPriors {
-    const fn get(&self, tier: &Tier) -> (f64, f64) {
+    const fn get(&self, tier: Tier) -> (f64, f64) {
         match tier {
             Tier::Flagship => self.flagship,
             Tier::Standard => self.standard,
@@ -141,34 +141,37 @@ impl Default for BanditPolicy {
 
 impl BanditPolicy {
     /// Create a new bandit policy with default config
+    #[must_use]
     pub fn new() -> Self {
         Self {
             config: BanditConfig::default(),
-            route_stats: HashMap::new(),
-            route_tiers: HashMap::new(),
+            route_stats: HashMap::default(),
+            route_tiers: HashMap::default(),
             utility_estimator: UtilityEstimator::new(),
         }
     }
 
     /// Create a new bandit policy with custom config
+    #[must_use]
     pub fn with_config(config: BanditConfig) -> Self {
         Self {
             config,
-            route_stats: HashMap::new(),
-            route_tiers: HashMap::new(),
+            route_stats: HashMap::default(),
+            route_tiers: HashMap::default(),
             utility_estimator: UtilityEstimator::new(),
         }
     }
 
     /// Create a new bandit policy with utility estimator
+    #[must_use]
     pub fn with_utility_estimator(
         config: BanditConfig,
         utility_estimator: UtilityEstimator,
     ) -> Self {
         Self {
             config,
-            route_stats: HashMap::new(),
-            route_tiers: HashMap::new(),
+            route_stats: HashMap::default(),
+            route_tiers: HashMap::default(),
             utility_estimator,
         }
     }

@@ -8,6 +8,7 @@ use crate::config;
 use crate::state::{AppState, HealthStatus, ModelInfo};
 use smart_routing::classification::RequestClassifier;
 
+/// Returns gateway metadata and available endpoints.
 pub async fn root() -> Json<Value> {
     Json(json!({
         "name": "Gateway API",
@@ -27,9 +28,15 @@ pub async fn root() -> Json<Value> {
     }))
 }
 
-/// Authentication middleware for protected routes
-/// Validates Bearer token against configured `auth_tokens`
-/// Fails-closed by default (requires auth) unless `GATEWAY_ENV=development` is set
+/// Authentication middleware for protected routes.
+///
+/// Validates Bearer token against configured `auth_tokens`.
+/// Fails-closed by default (requires auth) unless `GATEWAY_ENV=development` is set.
+///
+/// # Errors
+///
+/// Returns `403 Forbidden` if no auth tokens are configured in non-development mode.
+/// Returns `401 Unauthorized` if the `Authorization` header is missing or the token is invalid.
 pub async fn auth_middleware(
     State(state): State<AppState>,
     req: axum::extract::Request,
@@ -131,10 +138,15 @@ pub async fn security_headers_middleware(
     response
 }
 
-/// Rate limiting middleware. Extracts client IP from X-Forwarded-For or
-/// X-Real-IP headers only when `trust_proxy_headers` is enabled (gateway behind
-/// a trusted reverse proxy). Otherwise, all requests share a single bucket to
-/// prevent header-spoofing bypasses.
+/// Rate limiting middleware.
+///
+/// Extracts client IP from X-Forwarded-For or X-Real-IP headers only when
+/// `trust_proxy_headers` is enabled (gateway behind a trusted reverse proxy).
+/// Otherwise, all requests share a single bucket to prevent header-spoofing bypasses.
+///
+/// # Errors
+///
+/// Returns `429 Too Many Requests` when the client exceeds the configured rate limit.
 pub async fn rate_limit_middleware(
     axum::extract::State(state): axum::extract::State<AppState>,
     axum::extract::ConnectInfo(addr): axum::extract::ConnectInfo<SocketAddr>,
@@ -170,6 +182,7 @@ pub async fn rate_limit_middleware(
     Ok(next.run(req).await)
 }
 
+/// Returns gateway health status including uptime and credential counts.
 pub async fn health_check(State(state): State<AppState>) -> Json<HealthStatus> {
     let uptime = state.start_time.elapsed().as_secs();
 
@@ -191,6 +204,7 @@ pub async fn health_check(State(state): State<AppState>) -> Json<HealthStatus> {
     })
 }
 
+/// Lists all models available from configured credentials.
 pub async fn list_models(State(state): State<AppState>) -> Json<Value> {
     // Build model list from configured credentials
     // Note: When allowed_models is empty, it means all provider models are allowed
@@ -236,6 +250,7 @@ pub async fn list_models(State(state): State<AppState>) -> Json<Value> {
     }))
 }
 
+/// Classifies a sample request and returns the computed route plan.
 pub async fn route_request(State(state): State<AppState>) -> Json<Value> {
     // Create a sample request for demonstration
     // In production, this would come from the request body as JSON
@@ -263,16 +278,15 @@ pub async fn route_request(State(state): State<AppState>) -> Json<Value> {
     // and Step 5 would return the LLM response
 
     // Format the primary route
-    let primary_json = match &route_plan.primary {
-        Some(primary) => json!({
+    let primary_json = route_plan.primary.as_ref().map_or(json!(null), |primary| {
+        json!({
             "credential_id": primary.credential_id,
             "model_id": primary.model_id,
             "provider": primary.provider,
             "utility": primary.utility,
             "weight": primary.weight,
-        }),
-        None => json!(null),
-    };
+        })
+    });
 
     // Format fallbacks
     let fallbacks_json: Vec<Value> = route_plan
@@ -315,7 +329,20 @@ pub async fn route_request(State(state): State<AppState>) -> Json<Value> {
     }))
 }
 
-/// POST /v1/chat/completions - Proxy endpoint for chat completion requests
+/// Proxies a chat completion request to the optimal provider.
+///
+/// Classifies the request, plans routes via the smart router, selects a provider
+/// adapter, and returns a mock response. In production, this would execute the
+/// upstream HTTP call.
+///
+/// # Errors
+///
+/// Returns `503 Service Unavailable` if no suitable route is found.
+/// Returns `500 Internal Server Error` if the matched credential is missing from configuration.
+///
+/// # Panics
+///
+/// Panics if system clock is before UNIX epoch (impossible in practice).
 pub async fn chat_completions(
     State(state): State<AppState>,
     Json(request): Json<Value>,
@@ -337,50 +364,42 @@ pub async fn chat_completions(
     let route_plan = state.router.plan(&classified, auths, session_id).await;
 
     // Step 4: Get primary route
-    let primary = match &route_plan.primary {
-        Some(p) => p,
-        None => {
-            return Err((
-                axum::http::StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({
-                    "error": {
-                        "type": "no_route_available",
-                        "message": "No suitable routes found. Configure credentials in gateway.yaml"
-                    }
-                })),
-            ));
-        },
+    let Some(primary) = &route_plan.primary else {
+        return Err((
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({
+                "error": {
+                    "type": "no_route_available",
+                    "message": "No suitable routes found. Configure credentials in gateway.yaml"
+                }
+            })),
+        ));
     };
 
     // Step 5: Find credential config for this route
-    let credential = match state
+    let Some(credential) = state
         .config
         .credentials
         .iter()
         .find(|c| c.id == primary.credential_id)
-    {
-        Some(cred) => cred,
-        None => {
-            return Err((
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "error": {
-                        "type": "credential_not_found",
-                        "message": format!("Credential {} not found in configuration", primary.credential_id)
-                    }
-                })),
-            ));
-        },
+    else {
+        return Err((
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": {
+                    "type": "credential_not_found",
+                    "message": format!("Credential {} not found in configuration", primary.credential_id)
+                }
+            })),
+        ));
     };
 
     // Step 6: Select provider adapter
     let provider = &primary.provider;
-    let adapter: Box<dyn ProviderAdapter> = match provider.as_str() {
-        "openai" | "azure-openai" => Box::new(providers::OpenAIAdapter::new()),
-        "google" => Box::new(providers::GoogleAdapter::new()),
-        "deepseek" => Box::new(providers::OpenAIAdapter::new()),
-        "mistral" | "mistral-large" => Box::new(providers::OpenAIAdapter::new()),
-        _ => Box::new(providers::OpenAIAdapter::new()), // Default to OpenAI format
+    let adapter: Box<dyn ProviderAdapter> = if provider == "google" {
+        Box::new(providers::GoogleAdapter::new())
+    } else {
+        Box::new(providers::OpenAIAdapter::new())
     };
 
     // Step 7: Transform request for provider
