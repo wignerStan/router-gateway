@@ -1,11 +1,12 @@
-//! Predefined policy templates for common use cases.
+//! Predefined policy templates for common routing scenarios.
 
 use super::types::{
     CapabilityCategory, PolicyCondition, PolicyConditionType, ProviderCategory, RoutingPolicy,
     TierCategory,
 };
 
-/// Create cost-optimization policy
+/// Cost-optimization policy: boosts weight for cheaper models.
+#[must_use]
 pub fn cost_optimization() -> RoutingPolicy {
     RoutingPolicy::new("cost_optimization", "Cost Optimization")
         .with_priority(10)
@@ -13,7 +14,8 @@ pub fn cost_optimization() -> RoutingPolicy {
         .with_weight_factor(1.5)
 }
 
-/// Create performance-first policy (prefer fast models)
+/// Performance-first policy: prefers fast-tier models.
+#[must_use]
 pub fn performance_first() -> RoutingPolicy {
     RoutingPolicy::new("performance_first", "Performance First")
         .with_priority(20)
@@ -21,7 +23,8 @@ pub fn performance_first() -> RoutingPolicy {
         .with_action("prefer")
 }
 
-/// Create quality-first policy (prefer flagship models)
+/// Quality-first policy: prefers flagship-tier models.
+#[must_use]
 pub fn quality_first() -> RoutingPolicy {
     RoutingPolicy::new("quality_first", "Quality First")
         .with_priority(20)
@@ -29,7 +32,8 @@ pub fn quality_first() -> RoutingPolicy {
         .with_action("prefer")
 }
 
-/// Create vision-capable policy
+/// Vision-required policy: requires vision capability.
+#[must_use]
 pub fn vision_required() -> RoutingPolicy {
     RoutingPolicy::new("vision_required", "Vision Required")
         .with_priority(30)
@@ -37,7 +41,8 @@ pub fn vision_required() -> RoutingPolicy {
         .with_action("prefer")
 }
 
-/// Create thinking-required policy
+/// Thinking-required policy: requires extended thinking capability.
+#[must_use]
 pub fn thinking_required() -> RoutingPolicy {
     RoutingPolicy::new("thinking_required", "Extended Thinking Required")
         .with_priority(30)
@@ -45,14 +50,16 @@ pub fn thinking_required() -> RoutingPolicy {
         .with_action("prefer")
 }
 
-/// Create large context policy
+/// Large-context policy: prefers models with large context windows.
+#[must_use]
 pub fn large_context() -> RoutingPolicy {
     RoutingPolicy::new("large_context", "Large Context Required")
         .with_priority(25)
         .with_action("prefer")
 }
 
-/// Create provider preference policy
+/// Provider preference policy: boosts weight for a specific provider.
+#[must_use]
 pub fn prefer_provider(provider: ProviderCategory) -> RoutingPolicy {
     RoutingPolicy::new(
         format!("prefer_{provider:?}").to_lowercase(),
@@ -63,7 +70,8 @@ pub fn prefer_provider(provider: ProviderCategory) -> RoutingPolicy {
     .with_action("prefer")
 }
 
-/// Create off-peak hours policy
+/// Off-peak hours policy: reduces weight during low-traffic hours (22:00-06:00).
+#[must_use]
 pub fn off_peak_hours() -> RoutingPolicy {
     let mut policy = RoutingPolicy::new("off_peak_hours", "Off-Peak Hours")
         .with_priority(5)

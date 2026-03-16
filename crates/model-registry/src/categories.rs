@@ -2,17 +2,23 @@ use crate::info::ModelInfo;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-/// `CapabilityCategory` represents a functional capability.
+/// Functional capability of a model.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CapabilityCategory {
+    /// Image/vision input support.
     Vision,
+    /// Function/tool calling support.
     Tools,
+    /// Streaming response support.
     Streaming,
+    /// Extended thinking/reasoning support.
     Thinking,
 }
 
 impl CapabilityCategory {
+    /// Returns the `snake_case` string representation.
+    #[must_use]
     pub const fn as_str(&self) -> &str {
         match self {
             Self::Vision => "vision",
@@ -23,19 +29,21 @@ impl CapabilityCategory {
     }
 }
 
-/// `TierCategory` represents quality/performance tier.
+/// Quality or performance tier for model classification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TierCategory {
-    /// Flagship models (Opus, GPT-4)
+    /// Flagship models (Opus, GPT-4).
     Flagship,
-    /// Standard quality (Sonnet, GPT-4o)
+    /// Standard quality (Sonnet, GPT-4o).
     Standard,
-    /// Economy/fast (Haiku, GPT-4o-mini, Flash)
+    /// Economy/fast (Haiku, GPT-4o-mini, Flash).
     Fast,
 }
 
 impl TierCategory {
+    /// Returns the `snake_case` string representation.
+    #[must_use]
     pub const fn as_str(&self) -> &str {
         match self {
             Self::Flagship => "flagship",
@@ -45,21 +53,23 @@ impl TierCategory {
     }
 }
 
-/// `CostCategory` represents pricing band based on input price per million tokens.
+/// Pricing band based on input price per million tokens.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CostCategory {
-    /// $50+/1M tokens
+    /// $50+/1M tokens.
     UltraPremium,
-    /// $10-50/1M tokens
+    /// $10-50/1M tokens.
     Premium,
-    /// $1-10/1M tokens
+    /// $1-10/1M tokens.
     Standard,
-    /// <$1/1M tokens
+    /// <$1/1M tokens.
     Economy,
 }
 
 impl CostCategory {
+    /// Returns the `snake_case` string representation.
+    #[must_use]
     pub const fn as_str(&self) -> &str {
         match self {
             Self::UltraPremium => "ultra_premium",
@@ -70,21 +80,23 @@ impl CostCategory {
     }
 }
 
-/// `ContextWindowCategory` represents context size band.
+/// Context window size band.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ContextWindowCategory {
-    /// <32K tokens
+    /// <32K tokens.
     Small,
-    /// 32K-128K tokens
+    /// 32K-128K tokens.
     Medium,
-    /// 128K-500K tokens
+    /// 128K-500K tokens.
     Large,
-    /// 500K+ tokens
+    /// 500K+ tokens.
     Ultra,
 }
 
 impl ContextWindowCategory {
+    /// Returns the `snake_case` string representation.
+    #[must_use]
     pub const fn as_str(&self) -> &str {
         match self {
             Self::Small => "small",
@@ -95,52 +107,76 @@ impl ContextWindowCategory {
     }
 }
 
-/// `ProviderCategory` represents model vendor.
-/// Extended to support providers from models.dev
+/// Model vendor for provider-based routing and filtering.
+///
+/// Extended to support providers from models.dev.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderCategory {
     // Major Cloud Providers
+    /// Anthropic (Claude).
     Anthropic,
+    /// `OpenAI` (GPT).
     #[serde(rename = "openai")]
     OpenAI,
+    /// Google (Gemini).
     Google,
 
     // Emerging AI Companies
+    /// xAI (Grok).
     #[serde(rename = "xai")]
-    XAI, // xAI Grok
+    XAI,
+    /// `DeepSeek`.
     #[serde(rename = "deepseek")]
-    DeepSeek, // DeepSeek
-    Mistral,    // Mistral AI
-    Cohere,     // Cohere
-    Perplexity, // Perplexity AI
+    DeepSeek,
+    /// Mistral AI.
+    Mistral,
+    /// Cohere.
+    Cohere,
+    /// Perplexity AI.
+    Perplexity,
 
     // Chinese Providers
-    Alibaba,  // Qwen/Tongyi
-    Zhipu,    // GLM/ChatGLM
-    Baidu,    // ERNIE/Wenxin
-    Moonshot, // Kimi
+    /// Alibaba (Qwen/Tongyi).
+    Alibaba,
+    /// Zhipu AI (GLM/ChatGLM).
+    Zhipu,
+    /// Baidu (ERNIE/Wenxin).
+    Baidu,
+    /// Moonshot AI (Kimi).
+    Moonshot,
+    /// `ByteDance` (Doubao).
     #[serde(rename = "bytedance")]
-    ByteDance, // Doubao
+    ByteDance,
 
     // Open Source / Community
-    Meta, // Llama
+    /// Meta (Llama).
+    Meta,
+    /// Meta Llama (alias).
     #[serde(rename = "meta-llama")]
-    MetaLlama, // Alias for Meta
-    Databricks, // Dolly
-    Stability, // Stable LM
+    MetaLlama,
+    /// Databricks.
+    Databricks,
+    /// Stability AI.
+    Stability,
 
     // Cloud Platforms
-    Amazon, // AWS Bedrock
-    Azure,  // Azure OpenAI
+    /// Amazon (AWS Bedrock).
+    Amazon,
+    /// Azure `OpenAI`.
+    Azure,
+    /// Google Vertex AI.
     #[serde(rename = "vertexai")]
-    VertexAI, // GCP Vertex AI (alias for Google)
+    VertexAI,
 
     // Other
+    /// Unrecognized or unspecified provider.
     Other,
 }
 
 impl ProviderCategory {
+    /// Returns the `snake_case` string representation.
+    #[must_use]
     pub const fn as_str(&self) -> &str {
         match self {
             Self::Anthropic => "anthropic",
@@ -167,6 +203,10 @@ impl ProviderCategory {
         }
     }
 
+    /// Parses a provider string (case-insensitive, alias-aware).
+    ///
+    /// Unknown providers map to [`Other`].
+    #[must_use]
     pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "anthropic" => Some(Self::Anthropic),
@@ -193,7 +233,8 @@ impl ProviderCategory {
         }
     }
 
-    /// Check if this is a Chinese provider
+    /// Returns `true` for providers headquartered in China.
+    #[must_use]
     pub const fn is_chinese_provider(&self) -> bool {
         matches!(
             self,
@@ -206,12 +247,14 @@ impl ProviderCategory {
         )
     }
 
-    /// Check if this is a major cloud platform (as opposed to direct model provider)
+    /// Returns `true` for cloud platforms (as opposed to direct model providers).
+    #[must_use]
     pub const fn is_cloud_platform(&self) -> bool {
         matches!(self, Self::Amazon | Self::Azure | Self::VertexAI)
     }
 
-    /// Get display name for UI
+    /// Human-readable display name for UI rendering.
+    #[must_use]
     pub const fn display_name(&self) -> &str {
         match self {
             Self::Anthropic => "Anthropic",
@@ -239,29 +282,46 @@ impl ProviderCategory {
     }
 }
 
-/// `ModelCategorySet` represents multiple categories for a model.
+/// Aggregated category set for a single model across all classification dimensions.
 #[derive(Debug, Clone)]
 pub struct ModelCategorySet {
+    /// Capabilities the model supports.
     pub capabilities: Vec<CapabilityCategory>,
+    /// Quality/performance tier.
     pub tier: TierCategory,
+    /// Pricing band.
     pub cost: CostCategory,
+    /// Context window size band.
     pub context: ContextWindowCategory,
+    /// Provider vendor.
     pub provider: ProviderCategory,
 }
 
-/// Extension trait to add categorization methods to `ModelInfo`
+/// Extension trait for multi-dimension classification on [`ModelInfo`].
 pub trait ModelCategorization {
+    /// Returns all categories for the model.
     fn get_categories(&self) -> ModelCategorySet;
+    /// Returns the model's capability categories.
     fn get_capability_categories(&self) -> Vec<CapabilityCategory>;
+    /// Returns the model's quality tier.
     fn get_tier(&self) -> TierCategory;
+    /// Returns the model's pricing band.
     fn get_cost_category(&self) -> CostCategory;
+    /// Returns the model's context window band.
     fn get_context_category(&self) -> ContextWindowCategory;
+    /// Returns the model's provider category.
     fn get_provider_category(&self) -> ProviderCategory;
+    /// Returns `true` if the model has all specified capabilities.
     fn has_all_capabilities(&self, caps: &[CapabilityCategory]) -> bool;
+    /// Returns `true` if the model has any of the specified capabilities.
     fn has_any_capability(&self, caps: &[CapabilityCategory]) -> bool;
+    /// Returns `true` if the model belongs to the given tier.
     fn is_in_tier(&self, tier: TierCategory) -> bool;
+    /// Returns `true` if the model is in the given cost band.
     fn is_in_cost_range(&self, cost: CostCategory) -> bool;
+    /// Returns `true` if the model is in the given context window band.
     fn is_in_context_range(&self, context: ContextWindowCategory) -> bool;
+    /// Returns `true` if the model is from the given provider.
     fn is_from_provider(&self, provider: ProviderCategory) -> bool;
 }
 

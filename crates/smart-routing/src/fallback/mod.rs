@@ -49,19 +49,22 @@ pub struct FallbackPlanner {
 }
 
 impl FallbackPlanner {
-    /// Create a new fallback planner with default config
+    /// Create a new fallback planner with default config.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             config: FallbackConfig::default(),
         }
     }
 
-    /// Create a new fallback planner with custom config
+    /// Create a new fallback planner with custom config.
+    #[must_use]
     pub const fn with_config(config: FallbackConfig) -> Self {
         Self { config }
     }
 
-    /// Get config
+    /// Get config.
+    #[must_use]
     pub const fn config(&self) -> &FallbackConfig {
         &self.config
     }

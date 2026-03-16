@@ -20,12 +20,14 @@ impl Default for AnthropicAdapter {
 }
 
 impl AnthropicAdapter {
-    /// Create a new Anthropic adapter
+    /// Create a new Anthropic adapter.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Create with custom base URL
+    /// Create an Anthropic adapter with a custom base URL.
+    #[must_use]
     pub const fn with_base_url(base_url: String) -> Self {
         Self {
             default_base_url: base_url,
@@ -75,23 +77,23 @@ impl ProviderAdapter for AnthropicAdapter {
                                     "text": p.text.as_ref().unwrap_or(&String::new())
                                 })
                             } else if p.part_type == "image_url" {
-                                // Safe handling: check if image_url exists before accessing
-                                if let Some(image_url) = &p.image_url {
-                                    // Anthropic expects base64 or URL in specific format
-                                    json!({
-                                        "type": "image",
-                                        "source": {
-                                            "type": "url",
-                                            "url": &image_url.url
-                                        }
-                                    })
-                                } else {
-                                    // Skip malformed image_url content - log as text placeholder
-                                    json!({
-                                        "type": "text",
-                                        "text": "[malformed image content]"
-                                    })
-                                }
+                                p.image_url.as_ref().map_or_else(
+                                    || {
+                                        json!({
+                                            "type": "text",
+                                            "text": "[malformed image content]"
+                                        })
+                                    },
+                                    |image_url| {
+                                        json!({
+                                            "type": "image",
+                                            "source": {
+                                                "type": "url",
+                                                "url": &image_url.url
+                                            }
+                                        })
+                                    },
+                                )
                             } else {
                                 json!({ "type": &p.part_type })
                             }
@@ -115,7 +117,7 @@ impl ProviderAdapter for AnthropicAdapter {
         });
 
         // Add system if present
-        if let Some(sys) = system.or(request.system.clone()) {
+        if let Some(sys) = system.or_else(|| request.system.clone()) {
             anthropic_request["system"] = json!(sys);
         }
 
@@ -141,7 +143,7 @@ impl ProviderAdapter for AnthropicAdapter {
                     json!({
                         "name": t.function.name,
                         "description": t.function.description,
-                        "input_schema": t.function.parameters.clone().unwrap_or(json!({}))
+                        "input_schema": t.function.parameters.clone().unwrap_or_else(|| json!({}))
                     })
                 })
                 .collect();
@@ -151,8 +153,7 @@ impl ProviderAdapter for AnthropicAdapter {
             if let Some(choice) = &request.tool_choice {
                 let anthropic_choice = match choice {
                     ToolChoice::Auto => json!({"type": "auto"}),
-                    ToolChoice::None => json!({"type": "any"}), // Anthropic doesn't have none
-                    ToolChoice::Required => json!({"type": "any"}),
+                    ToolChoice::None | ToolChoice::Required => json!({"type": "any"}),
                     ToolChoice::Function { name } => json!({"type": "tool", "name": name}),
                 };
                 anthropic_request["tool_choice"] = anthropic_choice;

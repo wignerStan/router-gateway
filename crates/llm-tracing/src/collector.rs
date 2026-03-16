@@ -48,6 +48,7 @@ impl MemoryTraceCollector {
     /// assert_eq!(collector.trace_count().await, 1);
     /// # }
     /// ```
+    #[must_use]
     pub fn new(max_size: usize) -> Self {
         Self {
             traces: Arc::new(RwLock::new(VecDeque::with_capacity(max_size))),
@@ -55,15 +56,16 @@ impl MemoryTraceCollector {
         }
     }
 
-    /// Create a collector with default buffer size (1000 traces)
+    /// Create a collector with default buffer size (1000 traces).
+    #[must_use]
     pub fn with_default_size() -> Self {
         Self::new(1000)
     }
 
     /// Clear all traces
     pub async fn clear(&self) {
-        let mut traces = self.traces.write().await;
-        traces.clear();
+        let mut guard = self.traces.write().await;
+        guard.clear();
     }
 }
 
@@ -84,8 +86,10 @@ impl TraceCollector for MemoryTraceCollector {
     }
 
     async fn get_traces(&self) -> Vec<TraceSpan> {
-        let traces = self.traces.read().await;
-        traces.iter().cloned().collect()
+        {
+            let guard = self.traces.read().await;
+            guard.iter().cloned().collect()
+        }
     }
 
     async fn trace_count(&self) -> usize {

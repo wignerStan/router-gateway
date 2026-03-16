@@ -17,6 +17,7 @@ pub struct SQLiteMetricsCollector {
 
 impl SQLiteMetricsCollector {
     /// Create a new `SQLite` metrics collector
+    #[must_use]
     pub fn new(store: SQLiteStore) -> Self {
         Self {
             store,
@@ -27,6 +28,7 @@ impl SQLiteMetricsCollector {
     }
 
     /// Create with custom flush interval
+    #[must_use]
     pub fn with_flush_interval(store: SQLiteStore, flush_interval: Duration) -> Self {
         Self {
             store,
@@ -64,6 +66,7 @@ impl SQLiteMetricsCollector {
     }
 
     /// Record request result
+    #[allow(clippy::significant_drop_tightening)]
     pub async fn record_request(
         &self,
         auth_id: &str,
@@ -75,67 +78,62 @@ impl SQLiteMetricsCollector {
             return;
         }
 
-        // Update cache
-        let mut cache = self.cache.write().await;
-        let entry = cache
-            .entry(auth_id.to_string())
-            .or_insert_with(|| AuthMetrics {
-                total_requests: 0,
-                success_count: 0,
-                failure_count: 0,
-                avg_latency_ms: 0.0,
-                min_latency_ms: 0.0,
-                max_latency_ms: 0.0,
-                success_rate: 1.0,
-                error_rate: 0.0,
-                consecutive_successes: 0,
-                consecutive_failures: 0,
-                last_request_time: chrono::Utc::now(),
-                last_success_time: None,
-                last_failure_time: None,
-            });
+        {
+            let mut cache = self.cache.write().await;
+            let entry = cache
+                .entry(auth_id.to_string())
+                .or_insert_with(|| AuthMetrics {
+                    total_requests: 0,
+                    success_count: 0,
+                    failure_count: 0,
+                    avg_latency_ms: 0.0,
+                    min_latency_ms: 0.0,
+                    max_latency_ms: 0.0,
+                    success_rate: 1.0,
+                    error_rate: 0.0,
+                    consecutive_successes: 0,
+                    consecutive_failures: 0,
+                    last_request_time: chrono::Utc::now(),
+                    last_success_time: None,
+                    last_failure_time: None,
+                });
 
-        entry.total_requests += 1;
-        entry.last_request_time = chrono::Utc::now();
+            entry.total_requests += 1;
+            entry.last_request_time = chrono::Utc::now();
 
-        if success {
-            entry.success_count += 1;
-            entry.consecutive_successes += 1;
-            entry.consecutive_failures = 0;
-            entry.last_success_time = Some(chrono::Utc::now());
-        } else {
-            entry.failure_count += 1;
-            entry.consecutive_failures += 1;
-            entry.consecutive_successes = 0;
-            entry.last_failure_time = Some(chrono::Utc::now());
+            if success {
+                entry.success_count += 1;
+                entry.consecutive_successes += 1;
+                entry.consecutive_failures = 0;
+                entry.last_success_time = Some(chrono::Utc::now());
+            } else {
+                entry.failure_count += 1;
+                entry.consecutive_failures += 1;
+                entry.consecutive_successes = 0;
+                entry.last_failure_time = Some(chrono::Utc::now());
+            }
+
+            if entry.min_latency_ms == 0.0 || latency_ms < entry.min_latency_ms {
+                entry.min_latency_ms = latency_ms;
+            }
+            if latency_ms > entry.max_latency_ms {
+                entry.max_latency_ms = latency_ms;
+            }
+
+            let alpha = 0.1;
+            entry.avg_latency_ms = alpha * latency_ms + (1.0 - alpha) * entry.avg_latency_ms;
+
+            if entry.total_requests > 0 {
+                entry.success_rate = entry.success_count as f64 / entry.total_requests as f64;
+                entry.error_rate = entry.failure_count as f64 / entry.total_requests as f64;
+            }
         }
 
-        // Update latency
-        if entry.min_latency_ms == 0.0 || latency_ms < entry.min_latency_ms {
-            entry.min_latency_ms = latency_ms;
-        }
-        if latency_ms > entry.max_latency_ms {
-            entry.max_latency_ms = latency_ms;
+        {
+            let mut dirty = self.dirty.write().await;
+            dirty.insert(auth_id.to_string(), true);
         }
 
-        // EWMA for average latency
-        let alpha = 0.1;
-        entry.avg_latency_ms = alpha * latency_ms + (1.0 - alpha) * entry.avg_latency_ms;
-
-        // Update success rate
-        if entry.total_requests > 0 {
-            entry.success_rate = entry.success_count as f64 / entry.total_requests as f64;
-            entry.error_rate = entry.failure_count as f64 / entry.total_requests as f64;
-        }
-
-        drop(cache);
-
-        // Mark as dirty
-        let mut dirty = self.dirty.write().await;
-        dirty.insert(auth_id.to_string(), true);
-        drop(dirty);
-
-        // Write status code history directly
         let _ = self
             .store
             .write_status_history(auth_id, status_code, latency_ms, success)
@@ -154,9 +152,12 @@ impl SQLiteMetricsCollector {
         cache.clone()
     }
 
-    /// Flush dirty data to database
+    /// Flush dirty data to database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing to the database fails.
     pub async fn flush(&self) -> Result<()> {
-        // Collect dirty auth IDs
         let to_flush = {
             let dirty = self.dirty.read().await;
             dirty
@@ -170,14 +171,12 @@ impl SQLiteMetricsCollector {
             return Ok(());
         }
 
-        // Flush each dirty entry
         for auth_id in to_flush {
             let cache = self.cache.read().await;
             if let Some(metrics) = cache.get(&auth_id) {
                 if let Err(e) = self.store.write_metrics(&auth_id, metrics).await {
                     eprintln!("Failed to flush metrics for {auth_id}: {e}");
                 } else {
-                    // Mark as clean
                     let mut dirty = self.dirty.write().await;
                     dirty.insert(auth_id, false);
                 }
@@ -187,19 +186,26 @@ impl SQLiteMetricsCollector {
         Ok(())
     }
 
-    /// Load metrics from database into cache
+    /// Load metrics from database into cache.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if loading from the database fails.
     pub async fn load_from_db(&self) -> Result<()> {
         let all_metrics = self.store.load_all_metrics().await?;
 
-        let mut cache = self.cache.write().await;
-        for (auth_id, metrics) in all_metrics {
-            cache.insert(auth_id, metrics);
+        {
+            let mut cache = self.cache.write().await;
+            for (auth_id, metrics) in all_metrics {
+                cache.insert(auth_id, metrics);
+            }
         }
 
         Ok(())
     }
 
     /// Start periodic flush task
+    #[must_use]
     pub fn start_flush_task(self: Arc<Self>) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             let mut timer = interval(self.flush_interval);
@@ -223,6 +229,7 @@ pub struct SQLiteHealthManager {
 
 impl SQLiteHealthManager {
     /// Create a new `SQLite` health manager
+    #[must_use]
     pub fn new(store: SQLiteStore) -> Self {
         Self {
             store,
@@ -233,6 +240,7 @@ impl SQLiteHealthManager {
     }
 
     /// Create with custom flush interval
+    #[must_use]
     pub fn with_flush_interval(store: SQLiteStore, flush_interval: Duration) -> Self {
         Self {
             store,
@@ -243,101 +251,100 @@ impl SQLiteHealthManager {
     }
 
     /// Record success
+    #[allow(clippy::significant_drop_tightening)]
     pub async fn record_success(&self, auth_id: &str) {
         if auth_id.is_empty() {
             return;
         }
 
-        let mut cache = self.cache.write().await;
-        let entry = cache
-            .entry(auth_id.to_string())
-            .or_insert_with(|| AuthHealth {
-                status: HealthStatus::Healthy,
-                consecutive_successes: 0,
-                consecutive_failures: 0,
-                last_status_change: chrono::Utc::now(),
-                last_check_time: chrono::Utc::now(),
-                unavailable_until: None,
-                error_counts: HashMap::new(),
-            });
+        {
+            let mut cache = self.cache.write().await;
+            let entry = cache
+                .entry(auth_id.to_string())
+                .or_insert_with(|| AuthHealth {
+                    status: HealthStatus::Healthy,
+                    consecutive_successes: 0,
+                    consecutive_failures: 0,
+                    last_status_change: chrono::Utc::now(),
+                    last_check_time: chrono::Utc::now(),
+                    unavailable_until: None,
+                    error_counts: HashMap::new(),
+                });
 
-        entry.consecutive_successes += 1;
-        entry.consecutive_failures = 0;
-        entry.last_check_time = chrono::Utc::now();
+            entry.consecutive_successes += 1;
+            entry.consecutive_failures = 0;
+            entry.last_check_time = chrono::Utc::now();
 
-        // Recover if consecutive successes reach threshold
-        if entry.consecutive_successes >= 3 {
-            if entry.status != HealthStatus::Healthy {
-                entry.status = HealthStatus::Healthy;
-                entry.last_status_change = chrono::Utc::now();
+            if entry.consecutive_successes >= 3 {
+                if entry.status != HealthStatus::Healthy {
+                    entry.status = HealthStatus::Healthy;
+                    entry.last_status_change = chrono::Utc::now();
+                }
+                entry.unavailable_until = None;
             }
-            entry.unavailable_until = None;
         }
 
-        drop(cache);
-
-        // Mark as dirty
-        let mut dirty = self.dirty.write().await;
-        dirty.insert(auth_id.to_string(), true);
+        {
+            let mut dirty = self.dirty.write().await;
+            dirty.insert(auth_id.to_string(), true);
+        }
     }
 
     /// Record failure
+    #[allow(clippy::significant_drop_tightening)]
     pub async fn record_failure(&self, auth_id: &str, status_code: i32) {
         if auth_id.is_empty() {
             return;
         }
 
-        let mut cache = self.cache.write().await;
-        let entry = cache
-            .entry(auth_id.to_string())
-            .or_insert_with(|| AuthHealth {
-                status: HealthStatus::Healthy,
-                consecutive_successes: 0,
-                consecutive_failures: 0,
-                last_status_change: chrono::Utc::now(),
-                last_check_time: chrono::Utc::now(),
-                unavailable_until: None,
-                error_counts: HashMap::new(),
-            });
+        {
+            let mut cache = self.cache.write().await;
+            let entry = cache
+                .entry(auth_id.to_string())
+                .or_insert_with(|| AuthHealth {
+                    status: HealthStatus::Healthy,
+                    consecutive_successes: 0,
+                    consecutive_failures: 0,
+                    last_status_change: chrono::Utc::now(),
+                    last_check_time: chrono::Utc::now(),
+                    unavailable_until: None,
+                    error_counts: HashMap::new(),
+                });
 
-        entry.consecutive_failures += 1;
-        entry.consecutive_successes = 0;
-        entry.last_check_time = chrono::Utc::now();
+            entry.consecutive_failures += 1;
+            entry.consecutive_successes = 0;
+            entry.last_check_time = chrono::Utc::now();
 
-        // Record error count
-        *entry.error_counts.entry(status_code).or_insert(0) += 1;
+            *entry.error_counts.entry(status_code).or_insert(0) += 1;
 
-        // Update health status based on status code
-        match status_code {
-            500..=599 | 401 | 403 => {
-                // Server error or auth error
-                if entry.consecutive_failures >= 3 {
-                    entry.status = HealthStatus::Unhealthy;
+            match status_code {
+                500..=599 | 401 | 403 => {
+                    if entry.consecutive_failures >= 3 {
+                        entry.status = HealthStatus::Unhealthy;
+                        entry.last_status_change = chrono::Utc::now();
+                        entry.unavailable_until =
+                            Some(chrono::Utc::now() + chrono::Duration::seconds(60));
+                    }
+                },
+                429 => {
+                    entry.status = HealthStatus::Degraded;
                     entry.last_status_change = chrono::Utc::now();
-                    entry.unavailable_until =
-                        Some(chrono::Utc::now() + chrono::Duration::seconds(60));
-                }
-            },
-            429 => {
-                // Rate limit - degraded
-                entry.status = HealthStatus::Degraded;
-                entry.last_status_change = chrono::Utc::now();
-            },
-            _ => {
-                if entry.consecutive_failures >= 5 {
-                    entry.status = HealthStatus::Unhealthy;
-                    entry.last_status_change = chrono::Utc::now();
-                    entry.unavailable_until =
-                        Some(chrono::Utc::now() + chrono::Duration::seconds(60));
-                }
-            },
+                },
+                _ => {
+                    if entry.consecutive_failures >= 5 {
+                        entry.status = HealthStatus::Unhealthy;
+                        entry.last_status_change = chrono::Utc::now();
+                        entry.unavailable_until =
+                            Some(chrono::Utc::now() + chrono::Duration::seconds(60));
+                    }
+                },
+            }
         }
 
-        drop(cache);
-
-        // Mark as dirty
-        let mut dirty = self.dirty.write().await;
-        dirty.insert(auth_id.to_string(), true);
+        {
+            let mut dirty = self.dirty.write().await;
+            dirty.insert(auth_id.to_string(), true);
+        }
     }
 
     /// Get health status
@@ -369,54 +376,55 @@ impl SQLiteHealthManager {
         }
 
         let cache = self.cache.read().await;
-        if let Some(health) = cache.get(auth_id) {
+        cache.get(auth_id).is_none_or(|health| {
             if health.status == HealthStatus::Unhealthy {
                 return false;
             }
-            if let Some(unavailable_until) = health.unavailable_until {
-                if chrono::Utc::now() < unavailable_until {
-                    return false;
-                }
-            }
-            return true;
-        }
-        true
+            health
+                .unavailable_until
+                .is_none_or(|until| chrono::Utc::now() >= until)
+        })
     }
 
     /// Mark auth as unavailable
+    #[allow(clippy::significant_drop_tightening)]
     pub async fn mark_unavailable(&self, auth_id: &str, duration: Duration) {
         if auth_id.is_empty() {
             return;
         }
 
-        let mut cache = self.cache.write().await;
-        let entry = cache
-            .entry(auth_id.to_string())
-            .or_insert_with(|| AuthHealth {
-                status: HealthStatus::Healthy,
-                consecutive_successes: 0,
-                consecutive_failures: 0,
-                last_status_change: chrono::Utc::now(),
-                last_check_time: chrono::Utc::now(),
-                unavailable_until: None,
-                error_counts: HashMap::new(),
-            });
+        {
+            let mut cache = self.cache.write().await;
+            let entry = cache
+                .entry(auth_id.to_string())
+                .or_insert_with(|| AuthHealth {
+                    status: HealthStatus::Healthy,
+                    consecutive_successes: 0,
+                    consecutive_failures: 0,
+                    last_status_change: chrono::Utc::now(),
+                    last_check_time: chrono::Utc::now(),
+                    unavailable_until: None,
+                    error_counts: HashMap::new(),
+                });
 
-        entry.status = HealthStatus::Unhealthy;
-        entry.last_status_change = chrono::Utc::now();
-        entry.unavailable_until =
-            Some(chrono::Utc::now() + chrono::Duration::seconds(duration.as_secs() as i64));
+            entry.status = HealthStatus::Unhealthy;
+            entry.last_status_change = chrono::Utc::now();
+            entry.unavailable_until =
+                Some(chrono::Utc::now() + chrono::Duration::seconds(duration.as_secs() as i64));
+        }
 
-        drop(cache);
-
-        // Mark as dirty
-        let mut dirty = self.dirty.write().await;
-        dirty.insert(auth_id.to_string(), true);
+        {
+            let mut dirty = self.dirty.write().await;
+            dirty.insert(auth_id.to_string(), true);
+        }
     }
 
-    /// Flush dirty data to database
+    /// Flush dirty data to database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing to the database fails.
     pub async fn flush(&self) -> Result<()> {
-        // Collect dirty auth IDs
         let to_flush = {
             let dirty = self.dirty.read().await;
             dirty
@@ -430,14 +438,12 @@ impl SQLiteHealthManager {
             return Ok(());
         }
 
-        // Flush each dirty entry
         for auth_id in to_flush {
             let cache = self.cache.read().await;
             if let Some(health) = cache.get(&auth_id) {
                 if let Err(e) = self.store.write_health(&auth_id, health).await {
                     eprintln!("Failed to flush health for {auth_id}: {e}");
                 } else {
-                    // Mark as clean
                     let mut dirty = self.dirty.write().await;
                     dirty.insert(auth_id, false);
                 }
@@ -447,19 +453,26 @@ impl SQLiteHealthManager {
         Ok(())
     }
 
-    /// Load health from database into cache
+    /// Load health from database into cache.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if loading from the database fails.
     pub async fn load_from_db(&self) -> Result<()> {
         let all_health = self.store.load_all_health().await?;
 
-        let mut cache = self.cache.write().await;
-        for (auth_id, health) in all_health {
-            cache.insert(auth_id, health);
+        {
+            let mut cache = self.cache.write().await;
+            for (auth_id, health) in all_health {
+                cache.insert(auth_id, health);
+            }
         }
 
         Ok(())
     }
 
     /// Start periodic flush task
+    #[must_use]
     pub fn start_flush_task(self: Arc<Self>) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             let mut timer = interval(self.flush_interval);

@@ -10,33 +10,22 @@ impl ContentTypeDetector {
     /// or image data URIs. Returns true if any image content is found.
     ///
     /// # Scenarios
-    /// - Image attachment present → requires vision
-    /// - Text-only content → no vision required
-    /// - Mixed (text + image) → requires vision
+    /// - Image attachment present -> requires vision
+    /// - Text-only content -> no vision required
+    /// - Mixed (text + image) -> requires vision
+    #[must_use]
     pub fn detect_vision_required(request: &Value) -> bool {
         // Check messages array for image content
         if let Some(messages) = request.get("messages").and_then(|m| m.as_array()) {
-            return Self::contains_image_in_messages(messages);
+            return messages
+                .iter()
+                .any(|msg| msg.get("content").is_some_and(Self::content_contains_image));
         }
 
         // Check content field directly (single message format)
-        if let Some(content) = request.get("content") {
-            return Self::content_contains_image(content);
-        }
-
-        false
-    }
-
-    /// Check if messages array contains any image content
-    fn contains_image_in_messages(messages: &[Value]) -> bool {
-        messages.iter().any(|msg| {
-            // Check content field
-            if let Some(content) = msg.get("content") {
-                Self::content_contains_image(content)
-            } else {
-                false
-            }
-        })
+        request
+            .get("content")
+            .is_some_and(Self::content_contains_image)
     }
 
     /// Check if content value (string, array, or object) contains images
@@ -135,9 +124,10 @@ impl ToolDetector {
     /// Empty arrays are treated as "no requirement" (optional feature).
     ///
     /// # Scenarios
-    /// - Non-empty tool definitions → requires tools
-    /// - No tool field → no requirement
-    /// - Empty array → no requirement
+    /// - Non-empty tool definitions -> requires tools
+    /// - No tool field -> no requirement
+    /// - Empty array -> no requirement
+    #[must_use]
     pub fn detect_tools_required(request: &Value) -> bool {
         // Check for tools array (modern format)
         if let Some(tools) = request.get("tools").and_then(|t| t.as_array()) {
@@ -191,6 +181,7 @@ impl ToolDetector {
     }
 
     /// Check if tools are explicitly disabled (`tool_choice` = "none" or empty array)
+    #[must_use]
     pub fn is_tools_disabled(request: &Value) -> bool {
         if let Some(choice) = request.get("tool_choice") {
             if let Some(choice_str) = choice.as_str() {
@@ -217,9 +208,10 @@ impl StreamingExtractor {
     /// Returns false if the parameter is missing (default behavior).
     ///
     /// # Scenarios
-    /// - `stream: true` → streaming required
-    /// - `stream: false` → streaming not required
-    /// - Missing stream parameter → default (false)
+    /// - `stream: true` -> streaming required
+    /// - `stream: false` -> streaming not required
+    /// - Missing stream parameter -> default (false)
+    #[must_use]
     pub fn extract_streaming_preference(request: &Value) -> bool {
         // Direct stream parameter
         if let Some(stream) = request.get("stream") {
@@ -244,6 +236,7 @@ impl StreamingExtractor {
     }
 
     /// Check if streaming is explicitly disabled
+    #[must_use]
     pub fn is_streaming_disabled(request: &Value) -> bool {
         if let Some(stream) = request.get("stream") {
             if let Some(stream_bool) = stream.as_bool() {

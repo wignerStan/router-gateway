@@ -39,6 +39,7 @@ pub enum TimeBucket {
 
 impl TimeBucket {
     /// Get time bucket from timestamp
+    #[must_use]
     pub fn from_timestamp(timestamp: DateTime<Utc>) -> Vec<Self> {
         let hour = timestamp.hour();
         let weekday = timestamp.weekday().num_days_from_sunday() as u8;
@@ -47,21 +48,18 @@ impl TimeBucket {
 
         let mut buckets = Vec::new();
 
-        // Peak/off-peak
         if is_peak {
             buckets.push(Self::Peak);
         } else {
             buckets.push(Self::OffPeak);
         }
 
-        // Weekday/weekend
         if is_weekend {
             buckets.push(Self::Weekend);
         } else {
             buckets.push(Self::Weekday);
         }
 
-        // Compound buckets: weekday/weekend + peak/off-peak
         match (is_weekend, is_peak) {
             (false, true) => buckets.push(Self::WeekdayPeak),
             (false, false) => buckets.push(Self::WeekdayOffPeak),
@@ -69,16 +67,14 @@ impl TimeBucket {
             (true, false) => buckets.push(Self::WeekendOffPeak),
         }
 
-        // Specific hour
         buckets.push(Self::Hour(hour as u8));
-
-        // Specific day
         buckets.push(Self::DayOfWeek(weekday));
 
         buckets
     }
 
     /// Get peak/off-peak bucket
+    #[must_use]
     pub fn peak_off_peak(timestamp: DateTime<Utc>) -> Self {
         let hour = timestamp.hour();
         if (PEAK_HOUR_START..PEAK_HOUR_END).contains(&hour) {
@@ -89,6 +85,7 @@ impl TimeBucket {
     }
 
     /// Get weekday/weekend bucket
+    #[must_use]
     pub fn weekday_weekend(timestamp: DateTime<Utc>) -> Self {
         let weekday = timestamp.weekday().num_days_from_sunday();
         if weekday == 0 || weekday == 6 {
@@ -197,7 +194,6 @@ fn update_bucket_stats(stats: &mut BucketStatistics, outcome: &ExecutionOutcome)
         if stats.avg_latency_ms == 0.0 {
             stats.avg_latency_ms = latency;
         } else {
-            // EWMA smoothing
             stats.avg_latency_ms =
                 EWMA_ALPHA.mul_add(latency, (1.0 - EWMA_ALPHA) * stats.avg_latency_ms);
         }
@@ -218,6 +214,7 @@ fn update_bucket_stats(stats: &mut BucketStatistics, outcome: &ExecutionOutcome)
 
 impl RouteStatistics {
     /// Create new route statistics
+    #[must_use]
     pub fn new(route_id: String) -> Self {
         let now = Utc::now();
         Self {
@@ -241,11 +238,13 @@ impl RouteStatistics {
     }
 
     /// Get statistics for a specific time bucket
+    #[must_use]
     pub fn get_bucket_stats(&self, bucket: &TimeBucket) -> Option<&BucketStatistics> {
         self.time_buckets.get(bucket)
     }
 
     /// Get all time bucket statistics
+    #[must_use]
     pub const fn get_all_buckets(&self) -> &HashMap<TimeBucket, BucketStatistics> {
         &self.time_buckets
     }
@@ -292,6 +291,7 @@ impl Default for ColdStartPriors {
 
 impl ColdStartPriors {
     /// Create new cold start priors
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -307,26 +307,25 @@ impl ColdStartPriors {
     }
 
     /// Get prior for a route
+    #[must_use]
     pub fn get_prior(&self, provider: Option<&str>, tier: Option<&str>) -> BucketStatistics {
-        // Try provider prior first
         if let Some(p) = provider {
             if let Some(prior) = self.provider_priors.get(p) {
                 return prior.clone();
             }
         }
 
-        // Try tier prior
         if let Some(t) = tier {
             if let Some(prior) = self.tier_priors.get(t) {
                 return prior.clone();
             }
         }
 
-        // Fall back to neutral prior
         self.neutral_prior.clone()
     }
 
     /// Initialize route statistics with priors
+    #[must_use]
     pub fn initialize_route(
         &self,
         route_id: String,
@@ -353,6 +352,7 @@ pub struct StatisticsAggregator {
 
 impl StatisticsAggregator {
     /// Create a new statistics aggregator
+    #[must_use]
     pub fn new() -> Self {
         Self {
             route_stats: HashMap::new(),
@@ -362,6 +362,7 @@ impl StatisticsAggregator {
     }
 
     /// Create with custom priors
+    #[must_use]
     pub fn with_priors(priors: ColdStartPriors) -> Self {
         Self {
             route_stats: HashMap::new(),
@@ -372,9 +373,9 @@ impl StatisticsAggregator {
 
     /// Record an execution outcome
     pub fn record(&mut self, outcome: &ExecutionOutcome) {
-        let route_id = outcome.effective_route().to_string();
-
         use std::collections::hash_map::Entry;
+
+        let route_id = outcome.effective_route().to_string();
         let stats = match self.route_stats.entry(route_id) {
             Entry::Occupied(entry) => entry.into_mut(),
             Entry::Vacant(entry) => {
@@ -387,11 +388,13 @@ impl StatisticsAggregator {
     }
 
     /// Get statistics for a route
+    #[must_use]
     pub fn get_stats(&self, route_id: &str) -> Option<&RouteStatistics> {
         self.route_stats.get(route_id)
     }
 
     /// Get all route statistics
+    #[must_use]
     pub const fn get_all_stats(&self) -> &HashMap<String, RouteStatistics> {
         &self.route_stats
     }
@@ -400,15 +403,14 @@ impl StatisticsAggregator {
     pub fn initialize_route(
         &mut self,
         route_id: String,
-        provider: Option<String>,
-        tier: Option<String>,
+        provider: Option<&str>,
+        tier: Option<&str>,
     ) {
         use std::collections::hash_map::Entry;
+
         if let Entry::Vacant(entry) = self.route_stats.entry(route_id) {
             let route_id = entry.key().clone();
-            let stats =
-                self.priors
-                    .initialize_route(route_id, provider.as_deref(), tier.as_deref());
+            let stats = self.priors.initialize_route(route_id, provider, tier);
             entry.insert(stats);
         }
     }
@@ -443,7 +445,6 @@ mod tests {
 
     #[test]
     fn test_time_bucket_from_timestamp() {
-        // Monday at 10 AM (peak, weekday)
         let timestamp = DateTime::parse_from_rfc3339("2024-01-08T10:00:00Z")
             .unwrap()
             .with_timezone(&Utc);
@@ -457,7 +458,6 @@ mod tests {
 
     #[test]
     fn test_time_bucket_weekend() {
-        // Saturday at 10 AM (peak, weekend)
         let timestamp = DateTime::parse_from_rfc3339("2024-01-06T10:00:00Z")
             .unwrap()
             .with_timezone(&Utc);
@@ -470,7 +470,6 @@ mod tests {
 
     #[test]
     fn test_time_bucket_off_peak() {
-        // Monday at 2 AM (off-peak, weekday)
         let timestamp = DateTime::parse_from_rfc3339("2024-01-08T02:00:00Z")
             .unwrap()
             .with_timezone(&Utc);
@@ -511,7 +510,6 @@ mod tests {
 
         stats.update(&outcome);
 
-        // Should have created time buckets
         assert!(stats.get_bucket_stats(&TimeBucket::Peak).is_some());
         assert!(stats.get_bucket_stats(&TimeBucket::Weekday).is_some());
         assert!(stats.get_bucket_stats(&TimeBucket::Hour(10)).is_some());
@@ -551,7 +549,6 @@ mod tests {
     fn test_cold_start_priors_fallback() {
         let priors = ColdStartPriors::new();
 
-        // No provider or tier - should use neutral prior
         let stats = priors.initialize_route("route-1".to_string(), None, None);
         assert_eq!(stats.overall.total_requests, 10);
         assert_eq!(stats.overall.success_rate, 0.9);
@@ -579,7 +576,7 @@ mod tests {
     fn test_statistics_aggregator_initialize_route() {
         let mut aggregator = StatisticsAggregator::new();
 
-        aggregator.initialize_route("route-1".to_string(), Some("anthropic".to_string()), None);
+        aggregator.initialize_route("route-1".to_string(), Some("anthropic"), None);
 
         assert!(aggregator.get_stats("route-1").is_some());
     }
@@ -670,13 +667,8 @@ mod tests {
         assert_eq!(stats.overall.fallback_count, 1);
     }
 
-    // ========================================
-    // Compound Weekend/Weekday Bucket Tests
-    // ========================================
-
     #[test]
     fn test_compound_buckets_isolate_weekday_peak() {
-        // Monday 10:00 UTC -> weekday + peak
         let ts = DateTime::parse_from_rfc3339("2026-03-09T10:00:00Z")
             .unwrap()
             .with_timezone(&Utc);
@@ -692,7 +684,6 @@ mod tests {
 
     #[test]
     fn test_compound_buckets_isolate_weekday_offpeak() {
-        // Tuesday 03:00 UTC -> weekday + off-peak
         let ts = DateTime::parse_from_rfc3339("2026-03-10T03:00:00Z")
             .unwrap()
             .with_timezone(&Utc);
@@ -708,7 +699,6 @@ mod tests {
 
     #[test]
     fn test_compound_buckets_isolate_weekend_peak() {
-        // Saturday 14:00 UTC -> weekend + peak
         let ts = DateTime::parse_from_rfc3339("2026-03-14T14:00:00Z")
             .unwrap()
             .with_timezone(&Utc);
@@ -724,7 +714,6 @@ mod tests {
 
     #[test]
     fn test_compound_buckets_isolate_weekend_offpeak() {
-        // Sunday 02:00 UTC -> weekend + off-peak
         let ts = DateTime::parse_from_rfc3339("2026-03-15T02:00:00Z")
             .unwrap()
             .with_timezone(&Utc);
@@ -740,7 +729,6 @@ mod tests {
 
     #[test]
     fn test_weekday_peak_boundary_hours() {
-        // Monday 08:59 -> weekday off-peak (just before peak)
         let ts = DateTime::parse_from_rfc3339("2026-03-09T08:59:00Z")
             .unwrap()
             .with_timezone(&Utc);
@@ -748,7 +736,6 @@ mod tests {
         assert!(buckets.contains(&TimeBucket::WeekdayOffPeak));
         assert!(buckets.contains(&TimeBucket::OffPeak));
 
-        // Monday 09:00 -> weekday peak (peak starts)
         let ts = DateTime::parse_from_rfc3339("2026-03-09T09:00:00Z")
             .unwrap()
             .with_timezone(&Utc);
@@ -756,14 +743,12 @@ mod tests {
         assert!(buckets.contains(&TimeBucket::WeekdayPeak));
         assert!(buckets.contains(&TimeBucket::Peak));
 
-        // Monday 20:59 -> weekday peak (just before off-peak)
         let ts = DateTime::parse_from_rfc3339("2026-03-09T20:59:00Z")
             .unwrap()
             .with_timezone(&Utc);
         let buckets = TimeBucket::from_timestamp(ts);
         assert!(buckets.contains(&TimeBucket::WeekdayPeak));
 
-        // Monday 21:00 -> weekday off-peak (off-peak starts)
         let ts = DateTime::parse_from_rfc3339("2026-03-09T21:00:00Z")
             .unwrap()
             .with_timezone(&Utc);
@@ -775,7 +760,6 @@ mod tests {
     fn test_stats_recorded_to_correct_compound_buckets() {
         let mut stats = RouteStatistics::new("route-1".to_string());
 
-        // Record a weekday peak event (Monday 10am)
         let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 200, 300, 200);
         let ts = DateTime::parse_from_rfc3339("2026-03-09T10:00:00Z")
             .unwrap()
@@ -784,14 +768,12 @@ mod tests {
         outcome_wp.timestamp = ts;
         stats.update(&outcome_wp);
 
-        // Record a weekend off-peak event (Sunday 2am)
         let mut outcome_wo = outcome;
         outcome_wo.timestamp = DateTime::parse_from_rfc3339("2026-03-15T02:00:00Z")
             .unwrap()
             .with_timezone(&Utc);
         stats.update(&outcome_wo);
 
-        // Verify compound buckets are independently populated
         assert_eq!(
             stats
                 .get_bucket_stats(&TimeBucket::WeekdayPeak)
@@ -808,7 +790,6 @@ mod tests {
             1,
             "WeekendOffPeak should have exactly 1 request"
         );
-        // Verify compound buckets that had no events return None or 0
         assert_eq!(
             stats
                 .get_bucket_stats(&TimeBucket::WeekdayOffPeak)
@@ -824,7 +805,6 @@ mod tests {
             "WeekendPeak should have 0 requests"
         );
 
-        // Verify parent buckets aggregate correctly
         assert_eq!(
             stats
                 .get_bucket_stats(&TimeBucket::Weekday)

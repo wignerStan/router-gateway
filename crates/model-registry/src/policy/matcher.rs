@@ -11,45 +11,50 @@ use super::types::{
 use crate::categories::ModelCategorization;
 use crate::info::ModelInfo;
 
+/// Evaluates models against a set of routing policies.
 pub struct PolicyMatcher {
     registry: PolicyRegistry,
 }
 
 impl PolicyMatcher {
-    /// Create a new policy matcher with the given registry
+    /// Creates a new policy matcher wrapping the given registry.
+    #[must_use]
     pub const fn new(registry: PolicyRegistry) -> Self {
         Self { registry }
     }
 
-    /// Create a matcher with an empty registry
+    /// Creates a matcher with an empty registry.
+    #[must_use]
     pub const fn empty() -> Self {
         Self {
             registry: PolicyRegistry::new(),
         }
     }
 
-    /// Get reference to the underlying registry
+    /// Returns a reference to the underlying registry.
+    #[must_use]
     pub const fn registry(&self) -> &PolicyRegistry {
         &self.registry
     }
 
-    /// Get mutable reference to the underlying registry
+    /// Returns a mutable reference to the underlying registry.
     pub const fn registry_mut(&mut self) -> &mut PolicyRegistry {
         &mut self.registry
     }
 
-    /// Evaluate all policies against a model in the given context
+    /// Evaluates all policies against a model in the given context.
     ///
-    /// Returns a list of `PolicyMatch` for all policies that match the model
-    /// and satisfy their conditions.
+    /// Returns all [`PolicyMatch`] entries for policies whose conditions are met
+    /// and whose dimension filters match the model.
+    #[must_use]
     pub fn evaluate(&self, model: &ModelInfo, context: &PolicyContext) -> Vec<PolicyMatch> {
         self.registry
             .all()
             .iter()
             .filter(|policy| policy.enabled && policy.matches(context))
-            .filter(|policy| self.matches_model(policy, model))
+            .filter(|policy| Self::matches_model(policy, model))
             .map(|policy| {
-                let score = self.calculate_score(policy, model, context);
+                let score = Self::calculate_score(policy, model, context);
                 PolicyMatch {
                     policy: policy.clone(),
                     score,
@@ -59,7 +64,8 @@ impl PolicyMatcher {
             .collect()
     }
 
-    /// Evaluate and return only the best matching policy (highest priority + score)
+    /// Evaluates and returns the best matching policy (highest priority + score).
+    #[must_use]
     pub fn evaluate_best(&self, model: &ModelInfo, context: &PolicyContext) -> Option<PolicyMatch> {
         let mut matches = self.evaluate(model, context);
         if matches.is_empty() {
@@ -78,8 +84,8 @@ impl PolicyMatcher {
         matches.into_iter().next()
     }
 
-    /// Check if a single policy matches a model's dimensions
-    fn matches_model(&self, policy: &RoutingPolicy, model: &ModelInfo) -> bool {
+    /// Checks if a single policy matches a model's dimensions.
+    fn matches_model(policy: &RoutingPolicy, model: &ModelInfo) -> bool {
         // Check capabilities (ALL "require" must match, ANY "exclude" must not match)
         for cap_filter in &policy.filters.capabilities {
             let has_capability = match cap_filter.capability {
@@ -99,9 +105,6 @@ impl PolicyMatcher {
                     if has_capability {
                         return false;
                     }
-                },
-                "prefer" => {
-                    // Prefer doesn't block matching, just affects score
                 },
                 _ => {},
             }
@@ -142,7 +145,7 @@ impl PolicyMatcher {
         // Check modalities (ALL must match if specified)
         // Note: ModelInfo doesn't have explicit modality field, so we infer from capabilities
         for modality in &policy.filters.modalities {
-            if !self.check_modality_match(model, modality) {
+            if !Self::check_modality_match(model, *modality) {
                 return false;
             }
         }
@@ -173,25 +176,18 @@ impl PolicyMatcher {
         true
     }
 
-    /// Check if model supports a modality
-    const fn check_modality_match(&self, model: &ModelInfo, modality: &ModalityCategory) -> bool {
+    /// Checks if model supports a modality.
+    const fn check_modality_match(model: &ModelInfo, modality: ModalityCategory) -> bool {
         match modality {
-            ModalityCategory::Text => true, // All models support text
-            ModalityCategory::Image => model.capabilities.vision,
-            ModalityCategory::Audio => false, // Not tracked in current ModelInfo
-            ModalityCategory::Video => model.capabilities.vision, // Vision models often support video
-            ModalityCategory::Embedding => false,                 // Would need model type field
-            ModalityCategory::Code => true, // Assume all models can generate code
+            ModalityCategory::Image | ModalityCategory::Video => model.capabilities.vision,
+            ModalityCategory::Audio | ModalityCategory::Embedding => false,
+            ModalityCategory::Text | ModalityCategory::Code => true,
         }
     }
 
-    /// Calculate match score for a policy-model pair
-    fn calculate_score(
-        &self,
-        policy: &RoutingPolicy,
-        model: &ModelInfo,
-        _context: &PolicyContext,
-    ) -> f64 {
+    /// Calculates match score for a policy-model pair.
+    #[must_use]
+    fn calculate_score(policy: &RoutingPolicy, model: &ModelInfo, _context: &PolicyContext) -> f64 {
         // Base score from action type
         let mut score = match policy.action.action_type.as_str() {
             "prefer" => 1.5,
@@ -242,10 +238,10 @@ impl PolicyMatcher {
         score
     }
 
-    /// Calculate combined policy weight factor for a model
+    /// Calculates a combined weight factor from all matching policies.
     ///
-    /// This combines all matching policies' scores into a single weight factor
-    /// that can be applied to the base weight calculation.
+    /// Returns `1.0` when no policies match (neutral weight).
+    #[must_use]
     pub fn calculate_weight_factor(&self, model: &ModelInfo, context: &PolicyContext) -> f64 {
         let matches = self.evaluate(model, context);
 
@@ -273,13 +269,14 @@ impl PolicyMatcher {
         avg_weight.clamp(0.1, 10.0)
     }
 
-    /// Check if a model should be blocked by any policy
+    /// Returns `true` if any policy blocks the given model in the context.
+    #[must_use]
     pub fn is_blocked(&self, model: &ModelInfo, context: &PolicyContext) -> bool {
         self.registry.all().iter().any(|policy| {
             policy.enabled
                 && policy.matches(context)
                 && policy.action.action_type == "block"
-                && self.matches_model(policy, model)
+                && Self::matches_model(policy, model)
         })
     }
 }

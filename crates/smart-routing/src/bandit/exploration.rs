@@ -7,6 +7,7 @@ impl BanditPolicy {
     /// Select a route using Thompson sampling
     ///
     /// Returns the selected route ID, or None if no routes available
+    #[must_use]
     pub fn select_route(&self, route_ids: &[&str]) -> Option<String> {
         if route_ids.is_empty() {
             return None;
@@ -28,6 +29,7 @@ impl BanditPolicy {
     }
 
     /// Select route with utility-weighted Thompson sampling
+    #[must_use]
     pub fn select_route_with_utility(
         &self,
         route_ids: &[&str],
@@ -63,17 +65,18 @@ impl BanditPolicy {
     }
 
     /// Thompson sampling: draw from Beta(alpha, beta)
+    #[must_use]
     pub(crate) fn thompson_sample(&self, route_id: &str) -> f64 {
         let stats = self.route_stats.get(route_id);
 
         match stats {
             None => {
                 let (alpha, beta) = self.get_prior(route_id);
-                self.sample_beta(alpha, beta)
+                Self::sample_beta(alpha, beta)
             },
             Some(s) if s.pulls < self.config.min_samples_for_thompson => {
                 let (alpha, beta) = self.get_prior(route_id);
-                self.sample_beta(alpha, beta)
+                Self::sample_beta(alpha, beta)
             },
             Some(s) => {
                 // Use actual statistics
@@ -81,7 +84,7 @@ impl BanditPolicy {
                 let beta = s.failures;
 
                 // Apply diversity penalty
-                let base_sample = self.sample_beta(alpha, beta);
+                let base_sample = Self::sample_beta(alpha, beta);
                 let penalty = s.diversity_penalty * self.config.diversity_weight;
                 (base_sample - penalty).max(0.0)
             },
@@ -89,7 +92,9 @@ impl BanditPolicy {
     }
 
     /// Sample from Beta distribution using gamma distribution
-    pub(crate) fn sample_beta(&self, alpha: f64, beta: f64) -> f64 {
+    #[allow(clippy::many_single_char_names)]
+    #[must_use]
+    pub(crate) fn sample_beta(alpha: f64, beta: f64) -> f64 {
         let mut rng = rand::thread_rng();
 
         // Beta(alpha, beta) = Gamma(alpha, 1) / (Gamma(alpha, 1) + Gamma(beta, 1))
@@ -109,8 +114,8 @@ impl BanditPolicy {
             (mean + z * std_dev).clamp(0.0, 1.0)
         } else {
             // Gamma sampling for small parameters
-            let gamma_alpha = self.sample_gamma(alpha);
-            let gamma_beta = self.sample_gamma(beta);
+            let gamma_alpha = Self::sample_gamma(alpha);
+            let gamma_beta = Self::sample_gamma(beta);
             let sum = gamma_alpha + gamma_beta;
 
             if sum > 0.0 {
@@ -122,17 +127,19 @@ impl BanditPolicy {
     }
 
     /// Sample from Gamma distribution using Marsaglia and Tsang's method
-    pub(crate) fn sample_gamma(&self, shape: f64) -> f64 {
+    #[allow(clippy::many_single_char_names)]
+    #[must_use]
+    pub(crate) fn sample_gamma(shape: f64) -> f64 {
         let mut rng = rand::thread_rng();
 
         if shape < 1.0 {
             // Use transformation for shape < 1
-            let u: f64 = rng.gen();
-            return self.sample_gamma(1.0 + shape) * u.powf(1.0 / shape);
+            let uniform: f64 = rng.gen();
+            return Self::sample_gamma(1.0 + shape) * uniform.powf(1.0 / shape);
         }
 
-        let d = shape - 1.0 / 3.0;
-        let c = (1.0 / 3.0) / d.sqrt();
+        let delta = shape - 1.0 / 3.0;
+        let c = (1.0 / 3.0) / delta.sqrt();
 
         loop {
             let mut x: f64;
@@ -152,11 +159,11 @@ impl BanditPolicy {
             let u: f64 = rng.gen();
 
             if u < 0.0331f64.mul_add(-(x * x).powi(2), 1.0) {
-                return d * v;
+                return delta * v;
             }
 
-            if (u / v).ln() < (0.5 * x).mul_add(x, d * (1.0 - v + v.ln())) {
-                return d * v;
+            if (u / v).ln() < (0.5 * x).mul_add(x, delta * (1.0 - v + v.ln())) {
+                return delta * v;
             }
         }
     }
@@ -189,11 +196,13 @@ impl BanditPolicy {
     }
 
     /// Get route statistics
+    #[must_use]
     pub fn get_stats(&self, route_id: &str) -> Option<&RouteStats> {
         self.route_stats.get(route_id)
     }
 
     /// Get all route statistics
+    #[must_use]
     pub const fn get_all_stats(&self) -> &HashMap<String, RouteStats> {
         &self.route_stats
     }
@@ -217,16 +226,18 @@ impl BanditPolicy {
     fn get_prior(&self, route_id: &str) -> (f64, f64) {
         self.route_tiers
             .get(route_id)
-            .and_then(|tier| self.config.tier_priors.as_ref().map(|tp| tp.get(tier)))
+            .and_then(|tier| self.config.tier_priors.as_ref().map(|tp| tp.get(*tier)))
             .unwrap_or((self.config.prior_successes, self.config.prior_failures))
     }
 
     /// Get utility estimator
+    #[must_use]
     pub const fn utility_estimator(&self) -> &crate::utility::UtilityEstimator {
         &self.utility_estimator
     }
 
     /// Get config
+    #[must_use]
     pub const fn config(&self) -> &BanditConfig {
         &self.config
     }

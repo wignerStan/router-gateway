@@ -19,19 +19,24 @@ pub struct TraceSpan {
 
     /// Timestamps
     pub start_time: DateTime<Utc>,
+    /// When the trace completed, if finished.
     pub end_time: Option<DateTime<Utc>>,
 
     /// Request data
     pub input_tokens: Option<u32>,
+    /// The prompt text sent to the LLM, if available.
     pub prompt: Option<String>,
 
     /// Response data
     pub output_tokens: Option<u32>,
+    /// HTTP status code returned by the provider.
     pub status_code: Option<u16>,
+    /// End-to-end latency in milliseconds.
     pub latency_ms: Option<u64>,
 
     /// Metadata
     pub error_message: Option<String>,
+    /// Whether the request used server-sent streaming.
     pub is_streaming: bool,
 }
 
@@ -57,6 +62,7 @@ impl TraceSpan {
     /// assert_eq!(span.provider, "openai");
     /// assert!(span.end_time.is_none());
     /// ```
+    #[must_use]
     pub fn new(
         request_id: String,
         provider: String,
@@ -97,7 +103,8 @@ impl TraceSpan {
         self.complete(500);
     }
 
-    /// Check if the trace was successful
+    /// Check if the trace was successful (2xx status code).
+    #[must_use]
     pub fn is_success(&self) -> bool {
         self.status_code.is_some_and(|s| (200..300).contains(&s))
     }

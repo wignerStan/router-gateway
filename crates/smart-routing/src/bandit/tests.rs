@@ -278,25 +278,21 @@ mod beta_sampling {
 
     #[test]
     fn test_beta_sampling_bounds() {
-        let policy = BanditPolicy::new();
-
         // Test that beta samples are in [0, 1]
         for _ in 0..100 {
-            let sample = policy.sample_beta(1.0, 1.0);
+            let sample = BanditPolicy::sample_beta(1.0, 1.0);
             assert!((0.0..=1.0).contains(&sample));
         }
     }
 
     #[test]
     fn test_beta_sampling_distribution() {
-        let policy = BanditPolicy::new();
-
         // Beta(1, 1) should be uniform around 0.5
-        let mut sum = 0.0;
+        let mut sum = 0.0_f64;
         for _ in 0..1000 {
-            sum += policy.sample_beta(1.0, 1.0);
+            sum += BanditPolicy::sample_beta(1.0, 1.0);
         }
-        let mean = sum / 1000.0;
+        let mean = sum / 1000.0_f64;
 
         // Mean should be close to 0.5
         assert!((mean - 0.5).abs() < 0.1);
@@ -304,11 +300,9 @@ mod beta_sampling {
 
     #[test]
     fn test_beta_sampling_very_small_alpha_beta() {
-        let policy = BanditPolicy::new();
-
         // Very small parameters (near zero)
         for _ in 0..100 {
-            let sample = policy.sample_beta(0.001, 0.001);
+            let sample = BanditPolicy::sample_beta(0.001, 0.001);
             assert!(
                 (0.0..=1.0).contains(&sample),
                 "Sample should be in [0,1] with small params: {sample}"
@@ -318,12 +312,10 @@ mod beta_sampling {
 
     #[test]
     fn test_beta_sampling_very_large_alpha_beta() {
-        let policy = BanditPolicy::new();
-
         // Very large parameters (uses normal approximation)
         let mut samples = Vec::new();
         for _ in 0..100 {
-            let sample = policy.sample_beta(100.0, 100.0);
+            let sample = BanditPolicy::sample_beta(100.0, 100.0);
             assert!(
                 (0.0..=1.0).contains(&sample),
                 "Sample should be in [0,1] with large params: {sample}"
@@ -341,12 +333,10 @@ mod beta_sampling {
 
     #[test]
     fn test_beta_sampling_skewed_distributions() {
-        let policy = BanditPolicy::new();
-
         // Beta(100, 1) should give values close to 1
         let mut samples_high = Vec::new();
         for _ in 0..100 {
-            samples_high.push(policy.sample_beta(100.0, 1.0));
+            samples_high.push(BanditPolicy::sample_beta(100.0, 1.0));
         }
         let mean_high: f64 = samples_high.iter().sum::<f64>() / samples_high.len() as f64;
         assert!(
@@ -357,7 +347,7 @@ mod beta_sampling {
         // Beta(1, 100) should give values close to 0
         let mut samples_low = Vec::new();
         for _ in 0..100 {
-            samples_low.push(policy.sample_beta(1.0, 100.0));
+            samples_low.push(BanditPolicy::sample_beta(1.0, 100.0));
         }
         let mean_low: f64 = samples_low.iter().sum::<f64>() / samples_low.len() as f64;
         assert!(mean_low < 0.1, "Beta(1,100) mean should be low: {mean_low}");
@@ -369,23 +359,19 @@ mod gamma_sampling {
 
     #[test]
     fn test_gamma_sampling_positive() {
-        let policy = BanditPolicy::new();
-
         // Test that gamma samples are positive
         for _ in 0..100 {
-            let sample = policy.sample_gamma(2.0);
+            let sample = BanditPolicy::sample_gamma(2.0);
             assert!(sample > 0.0);
         }
     }
 
     #[test]
     fn test_gamma_sampling_shape_less_than_one() {
-        let policy = BanditPolicy::new();
-
         // Shape < 1 uses transformation method
-        for shape in [0.1, 0.5, 0.9] {
+        for shape in [0.1_f64, 0.5, 0.9] {
             for _ in 0..50 {
-                let sample = policy.sample_gamma(shape);
+                let sample = BanditPolicy::sample_gamma(shape);
                 assert!(
                     sample > 0.0,
                     "Gamma sample with shape {shape} should be positive: {sample}"

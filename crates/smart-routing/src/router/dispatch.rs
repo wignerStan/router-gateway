@@ -27,11 +27,13 @@ impl Router {
     /// assert!(config.use_bandit);
     /// assert_eq!(config.max_fallbacks, 5);
     /// ```
+    #[must_use]
     pub fn new() -> Self {
         Self::with_config(RouterConfig::default())
     }
 
     /// Create a new Router with custom configuration
+    #[must_use]
     pub fn with_config(config: RouterConfig) -> Self {
         Self {
             candidate_builder: crate::candidate::CandidateBuilder::new(),
@@ -54,14 +56,15 @@ impl Router {
 
     /// Add a credential with its associated models
     pub fn add_credential(&mut self, credential_id: String, model_ids: Vec<String>) -> &mut Self {
-        self.candidate_builder
+        let _ = self
+            .candidate_builder
             .add_credential(credential_id, model_ids);
         self
     }
 
     /// Set model information
     pub fn set_model(&mut self, model_id: String, info: ModelInfo) -> &mut Self {
-        self.candidate_builder.set_model(model_id, info);
+        let _ = self.candidate_builder.set_model(model_id, info);
         self
     }
 
@@ -334,26 +337,31 @@ impl Router {
     }
 
     /// Get metrics collector
+    #[must_use]
     pub const fn metrics(&self) -> &MetricsCollector {
         self.selector.metrics()
     }
 
     /// Get health manager
+    #[must_use]
     pub const fn health(&self) -> &HealthManager {
         self.selector.health()
     }
 
     /// Get session manager
+    #[must_use]
     pub const fn session_manager(&self) -> &SessionAffinityManager {
         &self.session_manager
     }
 
     /// Get bandit policy (returns reference to the Arc for shared access)
+    #[must_use]
     pub const fn bandit_policy(&self) -> &Arc<Mutex<BanditPolicy>> {
         &self.bandit_policy
     }
 
     /// Get config
+    #[must_use]
     pub const fn config(&self) -> &RouterConfig {
         &self.config
     }

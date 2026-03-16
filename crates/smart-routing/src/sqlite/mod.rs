@@ -1,6 +1,12 @@
+//! SQLite-backed persistence for metrics, health, and selector state.
+
+/// Health data collectors backed by `SQLite`.
 pub mod collectors;
+/// Error types for `SQLite` operations.
 pub mod error;
+/// `SQLite`-based credential selector with weighted scoring.
 pub mod selector;
+/// SQLite store configuration and connection management.
 pub mod store;
 
 #[cfg(test)]

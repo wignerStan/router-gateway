@@ -50,6 +50,7 @@ impl Default for SessionAffinityManager {
 
 impl SessionAffinityManager {
     /// Create a new session affinity manager
+    #[must_use]
     pub fn new() -> Self {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
@@ -59,6 +60,7 @@ impl SessionAffinityManager {
     }
 
     /// Create a session affinity manager with custom limits
+    #[must_use]
     pub fn with_limits(max_sessions: usize, session_ttl_seconds: i64) -> Self {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
@@ -88,6 +90,11 @@ impl SessionAffinityManager {
     }
 
     /// Set or update the preferred provider for a session
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `session_id` is empty.
+    /// Returns an error if `provider` is empty.
     pub async fn set_provider(&self, session_id: String, provider: String) -> Result<(), String> {
         if session_id.is_empty() {
             return Err("Session ID cannot be empty".to_string());
@@ -96,30 +103,32 @@ impl SessionAffinityManager {
             return Err("Provider cannot be empty".to_string());
         }
 
-        let mut sessions = self.sessions.write().await;
+        {
+            use std::collections::hash_map::Entry;
+            let mut sessions = self.sessions.write().await;
 
-        use std::collections::hash_map::Entry;
-        match sessions.entry(session_id) {
-            Entry::Occupied(mut entry) => {
-                let affinity = entry.get_mut();
-                affinity.preferred_provider = provider;
-                affinity.last_access = Utc::now();
-                affinity.request_count += 1;
-            },
-            Entry::Vacant(entry) => {
-                let session_id = entry.key().clone();
-                entry.insert(SessionAffinity {
-                    session_id,
-                    preferred_provider: provider,
-                    last_access: Utc::now(),
-                    request_count: 1,
-                });
-            },
-        }
+            match sessions.entry(session_id) {
+                Entry::Occupied(mut entry) => {
+                    let affinity = entry.get_mut();
+                    affinity.preferred_provider = provider;
+                    affinity.last_access = Utc::now();
+                    affinity.request_count += 1;
+                },
+                Entry::Vacant(entry) => {
+                    let session_id = entry.key().clone();
+                    entry.insert(SessionAffinity {
+                        session_id,
+                        preferred_provider: provider,
+                        last_access: Utc::now(),
+                        request_count: 1,
+                    });
+                },
+            }
 
-        // Cleanup if over limit
-        if sessions.len() > self.max_sessions {
-            self.cleanup_expired(&mut sessions);
+            // Cleanup if over limit
+            if sessions.len() > self.max_sessions {
+                self.cleanup_expired(&mut sessions);
+            }
         }
 
         Ok(())

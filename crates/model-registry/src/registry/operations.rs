@@ -22,11 +22,13 @@ impl Registry {
     /// assert_eq!(registry.cached_count().await, 0);
     /// # }
     /// ```
+    #[must_use]
     pub fn new() -> Self {
         Self::with_config(RegistryConfig::default())
     }
 
     /// Creates a new model registry with custom configuration.
+    #[must_use]
     pub fn with_config(config: RegistryConfig) -> Self {
         let ttl = config.ttl;
         let shutdown_token = CancellationToken::new();
@@ -35,7 +37,7 @@ impl Registry {
             cache: Arc::new(RwLock::new(HashMap::new())),
             pending_fetches: Arc::new(Mutex::new(HashMap::new())),
             ttl,
-            _background_handle: None,
+            background_handle: None,
             shutdown_token,
         };
 
@@ -48,7 +50,12 @@ impl Registry {
     }
 
     /// Retrieves model information for a single model ID.
-    /// Returns None if the model is not found.
+    ///
+    /// Returns `None` if the model is not found.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the model ID is empty or the underlying fetcher fails.
     pub async fn get(
         &self,
         model_id: &str,
@@ -75,11 +82,6 @@ impl Registry {
             if let Some(tx) = pending.get(model_id) {
                 tx.subscribe()
             } else {
-                // Otherwise, we are the fetcher
-                let (tx, _rx) = broadcast::channel(1);
-                pending.insert(model_id.to_string(), tx.clone());
-                drop(pending); // Release lock before I/O
-
                 // Ensure cleanup of pending map even on cancellation
                 struct FetchGuard {
                     id: String,
@@ -92,6 +94,11 @@ impl Registry {
                         }
                     }
                 }
+
+                let (tx, _rx) = broadcast::channel(1);
+                pending.insert(model_id.to_string(), tx.clone());
+                drop(pending); // Release lock before I/O
+
                 let _guard = FetchGuard {
                     id: model_id.to_string(),
                     pending: Arc::clone(&self.pending_fetches),
@@ -106,14 +113,16 @@ impl Registry {
                             Err(e.to_string())
                         } else {
                             // Cache valid result
-                            let mut cache = self.cache.write().await;
-                            cache.insert(
-                                model_id.to_string(),
-                                CachedModelInfo {
-                                    info: info.clone(),
-                                    expires_at: Utc::now() + self.ttl,
-                                },
-                            );
+                            {
+                                let mut cache = self.cache.write().await;
+                                cache.insert(
+                                    model_id.to_string(),
+                                    CachedModelInfo {
+                                        info: info.clone(),
+                                        expires_at: Utc::now() + self.ttl,
+                                    },
+                                );
+                            }
                             Ok(Some(info))
                         }
                     },
@@ -139,8 +148,13 @@ impl Registry {
         }
     }
 
-    /// Retrieves model information for multiple model IDs.
-    /// Returns a map of modelID -> `ModelInfo` for found models.
+    /// Retrieves model information for multiple model IDs in parallel.
+    ///
+    /// Returns a map of model ID to [`ModelInfo`] for found models.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any underlying fetch operation fails.
     pub async fn get_multiple(
         &self,
         model_ids: &[String],
@@ -154,24 +168,25 @@ impl Registry {
         let now = Utc::now();
 
         // Check cache and identify needed models
-        {
+        let to_fetch: Vec<(String, Self)> = {
             let cache = self.cache.read().await;
-            for model_id in model_ids {
-                if model_id.is_empty() {
-                    continue;
-                }
-                if let Some(cached) = cache.get(model_id) {
-                    if now < cached.expires_at {
-                        result.insert(model_id.clone(), cached.info.clone());
-                        continue;
+            model_ids
+                .iter()
+                .filter(|model_id| !model_id.is_empty())
+                .filter_map(|model_id| {
+                    if let Some(cached) = cache.get(model_id) {
+                        if now < cached.expires_at {
+                            result.insert(model_id.clone(), cached.info.clone());
+                            return None;
+                        }
                     }
-                }
+                    Some((model_id.clone(), self.clone()))
+                })
+                .collect()
+        };
 
-                // Need to fetch this model
-                let registry = self.clone();
-                let id = model_id.clone();
-                set.spawn(async move { (id.clone(), registry.get(&id).await) });
-            }
+        for (id, registry) in to_fetch {
+            set.spawn(async move { (id.clone(), registry.get(&id).await) });
         }
 
         // Collect parallel results
@@ -186,7 +201,12 @@ impl Registry {
     }
 
     /// Refreshes the cache for specific model IDs.
+    ///
     /// If `model_ids` is empty, refreshes all models from the fetcher.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying fetcher fails.
     pub async fn refresh(
         &self,
         model_ids: &[String],
@@ -221,6 +241,7 @@ impl Registry {
     }
 
     /// Removes specific models from the cache.
+    ///
     /// If `model_ids` is empty, clears the entire cache.
     pub async fn invalidate(&self, model_ids: &[String]) {
         let mut cache = self.cache.write().await;
@@ -233,19 +254,22 @@ impl Registry {
         }
     }
 
-    /// Returns the number of models currently in cache.
+    /// Returns the number of non-expired models currently in the cache.
+    #[must_use]
     pub async fn cached_count(&self) -> usize {
         let cache = self.cache.read().await;
         cache.len()
     }
 
-    /// Returns all model IDs in the cache.
+    /// Returns all model IDs currently in the cache (may include expired entries).
+    #[must_use]
     pub async fn cached_ids(&self) -> Vec<String> {
         let cache = self.cache.read().await;
         cache.keys().cloned().collect()
     }
 
-    /// Removes expired entries from the cache.
+    /// Removes expired entries from the cache and returns the count removed.
+    #[must_use]
     pub async fn cleanup_expired(&self) -> usize {
         let mut cache = self.cache.write().await;
         let now = Utc::now();
@@ -256,121 +280,103 @@ impl Registry {
         initial_len - cache.len()
     }
 
-    /// Finds all cached models that support a specific capability.
+    /// Finds all non-expired cached models that support a given capability.
+    #[must_use]
     pub async fn find_by_capability(&self, capability: &str) -> Vec<ModelInfo> {
         let cache = self.cache.read().await;
         let now = Utc::now();
-        let mut result = Vec::new();
-
-        for cached in cache.values() {
-            if now < cached.expires_at && cached.info.supports_capability(capability) {
-                result.push(cached.info.clone());
-            }
-        }
-
-        result
+        cache
+            .values()
+            .filter(|cached| now < cached.expires_at && cached.info.supports_capability(capability))
+            .map(|cached| cached.info.clone())
+            .collect()
     }
 
-    /// Finds all cached models from a specific provider.
+    /// Finds all non-expired cached models from a given provider.
+    #[must_use]
     pub async fn find_by_provider(&self, provider: &str) -> Vec<ModelInfo> {
         let cache = self.cache.read().await;
         let now = Utc::now();
-        let mut result = Vec::new();
-
-        for cached in cache.values() {
-            if now < cached.expires_at && cached.info.provider == provider {
-                result.push(cached.info.clone());
-            }
-        }
-
-        result
+        cache
+            .values()
+            .filter(|cached| now < cached.expires_at && cached.info.provider == provider)
+            .map(|cached| cached.info.clone())
+            .collect()
     }
 
-    /// Filters cached models by capability category.
+    /// Filters non-expired cached models by capability category.
+    #[must_use]
     pub async fn filter_by_capability(&self, cap: CapabilityCategory) -> Vec<ModelInfo> {
         let cache = self.cache.read().await;
         let now = Utc::now();
-        let mut result = Vec::new();
-
-        for cached in cache.values() {
-            if now < cached.expires_at && cached.info.has_any_capability(&[cap]) {
-                result.push(cached.info.clone());
-            }
-        }
-
-        result
+        cache
+            .values()
+            .filter(|cached| now < cached.expires_at && cached.info.has_any_capability(&[cap]))
+            .map(|cached| cached.info.clone())
+            .collect()
     }
 
-    /// Filters models by quality tier.
+    /// Filters non-expired cached models by quality tier.
+    #[must_use]
     pub async fn filter_by_tier(&self, tier: TierCategory) -> Vec<ModelInfo> {
         let cache = self.cache.read().await;
         let now = Utc::now();
-        let mut result = Vec::new();
-
-        for cached in cache.values() {
-            if now < cached.expires_at && cached.info.is_in_tier(tier) {
-                result.push(cached.info.clone());
-            }
-        }
-
-        result
+        cache
+            .values()
+            .filter(|cached| now < cached.expires_at && cached.info.is_in_tier(tier))
+            .map(|cached| cached.info.clone())
+            .collect()
     }
 
-    /// Filters models by cost category.
+    /// Filters non-expired cached models by cost category.
+    #[must_use]
     pub async fn filter_by_cost(&self, cost: CostCategory) -> Vec<ModelInfo> {
         let cache = self.cache.read().await;
         let now = Utc::now();
-        let mut result = Vec::new();
-
-        for cached in cache.values() {
-            if now < cached.expires_at && cached.info.is_in_cost_range(cost) {
-                result.push(cached.info.clone());
-            }
-        }
-
-        result
+        cache
+            .values()
+            .filter(|cached| now < cached.expires_at && cached.info.is_in_cost_range(cost))
+            .map(|cached| cached.info.clone())
+            .collect()
     }
 
-    /// Filters models by context window category.
+    /// Filters non-expired cached models by context window category.
+    #[must_use]
     pub async fn filter_by_context_window(&self, context: ContextWindowCategory) -> Vec<ModelInfo> {
         let cache = self.cache.read().await;
         let now = Utc::now();
-        let mut result = Vec::new();
-
-        for cached in cache.values() {
-            if now < cached.expires_at && cached.info.is_in_context_range(context) {
-                result.push(cached.info.clone());
-            }
-        }
-
-        result
+        cache
+            .values()
+            .filter(|cached| now < cached.expires_at && cached.info.is_in_context_range(context))
+            .map(|cached| cached.info.clone())
+            .collect()
     }
 
-    /// Filters models by provider vendor.
+    /// Filters non-expired cached models by provider category.
+    #[must_use]
     pub async fn filter_by_provider(&self, provider: ProviderCategory) -> Vec<ModelInfo> {
         let cache = self.cache.read().await;
         let now = Utc::now();
-        let mut result = Vec::new();
-
-        for cached in cache.values() {
-            if now < cached.expires_at && cached.info.is_from_provider(provider) {
-                result.push(cached.info.clone());
-            }
-        }
-
-        result
+        cache
+            .values()
+            .filter(|cached| now < cached.expires_at && cached.info.is_from_provider(provider))
+            .map(|cached| cached.info.clone())
+            .collect()
     }
 
-    /// Estimates costs for multiple models given input/output tokens.
+    /// Estimates costs for multiple models given input/output token counts.
+    ///
+    /// Returns a map of model ID to estimated cost in USD.
+    /// Models that fail to fetch are silently omitted.
+    #[must_use]
     pub async fn estimate_costs(
         &self,
         model_ids: &[String],
         input_tokens: usize,
         output_tokens: usize,
     ) -> HashMap<String, f64> {
-        let models = match self.get_multiple(model_ids).await {
-            Ok(m) => m,
-            Err(_) => return HashMap::new(),
+        let Ok(models) = self.get_multiple(model_ids).await else {
+            return HashMap::new();
         };
 
         let mut costs = HashMap::new();
@@ -381,40 +387,33 @@ impl Registry {
         costs
     }
 
-    /// Finds the cheapest model that can fit the context window.
-    /// Returns None if no model can fit the requested token count.
+    /// Finds the cheapest non-expired cached model that fits the context window.
+    ///
+    /// Returns `None` if no model can fit the requested token count.
+    #[must_use]
     pub async fn find_best_fit(&self, tokens: usize) -> Option<ModelInfo> {
         let cache = self.cache.read().await;
         let now = Utc::now();
-        let mut best_model: Option<ModelInfo> = None;
-        let mut best_cost = f64::MAX;
-
-        for cached in cache.values() {
-            if now >= cached.expires_at {
-                continue;
-            }
-
-            if !cached.info.can_fit_context(tokens) {
-                continue;
-            }
-
-            // Estimate cost (using average input/output ratio of 70/30)
-            let estimated_input = (tokens as f64) * 0.7;
-            let estimated_output = (tokens as f64) * 0.3;
-            let cost = cached
-                .info
-                .estimate_cost(estimated_input as usize, estimated_output as usize);
-
-            if best_model.is_none() || cost < best_cost {
-                best_model = Some(cached.info.clone());
-                best_cost = cost;
-            }
-        }
-
-        best_model
+        cache
+            .values()
+            .filter(|cached| now < cached.expires_at && cached.info.can_fit_context(tokens))
+            .min_by(|a, b| {
+                let cost_a = a.info.estimate_cost(
+                    (tokens as f64 * 0.7) as usize,
+                    (tokens as f64 * 0.3) as usize,
+                );
+                let cost_b = b.info.estimate_cost(
+                    (tokens as f64 * 0.7) as usize,
+                    (tokens as f64 * 0.3) as usize,
+                );
+                cost_a
+                    .partial_cmp(&cost_b)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|cached| cached.info.clone())
     }
 
-    /// Starts background refresh task.
+    /// Starts a background task that periodically refreshes the cache.
     fn start_background_refresh(&mut self, interval: chrono::Duration) {
         let fetcher = Arc::clone(&self.fetcher);
         let cache = Arc::clone(&self.cache);
@@ -457,6 +456,6 @@ impl Registry {
             }
         });
 
-        self._background_handle = Some(handle);
+        self.background_handle = Some(handle);
     }
 }

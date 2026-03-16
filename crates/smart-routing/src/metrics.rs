@@ -1,3 +1,7 @@
+// ALLOW: Significant drop tightening in metrics operations requires restructuring
+// write lock chains that would reduce readability without meaningful benefit.
+#![allow(clippy::significant_drop_tightening)]
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -61,7 +65,8 @@ impl Clone for MetricsCollector {
 }
 
 impl MetricsCollector {
-    /// Create a new metrics collector
+    /// Create a new metrics collector.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             metrics: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
@@ -71,7 +76,8 @@ impl MetricsCollector {
         }
     }
 
-    /// Create a metrics collector with a limit
+    /// Create a metrics collector with a limit.
+    #[must_use]
     pub fn with_limit(max_entries: usize) -> Self {
         Self {
             metrics: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
@@ -109,7 +115,7 @@ impl MetricsCollector {
 
         // Cleanup old entries periodically
         if metrics.len() > self.max_entries {
-            self.cleanup_old_entries(&mut metrics).await;
+            self.cleanup_old_entries(&mut metrics);
         }
     }
 
@@ -130,69 +136,74 @@ impl MetricsCollector {
             .op_count
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if op_count % self.cleanup_interval == 0 {
+            {
+                let mut metrics = self.metrics.write().await;
+                if metrics.len() > self.max_entries {
+                    self.cleanup_old_entries(&mut metrics);
+                }
+            }
+        }
+
+        {
+            #[allow(clippy::significant_drop_tightening)]
             let mut metrics = self.metrics.write().await;
-            if metrics.len() > self.max_entries {
-                self.cleanup_old_entries(&mut metrics).await;
-            }
-        }
+            let entry = metrics
+                .entry(auth_id.to_string())
+                .or_insert_with(|| AuthMetrics {
+                    total_requests: 0,
+                    success_count: 0,
+                    failure_count: 0,
+                    avg_latency_ms: 0.0,
+                    min_latency_ms: f64::MAX,
+                    max_latency_ms: 0.0,
+                    success_rate: 1.0,
+                    error_rate: 0.0,
+                    consecutive_successes: 0,
+                    consecutive_failures: 0,
+                    last_request_time: Utc::now(),
+                    last_success_time: None,
+                    last_failure_time: None,
+                });
 
-        let mut metrics = self.metrics.write().await;
-        let entry = metrics
-            .entry(auth_id.to_string())
-            .or_insert_with(|| AuthMetrics {
-                total_requests: 0,
-                success_count: 0,
-                failure_count: 0,
-                avg_latency_ms: 0.0,
-                min_latency_ms: f64::MAX,
-                max_latency_ms: 0.0,
-                success_rate: 1.0,
-                error_rate: 0.0,
-                consecutive_successes: 0,
-                consecutive_failures: 0,
-                last_request_time: Utc::now(),
-                last_success_time: None,
-                last_failure_time: None,
-            });
+            // Update request counts
+            entry.total_requests += 1;
+            entry.last_request_time = Utc::now();
 
-        // Update request counts
-        entry.total_requests += 1;
-        entry.last_request_time = Utc::now();
-
-        if success {
-            entry.success_count += 1;
-            entry.consecutive_successes += 1;
-            entry.consecutive_failures = 0;
-            entry.last_success_time = Some(Utc::now());
-        } else {
-            entry.failure_count += 1;
-            entry.consecutive_failures += 1;
-            entry.consecutive_successes = 0;
-            entry.last_failure_time = Some(Utc::now());
-        }
-
-        // Update latency using EWMA
-        if latency_ms > 0.0 {
-            if entry.avg_latency_ms == 0.0 {
-                entry.avg_latency_ms = latency_ms;
+            if success {
+                entry.success_count += 1;
+                entry.consecutive_successes += 1;
+                entry.consecutive_failures = 0;
+                entry.last_success_time = Some(Utc::now());
             } else {
-                entry.avg_latency_ms =
-                    EWMA_ALPHA.mul_add(latency_ms, (1.0 - EWMA_ALPHA) * entry.avg_latency_ms);
+                entry.failure_count += 1;
+                entry.consecutive_failures += 1;
+                entry.consecutive_successes = 0;
+                entry.last_failure_time = Some(Utc::now());
             }
 
-            if latency_ms < entry.min_latency_ms {
-                entry.min_latency_ms = latency_ms;
+            // Update latency using EWMA
+            if latency_ms > 0.0 {
+                if entry.avg_latency_ms == 0.0 {
+                    entry.avg_latency_ms = latency_ms;
+                } else {
+                    entry.avg_latency_ms =
+                        EWMA_ALPHA.mul_add(latency_ms, (1.0 - EWMA_ALPHA) * entry.avg_latency_ms);
+                }
+
+                if latency_ms < entry.min_latency_ms {
+                    entry.min_latency_ms = latency_ms;
+                }
+                if latency_ms > entry.max_latency_ms {
+                    entry.max_latency_ms = latency_ms;
+                }
             }
-            if latency_ms > entry.max_latency_ms {
-                entry.max_latency_ms = latency_ms;
-            }
+
+            // Update success/error rate using EWMA
+            let current_success = if success { 1.0 } else { 0.0 };
+            entry.success_rate =
+                EWMA_ALPHA.mul_add(current_success, (1.0 - EWMA_ALPHA) * entry.success_rate);
+            entry.error_rate = 1.0 - entry.success_rate;
         }
-
-        // Update success/error rate using EWMA
-        let current_success = if success { 1.0 } else { 0.0 };
-        entry.success_rate =
-            EWMA_ALPHA.mul_add(current_success, (1.0 - EWMA_ALPHA) * entry.success_rate);
-        entry.error_rate = 1.0 - entry.success_rate;
     }
 
     /// Get auth metrics
@@ -244,11 +255,8 @@ impl MetricsCollector {
         *metrics = std::collections::HashMap::new();
     }
 
-    /// Cleanup old entries to control memory growth
-    async fn cleanup_old_entries(
-        &self,
-        metrics: &mut std::collections::HashMap<String, AuthMetrics>,
-    ) {
+    /// Cleanup old entries to control memory growth.
+    fn cleanup_old_entries(&self, metrics: &mut std::collections::HashMap<String, AuthMetrics>) {
         if self.max_entries == 0 {
             return;
         }

@@ -23,6 +23,7 @@ impl TokenEstimator {
     ///
     /// # Returns
     /// Estimated total tokens (input + expected output)
+    #[must_use]
     pub fn estimate(request: &Value) -> u32 {
         let input_tokens = Self::estimate_input(request);
         let output_tokens = Self::estimate_output(request);
@@ -99,7 +100,7 @@ impl TokenEstimator {
         // Check if max_tokens is specified
         if let Some(max_tokens) = request
             .get("max_tokens")
-            .or(request.get("max_completion_tokens"))
+            .or_else(|| request.get("max_completion_tokens"))
             .and_then(serde_json::Value::as_u64)
         {
             return max_tokens as u32;

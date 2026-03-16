@@ -55,7 +55,8 @@ impl Clone for ReasoningInference {
 }
 
 impl ReasoningInference {
-    /// Create a new reasoning inference engine
+    /// Create a new reasoning inference engine.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             model_cache: tokio::sync::RwLock::new(HashMap::new()),
@@ -94,7 +95,7 @@ impl ReasoningInference {
         let capability = self.infer_from_model_family(&request.model);
 
         // 4. Enhance based on max_tokens hint
-        let capability = self.enhance_from_tokens(capability, request.max_tokens);
+        let capability = Self::enhance_from_tokens(capability, request.max_tokens);
 
         // 5. Cache the inferred capability
         {
@@ -133,9 +134,8 @@ impl ReasoningInference {
         ReasoningCapability::None
     }
 
-    /// Enhance capability inference from `max_tokens` hint
+    /// Enhance capability inference from `max_tokens` hint.
     fn enhance_from_tokens(
-        &self,
         base_capability: ReasoningCapability,
         max_tokens: Option<u32>,
     ) -> ReasoningCapability {
@@ -159,7 +159,8 @@ impl ReasoningInference {
         )
     }
 
-    /// Get the capability level (0-3, higher is better)
+    /// Get the capability level (0-3, higher is better).
+    #[must_use]
     pub const fn capability_level(capability: ReasoningCapability) -> u8 {
         match capability {
             ReasoningCapability::None => 0,

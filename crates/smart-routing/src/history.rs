@@ -48,6 +48,7 @@ pub struct DecisionContext {
 
 impl DecisionContext {
     /// Create a new decision context
+    #[must_use]
     pub fn new(
         request_id: String,
         model_id: String,
@@ -69,29 +70,34 @@ impl DecisionContext {
     }
 
     /// Set predicted utilities
+    #[must_use]
     pub fn with_predicted_utilities(mut self, utilities: HashMap<String, f64>) -> Self {
         self.predicted_utilities = utilities;
         self
     }
 
     /// Set weights
+    #[must_use]
     pub fn with_weights(mut self, weights: HashMap<String, f64>) -> Self {
         self.weights = weights;
         self
     }
 
     /// Set reasoning
+    #[must_use]
     pub fn with_reasoning(mut self, reasoning: String) -> Self {
         self.reasoning = Some(reasoning);
         self
     }
 
     /// Get predicted utility for a route
+    #[must_use]
     pub fn get_predicted_utility(&self, route_id: &str) -> Option<f64> {
         self.predicted_utilities.get(route_id).copied()
     }
 
     /// Get weight for a route
+    #[must_use]
     pub fn get_weight(&self, route_id: &str) -> Option<f64> {
         self.weights.get(route_id).copied()
     }
@@ -116,6 +122,7 @@ pub struct RouteAttempt {
 
 impl RouteAttempt {
     /// Create a new route attempt
+    #[must_use]
     pub fn new(
         request_id: String,
         decision_context: DecisionContext,
@@ -124,7 +131,6 @@ impl RouteAttempt {
         let started_at = decision_context.timestamp;
         let completed_at = outcome.timestamp;
 
-        // Generate a simple UUID-like string without the uuid crate
         let attempt_id = format!(
             "{}-{}",
             started_at.timestamp(),
@@ -142,16 +148,19 @@ impl RouteAttempt {
     }
 
     /// Get attempt duration
+    #[must_use]
     pub fn duration(&self) -> chrono::Duration {
         self.completed_at - self.started_at
     }
 
     /// Check if attempt was successful
+    #[must_use]
     pub const fn is_successful(&self) -> bool {
         self.outcome.success
     }
 
     /// Check if fallback was used
+    #[must_use]
     pub const fn used_fallback(&self) -> bool {
         self.outcome.used_fallback
     }
@@ -168,6 +177,7 @@ pub struct AttemptHistory {
 
 impl AttemptHistory {
     /// Create a new attempt history
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             attempts: Vec::new(),
@@ -176,6 +186,7 @@ impl AttemptHistory {
     }
 
     /// Create with a limit
+    #[must_use]
     pub const fn with_limit(max_attempts: usize) -> Self {
         Self {
             attempts: Vec::new(),
@@ -191,7 +202,6 @@ impl AttemptHistory {
     pub fn record(&mut self, attempt: RouteAttempt) {
         self.attempts.push(attempt);
 
-        // Keep only the most recent attempts
         if self.attempts.len() > self.max_attempts {
             let remove_count = self.attempts.len() - self.max_attempts;
             self.attempts.drain(0..remove_count);
@@ -199,6 +209,7 @@ impl AttemptHistory {
     }
 
     /// Get attempts by request ID
+    #[must_use]
     pub fn get_attempts_for_request(&self, request_id: &str) -> Vec<&RouteAttempt> {
         self.attempts
             .iter()
@@ -207,6 +218,7 @@ impl AttemptHistory {
     }
 
     /// Get attempts by route ID
+    #[must_use]
     pub fn get_attempts_for_route(&self, route_id: &str) -> Vec<&RouteAttempt> {
         self.attempts
             .iter()
@@ -215,6 +227,7 @@ impl AttemptHistory {
     }
 
     /// Get attempts by model ID
+    #[must_use]
     pub fn get_attempts_for_model(&self, model_id: &str) -> Vec<&RouteAttempt> {
         self.attempts
             .iter()
@@ -223,6 +236,7 @@ impl AttemptHistory {
     }
 
     /// Get attempts by selection mode
+    #[must_use]
     pub fn get_attempts_by_selection_mode(&self, mode: &SelectionMode) -> Vec<&RouteAttempt> {
         self.attempts
             .iter()
@@ -231,6 +245,7 @@ impl AttemptHistory {
     }
 
     /// Get recent attempts (last N)
+    #[must_use]
     pub fn get_recent_attempts(&self, n: usize) -> Vec<&RouteAttempt> {
         let start = if self.attempts.len() > n {
             self.attempts.len() - n
@@ -241,6 +256,7 @@ impl AttemptHistory {
     }
 
     /// Get attempts in a time range
+    #[must_use]
     pub fn get_attempts_in_range(
         &self,
         start: DateTime<Utc>,
@@ -253,11 +269,13 @@ impl AttemptHistory {
     }
 
     /// Get all attempts
+    #[must_use]
     pub fn get_all_attempts(&self) -> &[RouteAttempt] {
         &self.attempts
     }
 
     /// Get success rate for a route
+    #[must_use]
     pub fn get_success_rate_for_route(&self, route_id: &str) -> Option<f64> {
         let attempts = self.get_attempts_for_route(route_id);
         if attempts.is_empty() {
@@ -269,6 +287,7 @@ impl AttemptHistory {
     }
 
     /// Get average latency for a route
+    #[must_use]
     pub fn get_avg_latency_for_route(&self, route_id: &str) -> Option<f64> {
         let attempts = self.get_attempts_for_route(route_id);
         if attempts.is_empty() {
@@ -280,6 +299,7 @@ impl AttemptHistory {
     }
 
     /// Get fallback usage rate for a route
+    #[must_use]
     pub fn get_fallback_rate_for_route(&self, route_id: &str) -> Option<f64> {
         let attempts = self.get_attempts_for_route(route_id);
         if attempts.is_empty() {
@@ -291,6 +311,7 @@ impl AttemptHistory {
     }
 
     /// Get selection mode distribution
+    #[must_use]
     pub fn get_selection_mode_distribution(&self) -> HashMap<SelectionMode, usize> {
         let mut distribution = HashMap::new();
         for attempt in &self.attempts {
@@ -307,11 +328,13 @@ impl AttemptHistory {
     }
 
     /// Get the number of attempts
+    #[must_use]
     pub fn len(&self) -> usize {
         self.attempts.len()
     }
 
     /// Check if empty
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.attempts.is_empty()
     }
@@ -350,6 +373,7 @@ pub struct AttemptMetrics {
 
 impl AttemptHistory {
     /// Calculate metrics for a route
+    #[must_use]
     pub fn calculate_metrics_for_route(&self, route_id: &str) -> Option<AttemptMetrics> {
         let attempts = self.get_attempts_for_route(route_id);
         if attempts.is_empty() {
@@ -401,6 +425,7 @@ pub struct TrackingSystem {
 
 impl TrackingSystem {
     /// Create a new tracking system
+    #[must_use]
     pub fn new() -> Self {
         Self {
             statistics: StatisticsAggregator::new(),
@@ -409,6 +434,7 @@ impl TrackingSystem {
     }
 
     /// Create with custom configuration
+    #[must_use]
     pub const fn with_config(statistics: StatisticsAggregator, history: AttemptHistory) -> Self {
         Self {
             statistics,
@@ -418,29 +444,29 @@ impl TrackingSystem {
 
     /// Record a route attempt
     pub fn record_attempt(&mut self, attempt: RouteAttempt) {
-        // Update statistics
         self.statistics.record(&attempt.outcome);
-
-        // Record in history
         self.history.record(attempt);
     }
 
     /// Record an execution outcome
-    pub fn record_outcome(&mut self, outcome: ExecutionOutcome) {
-        self.statistics.record(&outcome);
+    pub fn record_outcome(&mut self, outcome: &ExecutionOutcome) {
+        self.statistics.record(outcome);
     }
 
     /// Get statistics for a route
+    #[must_use]
     pub fn get_statistics(&self, route_id: &str) -> Option<&crate::statistics::RouteStatistics> {
         self.statistics.get_stats(route_id)
     }
 
     /// Get attempt metrics for a route
+    #[must_use]
     pub fn get_attempt_metrics(&self, route_id: &str) -> Option<AttemptMetrics> {
         self.history.calculate_metrics_for_route(route_id)
     }
 
     /// Get attempts for a route
+    #[must_use]
     pub fn get_attempts(&self, route_id: &str) -> Vec<&RouteAttempt> {
         self.history.get_attempts_for_route(route_id)
     }
@@ -448,7 +474,6 @@ impl TrackingSystem {
     /// Reset tracking for a route
     pub fn reset_route(&mut self, route_id: &str) {
         self.statistics.reset_route(route_id);
-        // Note: We don't clear history as it's for analysis
     }
 
     /// Reset all tracking
@@ -576,7 +601,7 @@ mod tests {
                 "route-1".to_string(),
             );
 
-            let success = i < 3; // First 3 succeed
+            let success = i < 3;
             let outcome = if success {
                 ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200)
             } else {
@@ -588,7 +613,7 @@ mod tests {
         }
 
         let success_rate = history.get_success_rate_for_route("route-1").unwrap();
-        assert_eq!(success_rate, 0.6); // 3 out of 5
+        assert_eq!(success_rate, 0.6);
     }
 
     #[test]
@@ -616,7 +641,7 @@ mod tests {
         }
 
         let avg_latency = history.get_avg_latency_for_route("route-1").unwrap();
-        assert_eq!(avg_latency, 150.0); // (100 + 150 + 200) / 3
+        assert_eq!(avg_latency, 150.0);
     }
 
     #[test]
@@ -689,7 +714,6 @@ mod tests {
 
         tracking.reset_route("route-1");
         assert!(tracking.get_statistics("route-1").is_none());
-        // History should still be available
         assert!(!tracking.get_attempts("route-1").is_empty());
     }
 }

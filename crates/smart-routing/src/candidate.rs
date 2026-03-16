@@ -49,6 +49,7 @@ pub struct CandidateBuilder {
 
 impl CandidateBuilder {
     /// Create a new candidate builder
+    #[must_use]
     pub fn new() -> Self {
         Self {
             credential_models: HashMap::new(),
@@ -57,12 +58,14 @@ impl CandidateBuilder {
     }
 
     /// Add a credential with its associated models
+    #[must_use]
     pub fn add_credential(&mut self, credential_id: String, model_ids: Vec<String>) -> &mut Self {
         self.credential_models.insert(credential_id, model_ids);
         self
     }
 
     /// Set model information
+    #[must_use]
     pub fn set_model(&mut self, model_id: String, info: ModelInfo) -> &mut Self {
         self.models.insert(model_id, info);
         self
@@ -74,10 +77,11 @@ impl CandidateBuilder {
     /// - Valid model creates candidates
     /// - No credentials returns empty list
     /// - Multiple credentials creates multiple candidates
+    #[must_use]
     pub fn build_candidates(&self, request: &ClassifiedRequest) -> Vec<RouteCandidate> {
         let mut candidates = Vec::new();
 
-        // No credentials → empty list
+        // No credentials -> empty list
         if self.credential_models.is_empty() {
             return candidates;
         }
@@ -122,6 +126,7 @@ impl Default for CandidateBuilder {
 }
 
 /// Check if required capabilities are supported by a model
+#[must_use]
 pub const fn check_capability_support(
     required: &RequiredCapabilities,
     model_info: &ModelInfo,
@@ -152,20 +157,26 @@ pub enum CapabilitySupport {
     Supported,
     /// Some required capabilities are not supported
     Unsupported {
+        /// Whether vision capability is missing
         missing_vision: bool,
+        /// Whether tools capability is missing
         missing_tools: bool,
+        /// Whether streaming capability is missing
         missing_streaming: bool,
+        /// Whether thinking capability is missing
         missing_thinking: bool,
     },
 }
 
 impl CapabilitySupport {
     /// Check if capabilities are fully supported
+    #[must_use]
     pub const fn is_supported(&self) -> bool {
         matches!(self, Self::Supported)
     }
 
     /// Get description of missing capabilities
+    #[must_use]
     pub fn missing_description(&self) -> Option<String> {
         match self {
             Self::Supported => None,

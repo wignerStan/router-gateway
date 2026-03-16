@@ -17,13 +17,14 @@ pub struct TracingMiddleware {
 }
 
 impl TracingMiddleware {
-    /// Create a new tracing middleware with a collector
+    /// Create a new tracing middleware with a collector.
+    #[must_use]
     pub fn new(collector: Arc<dyn TraceCollector>) -> Self {
         Self { collector }
     }
 
-    /// Extract request ID from headers or generate a new one
-    fn extract_request_id(&self, headers: &HeaderMap) -> String {
+    /// Extract request ID from headers or generate a new one.
+    fn extract_request_id(headers: &HeaderMap) -> String {
         headers
             .get("x-request-id")
             .or_else(|| headers.get("x-trace-id"))
@@ -37,8 +38,8 @@ impl TracingMiddleware {
             )
     }
 
-    /// Extract provider from request (e.g., from path or headers)
-    fn extract_provider(&self, headers: &HeaderMap) -> Option<String> {
+    /// Extract provider from request (e.g., from path or headers).
+    fn extract_provider(headers: &HeaderMap) -> Option<String> {
         // Try to get from header first
         if let Some(provider) = headers.get("x-llm-provider") {
             return provider.to_str().ok().map(std::string::ToString::to_string);
@@ -47,16 +48,16 @@ impl TracingMiddleware {
         None
     }
 
-    /// Extract model from request (e.g., from body or headers)
-    fn extract_model(&self, headers: &HeaderMap) -> Option<String> {
+    /// Extract model from request (e.g., from body or headers).
+    fn extract_model(headers: &HeaderMap) -> Option<String> {
         if let Some(model) = headers.get("x-llm-model") {
             return model.to_str().ok().map(std::string::ToString::to_string);
         }
         None
     }
 
-    /// Extract auth ID from headers (sanitized - never logs full credentials)
-    fn extract_auth_id(&self, headers: &HeaderMap) -> Option<String> {
+    /// Extract auth ID from headers (sanitized - never logs full credentials).
+    fn extract_auth_id(headers: &HeaderMap) -> Option<String> {
         headers
             .get("authorization")
             .and_then(|v| v.to_str().ok())
@@ -73,22 +74,17 @@ impl TracingMiddleware {
             })
     }
 
-    /// Process the request and generate a trace
-    pub async fn trace_request(
-        &self,
+    /// Process the request and generate a trace.
+    pub fn trace_request(
         _method: axum::http::Method,
         _uri: axum::http::Uri,
-        headers: HeaderMap,
+        headers: &HeaderMap,
         _body: Vec<u8>,
     ) -> TraceSpan {
-        let request_id = self.extract_request_id(&headers);
-        let provider = self
-            .extract_provider(&headers)
-            .unwrap_or_else(|| "unknown".to_string());
-        let model = self
-            .extract_model(&headers)
-            .unwrap_or_else(|| "unknown".to_string());
-        let auth_id = self.extract_auth_id(&headers);
+        let request_id = Self::extract_request_id(headers);
+        let provider = Self::extract_provider(headers).unwrap_or_else(|| "unknown".to_string());
+        let model = Self::extract_model(headers).unwrap_or_else(|| "unknown".to_string());
+        let auth_id = Self::extract_auth_id(headers);
 
         let mut span = TraceSpan::new(request_id, provider, model, auth_id);
 
@@ -121,7 +117,7 @@ pub async fn tracing_middleware(
     let headers = req.headers().clone();
 
     // Create initial trace span
-    let mut span = middleware.trace_request(method, uri, headers, vec![]).await;
+    let mut span = TracingMiddleware::trace_request(method, uri, &headers, vec![]);
 
     // Execute the request
     let response = next.run(req).await;
@@ -158,15 +154,25 @@ impl Default for TracingMiddlewareBuilder {
 }
 
 impl TracingMiddlewareBuilder {
+    /// Create a new builder.
+    #[must_use]
     pub fn new() -> Self {
         Self { collector: None }
     }
 
+    /// Set the trace collector.
+    #[must_use]
     pub fn with_collector(mut self, collector: Arc<dyn TraceCollector>) -> Self {
         self.collector = Some(collector);
         self
     }
 
+    /// Build the [`TracingMiddleware`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if no collector was set via [`with_collector`](Self::with_collector).
+    #[must_use]
     pub fn build(self) -> TracingMiddleware {
         TracingMiddleware {
             // ALLOW: Type-state builder — collector is required but not yet enforced at compile time.
@@ -187,50 +193,41 @@ mod tests {
 
     #[tokio::test]
     async fn test_extract_request_id() {
-        let collector =
-            Arc::new(MemoryTraceCollector::with_default_size()) as Arc<dyn TraceCollector>;
-        let middleware = TracingMiddleware::new(collector);
-
         // Test with x-request-id header
         let mut headers = HeaderMap::new();
         headers.insert("x-request-id", HeaderValue::from_static("test-req-123"));
-        assert_eq!(middleware.extract_request_id(&headers), "test-req-123");
+        assert_eq!(
+            TracingMiddleware::extract_request_id(&headers),
+            "test-req-123"
+        );
 
         // Test with x-trace-id header
         let mut headers = HeaderMap::new();
         headers.insert("x-trace-id", HeaderValue::from_static("trace-456"));
-        assert_eq!(middleware.extract_request_id(&headers), "trace-456");
+        assert_eq!(TracingMiddleware::extract_request_id(&headers), "trace-456");
 
         // Test without header (should generate UUID)
         let headers = HeaderMap::new();
-        let request_id = middleware.extract_request_id(&headers);
+        let request_id = TracingMiddleware::extract_request_id(&headers);
         assert!(!request_id.is_empty());
         assert!(Uuid::parse_str(&request_id).is_ok());
     }
 
     #[tokio::test]
     async fn test_extract_provider() {
-        let collector =
-            Arc::new(MemoryTraceCollector::with_default_size()) as Arc<dyn TraceCollector>;
-        let middleware = TracingMiddleware::new(collector);
-
         let mut headers = HeaderMap::new();
         headers.insert("x-llm-provider", HeaderValue::from_static("openai"));
         assert_eq!(
-            middleware.extract_provider(&headers),
+            TracingMiddleware::extract_provider(&headers),
             Some("openai".to_string())
         );
 
         let headers = HeaderMap::new();
-        assert_eq!(middleware.extract_provider(&headers), None);
+        assert_eq!(TracingMiddleware::extract_provider(&headers), None);
     }
 
     #[tokio::test]
     async fn test_extract_auth_id() {
-        let collector =
-            Arc::new(MemoryTraceCollector::with_default_size()) as Arc<dyn TraceCollector>;
-        let middleware = TracingMiddleware::new(collector);
-
         // Bearer token - should return "authenticated" (never expose full token)
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -238,7 +235,7 @@ mod tests {
             HeaderValue::from_static("Bearer token-123"),
         );
         assert_eq!(
-            middleware.extract_auth_id(&headers),
+            TracingMiddleware::extract_auth_id(&headers),
             Some("authenticated".to_string())
         );
 
@@ -246,21 +243,17 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert("authorization", HeaderValue::from_static("api-key-456"));
         assert_eq!(
-            middleware.extract_auth_id(&headers),
+            TracingMiddleware::extract_auth_id(&headers),
             Some("authenticated".to_string())
         );
 
         // No auth header - should return None
         let headers = HeaderMap::new();
-        assert_eq!(middleware.extract_auth_id(&headers), None);
+        assert_eq!(TracingMiddleware::extract_auth_id(&headers), None);
     }
 
     #[tokio::test]
     async fn test_trace_request() {
-        let collector =
-            Arc::new(MemoryTraceCollector::with_default_size()) as Arc<dyn TraceCollector>;
-        let middleware = TracingMiddleware::new(collector);
-
         let mut headers = HeaderMap::new();
         headers.insert("x-request-id", HeaderValue::from_static("req-123"));
         headers.insert("x-llm-provider", HeaderValue::from_static("anthropic"));
@@ -268,14 +261,12 @@ mod tests {
         headers.insert("x-input-tokens", HeaderValue::from_static("100"));
         headers.insert("x-streaming", HeaderValue::from_static("true"));
 
-        let span = middleware
-            .trace_request(
-                axum::http::Method::POST,
-                "/v1/messages".parse().unwrap(),
-                headers,
-                vec![],
-            )
-            .await;
+        let span = TracingMiddleware::trace_request(
+            axum::http::Method::POST,
+            "/v1/messages".parse().unwrap(),
+            &headers,
+            vec![],
+        );
 
         assert_eq!(span.request_id, "req-123");
         assert_eq!(span.provider, "anthropic");
@@ -300,10 +291,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_extract_request_id_invalid_utf8() {
-        let collector =
-            Arc::new(MemoryTraceCollector::with_default_size()) as Arc<dyn TraceCollector>;
-        let middleware = TracingMiddleware::new(collector);
-
         // Create headers with invalid UTF-8 value
         let mut headers = HeaderMap::new();
         // HeaderValue::from_bytes will fail for invalid UTF-8, so we use valid ASCII
@@ -312,84 +299,75 @@ mod tests {
             "x-request-id",
             HeaderValue::from_bytes(b"valid-id").unwrap(),
         );
-        assert_eq!(middleware.extract_request_id(&headers), "valid-id");
+        assert_eq!(TracingMiddleware::extract_request_id(&headers), "valid-id");
 
         // When no valid header exists, should generate UUID
         let empty_headers = HeaderMap::new();
-        let request_id = middleware.extract_request_id(&empty_headers);
+        let request_id = TracingMiddleware::extract_request_id(&empty_headers);
         assert!(Uuid::parse_str(&request_id).is_ok());
     }
 
     #[tokio::test]
     async fn test_extract_request_id_multiple_headers() {
-        let collector =
-            Arc::new(MemoryTraceCollector::with_default_size()) as Arc<dyn TraceCollector>;
-        let middleware = TracingMiddleware::new(collector);
-
         // x-request-id takes priority over x-trace-id
         let mut headers = HeaderMap::new();
         headers.insert("x-request-id", HeaderValue::from_static("priority-id"));
         headers.insert("x-trace-id", HeaderValue::from_static("secondary-id"));
-        assert_eq!(middleware.extract_request_id(&headers), "priority-id");
+        assert_eq!(
+            TracingMiddleware::extract_request_id(&headers),
+            "priority-id"
+        );
 
         // x-trace-id is used when x-request-id is absent
         let mut headers2 = HeaderMap::new();
         headers2.insert("x-trace-id", HeaderValue::from_static("trace-id-value"));
-        assert_eq!(middleware.extract_request_id(&headers2), "trace-id-value");
+        assert_eq!(
+            TracingMiddleware::extract_request_id(&headers2),
+            "trace-id-value"
+        );
     }
 
     #[tokio::test]
     async fn test_extract_provider_invalid_utf8() {
-        let collector =
-            Arc::new(MemoryTraceCollector::with_default_size()) as Arc<dyn TraceCollector>;
-        let middleware = TracingMiddleware::new(collector);
-
         // When header value is not valid UTF-8, to_str() returns Err
         // In that case, extract_provider returns None
         let headers = HeaderMap::new();
-        assert_eq!(middleware.extract_provider(&headers), None);
+        assert_eq!(TracingMiddleware::extract_provider(&headers), None);
 
         // Valid provider
         let mut headers2 = HeaderMap::new();
         headers2.insert("x-llm-provider", HeaderValue::from_static("openai"));
         assert_eq!(
-            middleware.extract_provider(&headers2),
+            TracingMiddleware::extract_provider(&headers2),
             Some("openai".to_string())
         );
     }
 
     #[tokio::test]
     async fn test_extract_provider_empty_string() {
-        let collector =
-            Arc::new(MemoryTraceCollector::with_default_size()) as Arc<dyn TraceCollector>;
-        let middleware = TracingMiddleware::new(collector);
-
         // Empty header value
         let mut headers = HeaderMap::new();
         headers.insert("x-llm-provider", HeaderValue::from_static(""));
-        assert_eq!(middleware.extract_provider(&headers), Some(String::new()));
+        assert_eq!(
+            TracingMiddleware::extract_provider(&headers),
+            Some(String::new())
+        );
 
         // No header at all
         let headers2 = HeaderMap::new();
-        assert_eq!(middleware.extract_provider(&headers2), None);
+        assert_eq!(TracingMiddleware::extract_provider(&headers2), None);
     }
 
     #[tokio::test]
     async fn test_trace_request_missing_headers() {
-        let collector =
-            Arc::new(MemoryTraceCollector::with_default_size()) as Arc<dyn TraceCollector>;
-        let middleware = TracingMiddleware::new(collector);
-
         // Empty headers - should use defaults
         let headers = HeaderMap::new();
-        let span = middleware
-            .trace_request(
-                axum::http::Method::POST,
-                "/v1/messages".parse().unwrap(),
-                headers,
-                vec![],
-            )
-            .await;
+        let span = TracingMiddleware::trace_request(
+            axum::http::Method::POST,
+            "/v1/messages".parse().unwrap(),
+            &headers,
+            vec![],
+        );
 
         // Should have generated a UUID request_id
         assert!(Uuid::parse_str(&span.request_id).is_ok());
@@ -401,10 +379,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_trace_request_large_body() {
-        let collector =
-            Arc::new(MemoryTraceCollector::with_default_size()) as Arc<dyn TraceCollector>;
-        let middleware = TracingMiddleware::new(collector);
-
         // Create a large body (1MB)
         let large_body = vec![0u8; 1024 * 1024];
 
@@ -412,14 +386,12 @@ mod tests {
         headers.insert("x-request-id", HeaderValue::from_static("req-large"));
         headers.insert("x-llm-provider", HeaderValue::from_static("openai"));
 
-        let span = middleware
-            .trace_request(
-                axum::http::Method::POST,
-                "/v1/chat/completions".parse().unwrap(),
-                headers,
-                large_body,
-            )
-            .await;
+        let span = TracingMiddleware::trace_request(
+            axum::http::Method::POST,
+            "/v1/chat/completions".parse().unwrap(),
+            &headers,
+            large_body,
+        );
 
         assert_eq!(span.request_id, "req-large");
         assert_eq!(span.provider, "openai");
@@ -434,98 +406,76 @@ mod tests {
 
     #[tokio::test]
     async fn test_extract_model_from_header() {
-        let collector =
-            Arc::new(MemoryTraceCollector::with_default_size()) as Arc<dyn TraceCollector>;
-        let middleware = TracingMiddleware::new(collector);
-
         let mut headers = HeaderMap::new();
         headers.insert("x-llm-model", HeaderValue::from_static("gpt-4-turbo"));
         assert_eq!(
-            middleware.extract_model(&headers),
+            TracingMiddleware::extract_model(&headers),
             Some("gpt-4-turbo".to_string())
         );
 
         let empty_headers = HeaderMap::new();
-        assert_eq!(middleware.extract_model(&empty_headers), None);
+        assert_eq!(TracingMiddleware::extract_model(&empty_headers), None);
     }
 
     #[tokio::test]
     async fn test_extract_input_tokens_from_header() {
-        let collector =
-            Arc::new(MemoryTraceCollector::with_default_size()) as Arc<dyn TraceCollector>;
-        let middleware = TracingMiddleware::new(collector);
-
         let mut headers = HeaderMap::new();
         headers.insert("x-request-id", HeaderValue::from_static("req-1"));
         headers.insert("x-input-tokens", HeaderValue::from_static("500"));
 
-        let span = middleware
-            .trace_request(
-                axum::http::Method::POST,
-                "/v1/messages".parse().unwrap(),
-                headers,
-                vec![],
-            )
-            .await;
+        let span = TracingMiddleware::trace_request(
+            axum::http::Method::POST,
+            "/v1/messages".parse().unwrap(),
+            &headers,
+            vec![],
+        );
 
         assert_eq!(span.input_tokens, Some(500));
     }
 
     #[tokio::test]
     async fn test_extract_streaming_flag() {
-        let collector =
-            Arc::new(MemoryTraceCollector::with_default_size()) as Arc<dyn TraceCollector>;
-        let middleware = TracingMiddleware::new(collector);
-
         // Test "true"
         let mut headers1 = HeaderMap::new();
         headers1.insert("x-streaming", HeaderValue::from_static("true"));
-        let span1 = middleware
-            .trace_request(
-                axum::http::Method::POST,
-                "/v1/messages".parse().unwrap(),
-                headers1,
-                vec![],
-            )
-            .await;
+        let span1 = TracingMiddleware::trace_request(
+            axum::http::Method::POST,
+            "/v1/messages".parse().unwrap(),
+            &headers1,
+            vec![],
+        );
         assert!(span1.is_streaming);
 
         // Test "1"
         let mut headers2 = HeaderMap::new();
         headers2.insert("x-streaming", HeaderValue::from_static("1"));
-        let span2 = middleware
-            .trace_request(
-                axum::http::Method::POST,
-                "/v1/messages".parse().unwrap(),
-                headers2,
-                vec![],
-            )
-            .await;
+        let span2 = TracingMiddleware::trace_request(
+            axum::http::Method::POST,
+            "/v1/messages".parse().unwrap(),
+            &headers2,
+            vec![],
+        );
         assert!(span2.is_streaming);
 
         // Test "false"
         let mut headers3 = HeaderMap::new();
         headers3.insert("x-streaming", HeaderValue::from_static("false"));
-        let span3 = middleware
-            .trace_request(
-                axum::http::Method::POST,
-                "/v1/messages".parse().unwrap(),
-                headers3,
-                vec![],
-            )
-            .await;
+        let span3 = TracingMiddleware::trace_request(
+            axum::http::Method::POST,
+            "/v1/messages".parse().unwrap(),
+            &headers3,
+            vec![],
+        );
         assert!(!span3.is_streaming);
 
         // Test no header
         let headers4 = HeaderMap::new();
-        let span4 = middleware
-            .trace_request(
-                axum::http::Method::POST,
-                "/v1/messages".parse().unwrap(),
-                headers4,
-                vec![],
-            )
-            .await;
+        let span4 = TracingMiddleware::trace_request(
+            axum::http::Method::POST,
+            "/v1/messages".parse().unwrap(),
+            &headers4,
+            vec![],
+        );
         assert!(!span4.is_streaming);
     }
 }

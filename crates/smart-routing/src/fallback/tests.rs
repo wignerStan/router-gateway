@@ -511,69 +511,61 @@ mod extract_provider {
 
     #[tokio::test]
     async fn test_extract_provider() {
-        let planner = FallbackPlanner::new();
-
         // Test various formats
         assert_eq!(
-            planner.extract_provider("anthropic-key"),
+            FallbackPlanner::extract_provider("anthropic-key"),
             Some("anthropic".to_string())
         );
         assert_eq!(
-            planner.extract_provider("openai-key-123"),
+            FallbackPlanner::extract_provider("openai-key-123"),
             Some("openai".to_string())
         );
         assert_eq!(
-            planner.extract_provider("google_model_key"),
+            FallbackPlanner::extract_provider("google_model_key"),
             Some("google".to_string())
         );
         assert_eq!(
-            planner.extract_provider("cohere:key"),
+            FallbackPlanner::extract_provider("cohere:key"),
             Some("cohere".to_string())
         );
-        assert_eq!(planner.extract_provider(""), None);
+        assert_eq!(FallbackPlanner::extract_provider(""), None);
     }
 
     #[test]
     fn test_extract_provider_multi_word_providers() {
-        let planner = FallbackPlanner::new();
-
         // amazon-bedrock should be recognized as a single provider, not "amazon"
         assert_eq!(
-            planner.extract_provider("amazon-bedrock-us-east-1-key"),
+            FallbackPlanner::extract_provider("amazon-bedrock-us-east-1-key"),
             Some("amazon-bedrock".to_string())
         );
         assert_eq!(
-            planner.extract_provider("azure-openai-gpt4-key"),
+            FallbackPlanner::extract_provider("azure-openai-gpt4-key"),
             Some("azure-openai".to_string())
         );
     }
 
     #[test]
     fn test_extract_provider_nested_paths() {
-        let planner = FallbackPlanner::new();
-
         // Standard single-segment providers still work
         assert_eq!(
-            planner.extract_provider("deepseek-key"),
+            FallbackPlanner::extract_provider("deepseek-key"),
             Some("deepseek".to_string())
         );
         assert_eq!(
-            planner.extract_provider("xai-grok-key"),
+            FallbackPlanner::extract_provider("xai-grok-key"),
             Some("xai".to_string())
         );
     }
 
     #[test]
     fn test_extract_provider_unknown_prefix_falls_back() {
-        let planner = FallbackPlanner::new();
-
         // Unknown provider falls back to first segment
         assert_eq!(
-            planner.extract_provider("my-custom-provider-key"),
+            FallbackPlanner::extract_provider("my-custom-provider-key"),
             Some("my".to_string())
         );
         assert_eq!(
-            planner.extract_provider("single"),
+            FallbackPlanner::extract_provider("single"),
             Some("single".to_string())
         );
     }

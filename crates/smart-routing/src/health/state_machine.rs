@@ -23,6 +23,7 @@ impl HealthManager {
     /// assert_eq!(manager.get_status("new-cred").await, HealthStatus::Healthy);
     /// # }
     /// ```
+    #[must_use]
     pub fn new(config: crate::config::HealthConfig) -> Self {
         Self {
             health: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
@@ -34,6 +35,7 @@ impl HealthManager {
     }
 
     /// Create a health manager with a limit
+    #[must_use]
     pub fn with_limit(config: crate::config::HealthConfig, max_entries: usize) -> Self {
         Self {
             health: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
@@ -77,57 +79,65 @@ impl HealthManager {
             .op_count
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if op_count % self.cleanup_interval == 0 {
-            let mut health = self.health.write().await;
-            if health.len() > self.max_entries {
-                self.cleanup_old_entries(&mut health).await;
+            {
+                let mut health = self.health.write().await;
+                if health.len() > self.max_entries {
+                    self.cleanup_old_entries(&mut health);
+                }
             }
         }
 
-        let mut health = self.health.write().await;
-        let entry = health
-            .entry(auth_id.to_string())
-            .or_insert_with(|| AuthHealth {
-                status: HealthStatus::Healthy,
-                consecutive_successes: 0,
-                consecutive_failures: 0,
-                last_status_change: Utc::now(),
-                last_check_time: Utc::now(),
-                unavailable_until: None,
-                error_counts: HashMap::new(),
-            });
-
-        let now = Utc::now();
-        entry.last_check_time = now;
-
-        // Record error type
-        if status_code > 0 {
-            *entry.error_counts.entry(status_code).or_insert(0) += 1;
-        }
-
-        // Update consecutive success/failure counts
-        if success {
-            entry.consecutive_successes += 1;
-            entry.consecutive_failures = 0;
-        } else {
-            entry.consecutive_failures += 1;
-            entry.consecutive_successes = 0;
-        }
-
-        // Calculate health status based on status code and consecutive counts
-        let new_status = self.calculate_health_status(entry, success, status_code);
-
-        // Update status if changed
-        if new_status != entry.status {
-            entry.status = new_status;
-            entry.last_status_change = now;
-        }
-
-        // Set cooldown period for unhealthy credentials
-        if entry.status == HealthStatus::Unhealthy
-            && entry.consecutive_failures >= self.config.unhealthy_threshold
         {
-            let cooldown = Duration::seconds(self.config.cooldown_period_seconds);
-            entry.unavailable_until = Some(now + cooldown);
+            let mut health = self.health.write().await;
+            let now = Utc::now();
+
+            let entry = match health.entry(auth_id.to_string()) {
+                std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
+                std::collections::hash_map::Entry::Vacant(e) => e.insert(AuthHealth {
+                    status: HealthStatus::Healthy,
+                    consecutive_successes: 0,
+                    consecutive_failures: 0,
+                    last_status_change: now,
+                    last_check_time: now,
+                    unavailable_until: None,
+                    error_counts: HashMap::new(),
+                }),
+            };
+
+            entry.last_check_time = now;
+
+            // Record error type
+            if status_code > 0 {
+                *entry.error_counts.entry(status_code).or_insert(0) += 1;
+            }
+
+            // Update consecutive success/failure counts
+            if success {
+                entry.consecutive_successes += 1;
+                entry.consecutive_failures = 0;
+            } else {
+                entry.consecutive_failures += 1;
+                entry.consecutive_successes = 0;
+            }
+
+            // Calculate health status based on status code and consecutive counts
+            let new_status = self.calculate_health_status(entry, success, status_code);
+
+            // Update status if changed
+            if new_status != entry.status {
+                entry.status = new_status;
+                entry.last_status_change = now;
+            }
+
+            // Set cooldown period for unhealthy credentials
+            if entry.status == HealthStatus::Unhealthy
+                && entry.consecutive_failures >= self.config.unhealthy_threshold
+            {
+                let cooldown = Duration::seconds(self.config.cooldown_period_seconds);
+                entry.unavailable_until = Some(now + cooldown);
+            }
+
+            drop(health);
         }
     }
 
@@ -196,22 +206,30 @@ impl HealthManager {
             return;
         }
 
-        let mut health = self.health.write().await;
-        let entry = health
-            .entry(auth_id.to_string())
-            .or_insert_with(|| AuthHealth {
-                status: HealthStatus::Healthy,
-                consecutive_successes: 0,
-                consecutive_failures: 0,
-                last_status_change: Utc::now(),
-                last_check_time: Utc::now(),
-                unavailable_until: None,
-                error_counts: HashMap::new(),
-            });
+        {
+            let mut health = self.health.write().await;
+            let entry = match health.entry(auth_id.to_string()) {
+                std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
+                std::collections::hash_map::Entry::Vacant(e) => {
+                    let now = Utc::now();
+                    e.insert(AuthHealth {
+                        status: HealthStatus::Healthy,
+                        consecutive_successes: 0,
+                        consecutive_failures: 0,
+                        last_status_change: now,
+                        last_check_time: now,
+                        unavailable_until: None,
+                        error_counts: HashMap::new(),
+                    })
+                },
+            };
 
-        entry.unavailable_until = Some(Utc::now() + duration);
-        entry.status = HealthStatus::Unhealthy;
-        entry.last_status_change = Utc::now();
+            entry.unavailable_until = Some(Utc::now() + duration);
+            entry.status = HealthStatus::Unhealthy;
+            entry.last_status_change = Utc::now();
+
+            drop(health);
+        }
     }
 
     /// Reset auth health status
@@ -258,7 +276,7 @@ impl HealthManager {
     }
 
     /// Cleanup old entries to control memory growth
-    async fn cleanup_old_entries(&self, health: &mut HashMap<String, AuthHealth>) {
+    fn cleanup_old_entries(&self, health: &mut HashMap<String, AuthHealth>) {
         if self.max_entries == 0 {
             return;
         }

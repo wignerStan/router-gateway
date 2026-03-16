@@ -2,77 +2,64 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use thiserror::Error;
 
-/// `ModelInfo` contains model metadata for routing decisions.
+/// Model metadata used for routing decisions.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ModelInfo {
-    /// ID is the unique model identifier (e.g., "claude-sonnet-4-20250514")
+    /// Unique model identifier (e.g., "claude-sonnet-4-20250514").
     pub id: String,
-
-    /// Name is the human-readable model name
+    /// Human-readable model name.
     pub name: String,
-
-    /// Provider is the model provider (e.g., "anthropic", "openai", "google")
+    /// Model provider (e.g., "anthropic", "openai", "google").
     pub provider: String,
-
-    /// `ContextWindow` is the maximum context window in tokens
+    /// Maximum context window in tokens.
     pub context_window: usize,
-
-    /// `MaxOutputTokens` is the maximum output tokens
+    /// Maximum output tokens.
     pub max_output_tokens: usize,
-
-    /// `InputPricePerMillion` is input price per 1M tokens in USD
+    /// Input price per 1M tokens in USD.
     pub input_price_per_million: f64,
-
-    /// `OutputPricePerMillion` is output price per 1M tokens in USD
+    /// Output price per 1M tokens in USD.
     pub output_price_per_million: f64,
-
-    /// Capabilities lists supported features
+    /// Supported features.
     pub capabilities: ModelCapabilities,
-
-    /// `RateLimits` defines rate limiting constraints
+    /// Rate limiting constraints.
     pub rate_limits: RateLimits,
-
-    /// Source indicates where this data came from
+    /// Where this data originated.
     pub source: DataSource,
 }
 
-/// `ModelCapabilities` defines supported model features.
+/// Supported model features.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ModelCapabilities {
-    /// Streaming indicates if streaming responses are supported
+    /// Whether streaming responses are supported.
     pub streaming: bool,
-
-    /// Tools indicates if function calling is supported
+    /// Whether function/tool calling is supported.
     pub tools: bool,
-
-    /// Vision indicates if image/vision input is supported
+    /// Whether image/vision input is supported.
     pub vision: bool,
-
-    /// Thinking indicates if extended thinking is supported
+    /// Whether extended thinking is supported.
     pub thinking: bool,
 }
 
-/// `RateLimits` defines rate limiting constraints.
+/// Rate limiting constraints for a model.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RateLimits {
-    /// `RequestsPerMinute` is the rate limit for requests
+    /// Maximum requests per minute.
     pub requests_per_minute: usize,
-
-    /// `TokensPerMinute` is the rate limit for tokens
+    /// Maximum tokens per minute.
     pub tokens_per_minute: usize,
 }
 
-/// `DataSource` indicates where model data originated.
+/// Origin of model metadata.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[non_exhaustive]
 pub enum DataSource {
-    /// Static indicates hardcoded fallback data
+    /// Hardcoded fallback data.
     Static,
-    /// `ModelsDev` indicates data from models.dev API
+    /// Data from the models.dev API.
     ModelsDev,
-    /// `LiteLLM` indicates data from `LiteLLM` proxy
+    /// Data from a `LiteLLM` proxy.
     LiteLLM,
-    /// Local indicates locally configured data
+    /// Locally configured data.
     Local,
 }
 
@@ -87,25 +74,32 @@ impl fmt::Display for DataSource {
     }
 }
 
-/// Errors that can occur when working with `ModelInfo`
+/// Validation errors for [`ModelInfo`].
 #[derive(Debug, Error)]
 pub enum ModelInfoError {
+    /// Model ID is empty.
     #[error("model ID cannot be empty")]
     EmptyId,
+    /// Context window is invalid for the given model.
     #[error("invalid context window for model {model}: {window}", model = .0, window = .1)]
     InvalidContextWindow(String, usize),
+    /// Input price is negative.
     #[error("invalid input price for model {model}: {price}", model = .0, price = .1)]
     InvalidInputPrice(String, f64),
+    /// Output price is negative.
     #[error("invalid output price for model {model}: {price}", model = .0, price = .1)]
     InvalidOutputPrice(String, f64),
+    /// Request rate limit is invalid for the given model.
     #[error("invalid request rate limit for model {model}: {limit}", model = .0, limit = .1)]
     InvalidRequestRateLimit(String, usize),
+    /// Token rate limit is invalid for the given model.
     #[error("invalid token rate limit for model {model}: {limit}", model = .0, limit = .1)]
     InvalidTokenRateLimit(String, usize),
 }
 
 impl ModelInfo {
-    /// `SupportsCapability` checks if the model supports a specific capability.
+    /// Checks if the model supports a named capability.
+    #[must_use]
     pub fn supports_capability(&self, capability: &str) -> bool {
         match capability {
             "streaming" => self.capabilities.streaming,
@@ -116,19 +110,24 @@ impl ModelInfo {
         }
     }
 
-    /// `EstimateCost` calculates the estimated cost for a request in USD.
+    /// Calculates estimated cost in USD for the given token counts.
+    #[must_use]
     pub fn estimate_cost(&self, input_tokens: usize, output_tokens: usize) -> f64 {
         let input_cost = (input_tokens as f64) / 1_000_000.0 * self.input_price_per_million;
         let output_cost = (output_tokens as f64) / 1_000_000.0 * self.output_price_per_million;
         input_cost + output_cost
     }
 
-    /// `CanFitContext` checks if the model can handle the given token count.
+    /// Returns `true` if `tokens` fits within the context window.
+    #[must_use]
     pub const fn can_fit_context(&self, tokens: usize) -> bool {
         tokens > 0 && tokens <= self.context_window
     }
 
-    /// `GetMaxTokens` returns the maximum output tokens allowed.
+    /// Returns the effective maximum output tokens.
+    ///
+    /// Falls back to 75% of the context window when not explicitly set.
+    #[must_use]
     pub fn get_max_tokens(&self) -> usize {
         if self.max_output_tokens > 0 && self.max_output_tokens < self.context_window {
             self.max_output_tokens
@@ -138,7 +137,11 @@ impl ModelInfo {
         }
     }
 
-    /// Validate checks if the model info is valid.
+    /// Validates that this model info is internally consistent.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ModelInfoError`] if any field violates invariants.
     pub fn validate(&self) -> Result<(), ModelInfoError> {
         if self.id.is_empty() {
             return Err(ModelInfoError::EmptyId);
@@ -167,8 +170,8 @@ impl ModelInfo {
     }
 }
 
-/// `EstimateRequestTokens` provides a rough token estimate for text input.
-/// This is a simple heuristic: ~4 characters per token for English text.
+/// Rough token estimate for English text (~4 characters per token).
+#[must_use]
 pub fn estimate_request_tokens(text: &str) -> usize {
     // Rough estimate: 4 chars per token for English text
     // This is conservative for code and other content

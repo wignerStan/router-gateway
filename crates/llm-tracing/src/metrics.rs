@@ -26,31 +26,43 @@ pub struct TraceMetrics {
     pub model_metrics: HashMap<String, ModelMetrics>,
 }
 
-/// Metrics aggregated per provider
+/// Metrics aggregated per provider.
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
 pub struct ProviderMetrics {
+    /// Total number of requests for this provider.
     pub total_requests: u64,
+    /// Number of successful requests (2xx status codes).
     pub successful_requests: u64,
+    /// Number of requests with recorded latency.
     pub latency_count: u64,
+    /// Average latency in milliseconds across all requests.
     pub avg_latency_ms: f64,
+    /// EWMA (Exponentially Weighted Moving Average) of latency.
     pub ewma_latency_ms: f64,
 }
 
-/// Metrics aggregated per model
+/// Metrics aggregated per model.
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
 pub struct ModelMetrics {
+    /// Total number of requests for this model.
     pub total_requests: u64,
+    /// Number of successful requests (2xx status codes).
     pub successful_requests: u64,
+    /// Number of requests with recorded latency.
     pub latency_count: u64,
+    /// Average latency in milliseconds across all requests.
     pub avg_latency_ms: f64,
+    /// Cumulative input tokens across all requests.
     pub total_input_tokens: u64,
+    /// Cumulative output tokens across all requests.
     pub total_output_tokens: u64,
 }
 
 impl TraceMetrics {
-    /// Create new empty metrics
+    /// Create new empty metrics.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -108,7 +120,8 @@ impl TraceMetrics {
             .update(trace);
     }
 
-    /// Aggregate metrics from a collection of traces
+    /// Aggregate metrics from a collection of traces.
+    #[must_use]
     pub fn aggregate(traces: &[TraceSpan]) -> Self {
         let mut metrics = Self::new();
         for trace in traces {
@@ -117,8 +130,10 @@ impl TraceMetrics {
         metrics
     }
 
-    /// Get percentile approximation using simple interpolation
-    /// Note: This requires storing all values; for production, consider t-digest or similar
+    /// Get percentile approximation using simple interpolation.
+    ///
+    /// Note: This requires storing all values; for production, consider t-digest or similar.
+    #[must_use]
     pub const fn get_percentile(&self, _percentile: f64) -> Option<f64> {
         // Placeholder: would need to store actual latency values
         // For production, use a proper percentile approximation algorithm
@@ -145,7 +160,8 @@ impl ProviderMetrics {
         }
     }
 
-    /// Get success rate for this provider
+    /// Get success rate for this provider.
+    #[must_use]
     pub fn success_rate(&self) -> f64 {
         if self.total_requests == 0 {
             0.0
@@ -180,7 +196,8 @@ impl ModelMetrics {
         }
     }
 
-    /// Get success rate for this model
+    /// Get success rate for this model.
+    #[must_use]
     pub fn success_rate(&self) -> f64 {
         if self.total_requests == 0 {
             0.0
@@ -189,7 +206,8 @@ impl ModelMetrics {
         }
     }
 
-    /// Get average tokens per request (input + output)
+    /// Get average tokens per request (input + output).
+    #[must_use]
     pub fn avg_total_tokens(&self) -> f64 {
         if self.total_requests == 0 {
             0.0

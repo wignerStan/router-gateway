@@ -44,33 +44,30 @@ impl DefaultWeightCalculator {
     /// let weight = calc.calculate(&auth, None, HealthStatus::Healthy);
     /// assert!(weight > 0.0, "healthy credential should have positive weight");
     /// ```
+    #[must_use]
     pub const fn new(config: WeightConfig) -> Self {
         Self { config }
     }
 
     /// Assess data availability from metrics
-    fn assess_data_availability(&self, metrics: Option<&AuthMetrics>) -> DataAvailability {
-        match metrics {
-            None => DataAvailability::Missing,
-            Some(m) => {
-                let has_requests = m.total_requests >= 10;
-                let has_latency = m.avg_latency_ms > 0.0;
-                let has_success_rate = m.success_rate >= 0.0;
+    fn assess_data_availability(metrics: Option<&AuthMetrics>) -> DataAvailability {
+        metrics.map_or(DataAvailability::Missing, |m| {
+            let has_requests = m.total_requests >= 10;
+            let has_latency = m.avg_latency_ms > 0.0;
+            let has_success_rate = m.success_rate >= 0.0;
 
-                if has_requests && has_latency && has_success_rate {
-                    DataAvailability::Full
-                } else if m.total_requests > 0 || has_latency || has_success_rate {
-                    DataAvailability::Sparse
-                } else {
-                    DataAvailability::Missing
-                }
-            },
-        }
+            if has_requests && has_latency && has_success_rate {
+                DataAvailability::Full
+            } else if m.total_requests > 0 || has_latency || has_success_rate {
+                DataAvailability::Sparse
+            } else {
+                DataAvailability::Missing
+            }
+        })
     }
 
     /// Select planner mode based on data availability and error state
     const fn select_planner_mode(
-        &self,
         data_availability: DataAvailability,
         health: HealthStatus,
     ) -> PlannerMode {
@@ -90,12 +87,12 @@ impl DefaultWeightCalculator {
     // ---- Scoring functions ----
 
     /// Calculate success rate score
-    fn calculate_success_rate_score(&self, metrics: Option<&AuthMetrics>) -> f64 {
+    fn calculate_success_rate_score(metrics: Option<&AuthMetrics>) -> f64 {
         metrics.map_or(0.5, |m| m.success_rate)
     }
 
     /// Calculate latency score (inverse function)
-    fn calculate_latency_score(&self, metrics: Option<&AuthMetrics>) -> f64 {
+    fn calculate_latency_score(metrics: Option<&AuthMetrics>) -> f64 {
         match metrics {
             Some(m) if m.avg_latency_ms > 0.0 => {
                 let score = 1.0 / (1.0 + m.avg_latency_ms / 1000.0);
@@ -106,7 +103,7 @@ impl DefaultWeightCalculator {
     }
 
     /// Calculate health status score
-    const fn calculate_health_score(&self, health: HealthStatus) -> f64 {
+    const fn calculate_health_score(health: HealthStatus) -> f64 {
         match health {
             HealthStatus::Healthy => 1.0,
             HealthStatus::Degraded => 0.6,
@@ -115,7 +112,7 @@ impl DefaultWeightCalculator {
     }
 
     /// Calculate load score based on request frequency and quota status
-    fn calculate_load_score(&self, auth: &AuthInfo, metrics: Option<&AuthMetrics>) -> f64 {
+    fn calculate_load_score(auth: &AuthInfo, metrics: Option<&AuthMetrics>) -> f64 {
         let recent_request_score = metrics.map_or(1.0, |m| {
             if m.total_requests > 0 {
                 1.0 / (1.0 + (m.total_requests as f64).ln() / 10.0)
@@ -139,7 +136,7 @@ impl DefaultWeightCalculator {
     }
 
     /// Calculate priority score
-    fn calculate_priority_score(&self, auth: &AuthInfo) -> f64 {
+    fn calculate_priority_score(auth: &AuthInfo) -> f64 {
         auth.priority.map_or(0.5, |priority| {
             let score = (f64::from(priority) + 100.0) / 200.0;
             score.clamp(0.0, 1.0)
@@ -155,11 +152,11 @@ impl DefaultWeightCalculator {
         metrics: Option<&AuthMetrics>,
         health: HealthStatus,
     ) -> f64 {
-        let success_rate_score = self.calculate_success_rate_score(metrics);
-        let latency_score = self.calculate_latency_score(metrics);
-        let health_score = self.calculate_health_score(health);
-        let load_score = self.calculate_load_score(auth, metrics);
-        let priority_score = self.calculate_priority_score(auth);
+        let success_rate_score = Self::calculate_success_rate_score(metrics);
+        let latency_score = Self::calculate_latency_score(metrics);
+        let health_score = Self::calculate_health_score(health);
+        let load_score = Self::calculate_load_score(auth, metrics);
+        let priority_score = Self::calculate_priority_score(auth);
 
         let mut total_weight = priority_score.mul_add(
             self.config.priority_weight,
@@ -182,7 +179,7 @@ impl DefaultWeightCalculator {
             HealthStatus::Degraded => {
                 total_weight *= self.config.degraded_penalty;
             },
-            _ => {},
+            HealthStatus::Healthy => {},
         }
 
         if auth.quota_exceeded {
@@ -203,8 +200,8 @@ impl DefaultWeightCalculator {
         metrics: Option<&AuthMetrics>,
         health: HealthStatus,
     ) -> f64 {
-        let health_score = self.calculate_health_score(health);
-        let priority_score = self.calculate_priority_score(auth);
+        let health_score = Self::calculate_health_score(health);
+        let priority_score = Self::calculate_priority_score(auth);
 
         let success_score = metrics.map_or(0.5, |m| m.success_rate);
         let latency_score = metrics.map_or(0.5, |m| {
@@ -235,8 +232,8 @@ impl DefaultWeightCalculator {
         _metrics: Option<&AuthMetrics>,
         health: HealthStatus,
     ) -> f64 {
-        let health_score = self.calculate_health_score(health);
-        let priority_score = self.calculate_priority_score(auth);
+        let health_score = Self::calculate_health_score(health);
+        let priority_score = Self::calculate_priority_score(auth);
 
         let total_weight = health_score.mul_add(0.7, priority_score * 0.3);
 
@@ -248,7 +245,7 @@ impl DefaultWeightCalculator {
             HealthStatus::Degraded => {
                 weight *= self.config.degraded_penalty;
             },
-            _ => {},
+            HealthStatus::Healthy => {},
         }
 
         if auth.quota_exceeded {
@@ -262,21 +259,15 @@ impl DefaultWeightCalculator {
     }
 
     /// Deterministic fallback: Predictable selection when errors occur
-    fn calculate_deterministic(&self, auth: &AuthInfo, health: HealthStatus) -> f64 {
-        let priority_score = self.calculate_priority_score(auth);
-        let health_score = match health {
-            HealthStatus::Healthy => 1.0,
-            HealthStatus::Degraded => 0.5,
-            HealthStatus::Unhealthy => 0.1,
-        };
-
-        let mut weight = f64::midpoint(priority_score, health_score);
+    fn calculate_deterministic(auth: &AuthInfo, health: HealthStatus) -> f64 {
+        let priority_score = Self::calculate_priority_score(auth);
+        let health_score = Self::calculate_health_score(health);
 
         if auth.quota_exceeded || auth.unavailable || matches!(health, HealthStatus::Unhealthy) {
-            weight = 0.0;
+            return 0.0;
         }
 
-        weight.max(0.0)
+        f64::midpoint(priority_score, health_score).max(0.0)
     }
 }
 
@@ -289,14 +280,14 @@ impl WeightCalculator for DefaultWeightCalculator {
         metrics: Option<&AuthMetrics>,
         health: HealthStatus,
     ) -> f64 {
-        let data_availability = self.assess_data_availability(metrics);
-        let planner_mode = self.select_planner_mode(data_availability, health);
+        let data_availability = Self::assess_data_availability(metrics);
+        let planner_mode = Self::select_planner_mode(data_availability, health);
 
         match planner_mode {
             PlannerMode::Learned => self.calculate_learned(auth, metrics, health),
             PlannerMode::Heuristic => self.calculate_heuristic(auth, metrics, health),
             PlannerMode::SafeWeighted => self.calculate_safe_weighted(auth, metrics, health),
-            PlannerMode::Deterministic => self.calculate_deterministic(auth, health),
+            PlannerMode::Deterministic => Self::calculate_deterministic(auth, health),
         }
     }
 

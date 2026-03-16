@@ -8,6 +8,7 @@ use crate::config;
 use crate::state::{AppState, HealthStatus, ModelInfo};
 use smart_routing::classification::RequestClassifier;
 
+/// Returns gateway metadata and available endpoints.
 pub async fn root() -> Json<Value> {
     Json(json!({
         "name": "Gateway API",
@@ -27,9 +28,15 @@ pub async fn root() -> Json<Value> {
     }))
 }
 
-/// Authentication middleware for protected routes
-/// Validates Bearer token against configured `auth_tokens`
-/// Fails-closed by default (requires auth) unless `GATEWAY_ENV=development` is set
+/// Authentication middleware for protected routes.
+///
+/// Validates Bearer token against configured `auth_tokens`.
+/// Fails-closed by default (requires auth) unless `GATEWAY_ENV=development` is set.
+///
+/// # Errors
+///
+/// Returns `403 Forbidden` if no auth tokens are configured in non-development mode.
+/// Returns `401 Unauthorized` if the `Authorization` header is missing or the token is invalid.
 pub async fn auth_middleware(
     State(state): State<AppState>,
     req: axum::extract::Request,
@@ -131,10 +138,15 @@ pub async fn security_headers_middleware(
     response
 }
 
-/// Rate limiting middleware. Extracts client IP from X-Forwarded-For or
-/// X-Real-IP headers only when `trust_proxy_headers` is enabled (gateway behind
-/// a trusted reverse proxy). Otherwise, all requests share a single bucket to
-/// prevent header-spoofing bypasses.
+/// Rate limiting middleware.
+///
+/// Extracts client IP from X-Forwarded-For or X-Real-IP headers only when
+/// `trust_proxy_headers` is enabled (gateway behind a trusted reverse proxy).
+/// Otherwise, all requests share a single bucket to prevent header-spoofing bypasses.
+///
+/// # Errors
+///
+/// Returns `429 Too Many Requests` when the client exceeds the configured rate limit.
 pub async fn rate_limit_middleware(
     axum::extract::State(state): axum::extract::State<AppState>,
     axum::extract::ConnectInfo(addr): axum::extract::ConnectInfo<SocketAddr>,
@@ -170,6 +182,7 @@ pub async fn rate_limit_middleware(
     Ok(next.run(req).await)
 }
 
+/// Returns gateway health status including uptime and credential counts.
 pub async fn health_check(State(state): State<AppState>) -> Json<HealthStatus> {
     let uptime = state.start_time.elapsed().as_secs();
 
@@ -191,6 +204,7 @@ pub async fn health_check(State(state): State<AppState>) -> Json<HealthStatus> {
     })
 }
 
+/// Lists all models available from configured credentials.
 pub async fn list_models(State(state): State<AppState>) -> Json<Value> {
     // Build model list from configured credentials
     // Note: When allowed_models is empty, it means all provider models are allowed
@@ -236,6 +250,7 @@ pub async fn list_models(State(state): State<AppState>) -> Json<Value> {
     }))
 }
 
+/// Classifies a sample request and returns the computed route plan.
 pub async fn route_request(State(state): State<AppState>) -> Json<Value> {
     // Create a sample request for demonstration
     // In production, this would come from the request body as JSON
@@ -263,16 +278,15 @@ pub async fn route_request(State(state): State<AppState>) -> Json<Value> {
     // and Step 5 would return the LLM response
 
     // Format the primary route
-    let primary_json = match &route_plan.primary {
-        Some(primary) => json!({
+    let primary_json = route_plan.primary.as_ref().map_or(json!(null), |primary| {
+        json!({
             "credential_id": primary.credential_id,
             "model_id": primary.model_id,
             "provider": primary.provider,
             "utility": primary.utility,
             "weight": primary.weight,
-        }),
-        None => json!(null),
-    };
+        })
+    });
 
     // Format fallbacks
     let fallbacks_json: Vec<Value> = route_plan

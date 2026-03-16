@@ -20,10 +20,14 @@ impl Default for OpenAIAdapter {
 }
 
 impl OpenAIAdapter {
+    /// Create a new OpenAI adapter.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Create an OpenAI adapter with a custom base URL.
+    #[must_use]
     pub const fn with_base_url(base_url: String) -> Self {
         Self {
             default_base_url: base_url,

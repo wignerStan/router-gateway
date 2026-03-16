@@ -16,6 +16,7 @@ impl FormatDetector {
     /// - **Anthropic**: Has `messages` with user/assistant roles AND `system` field
     /// - **Gemini**: Has `contents` array with `parts` field
     /// - **Generic**: Unknown or ambiguous structure
+    #[must_use]
     pub fn detect(request: &Value) -> RequestFormat {
         // Check for Gemini format (contents array with parts)
         if Self::is_gemini_format(request) {

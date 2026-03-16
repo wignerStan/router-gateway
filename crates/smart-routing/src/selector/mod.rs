@@ -32,15 +32,11 @@ pub struct SmartSelector {
 
 impl SmartSelector {
     /// Create a new smart selector
+    #[must_use]
     pub fn new(config: SmartRoutingConfig) -> Self {
-        let calculator: Box<dyn WeightCalculator> = match config.strategy.as_str() {
-            "weighted" => Box::new(crate::weight::DefaultWeightCalculator::new(
-                config.weight.clone(),
-            )),
-            _ => Box::new(crate::weight::DefaultWeightCalculator::new(
-                config.weight.clone(),
-            )),
-        };
+        let calculator: Box<dyn WeightCalculator> = Box::new(
+            crate::weight::DefaultWeightCalculator::new(config.weight.clone()),
+        );
 
         Self {
             calculator,
@@ -52,12 +48,13 @@ impl SmartSelector {
     }
 
     /// Create a new smart selector with policy support
+    #[must_use]
     pub fn with_policy(config: SmartRoutingConfig, registry: PolicyRegistry) -> Self {
         let matcher = Arc::new(PolicyMatcher::new(registry));
         let calculator: Box<dyn WeightCalculator> = if config.policy.enabled {
             Box::new(PolicyAwareWeightCalculator::new(
                 config.weight.clone(),
-                matcher.clone(),
+                Arc::clone(&matcher),
             ))
         } else {
             Box::new(crate::weight::DefaultWeightCalculator::new(
@@ -77,7 +74,7 @@ impl SmartSelector {
     /// Set the policy registry for policy-aware routing
     pub fn set_policy_registry(&mut self, registry: PolicyRegistry) {
         let matcher = Arc::new(PolicyMatcher::new(registry));
-        self.policy_matcher = Some(matcher.clone());
+        self.policy_matcher = Some(Arc::clone(&matcher));
 
         if self.config.policy.enabled {
             self.calculator = Box::new(PolicyAwareWeightCalculator::new(
@@ -88,21 +85,25 @@ impl SmartSelector {
     }
 
     /// Get the policy matcher (if configured)
+    #[must_use]
     pub fn policy_matcher(&self) -> Option<&PolicyMatcher> {
         self.policy_matcher.as_deref()
     }
 
     /// Get metrics collector
+    #[must_use]
     pub const fn metrics(&self) -> &MetricsCollector {
         &self.metrics
     }
 
     /// Get health manager
+    #[must_use]
     pub const fn health(&self) -> &HealthManager {
         &self.health
     }
 
     /// Get config
+    #[must_use]
     pub const fn config(&self) -> &SmartRoutingConfig {
         &self.config
     }
@@ -111,14 +112,9 @@ impl SmartSelector {
     pub fn set_config(&mut self, config: SmartRoutingConfig) {
         self.config = config;
 
-        self.calculator = match self.config.strategy.as_str() {
-            "weighted" => Box::new(crate::weight::DefaultWeightCalculator::new(
-                self.config.weight.clone(),
-            )),
-            _ => Box::new(crate::weight::DefaultWeightCalculator::new(
-                self.config.weight.clone(),
-            )),
-        };
+        self.calculator = Box::new(crate::weight::DefaultWeightCalculator::new(
+            self.config.weight.clone(),
+        ));
 
         self.health.set_config(self.config.health.clone());
     }
@@ -149,7 +145,7 @@ impl Clone for SmartSelector {
             )),
             metrics: self.metrics.clone(),
             health: self.health.clone(),
-            policy_matcher: self.policy_matcher.clone(),
+            policy_matcher: self.policy_matcher.as_ref().map(Arc::clone),
         }
     }
 }
