@@ -40,6 +40,8 @@ mod tests {
 
     #[test]
     fn expands_set_variable() {
+        // ALLOW: Mutex poisoning in tests is acceptable — propagates failure.
+        #[allow(clippy::unwrap_used)]
         let _guard = ENV_MUTEX.lock().unwrap();
         std::env::set_var("TEST_UTILS_API_KEY", "secret-value");
         let expanded = expand_env_var("${TEST_UTILS_API_KEY}");
@@ -49,6 +51,8 @@ mod tests {
 
     #[test]
     fn expands_with_default_when_unset() {
+        // ALLOW: Mutex poisoning in tests is acceptable — propagates failure.
+        #[allow(clippy::unwrap_used)]
         let _guard = ENV_MUTEX.lock().unwrap();
         let expanded = expand_env_var("${NONEXISTENT_VAR_UTILS:-default-value}");
         assert_eq!(expanded, "default-value");
@@ -62,6 +66,8 @@ mod tests {
 
     #[test]
     fn embedded_references() {
+        // ALLOW: Mutex poisoning in tests is acceptable — propagates failure.
+        #[allow(clippy::unwrap_used)]
         let _guard = ENV_MUTEX.lock().unwrap();
         std::env::set_var("TEST_UTILS_HOST", "example.com");
         let expanded = expand_env_var("https://${TEST_UTILS_HOST}/api");
@@ -77,6 +83,8 @@ mod tests {
 
     #[test]
     fn unset_var_expands_to_empty() {
+        // ALLOW: Mutex poisoning in tests is acceptable — propagates failure.
+        #[allow(clippy::unwrap_used)]
         let _guard = ENV_MUTEX.lock().unwrap();
         let expanded = expand_env_var("${SURELY_NONEXISTENT_VAR_XYZ}");
         assert_eq!(expanded, "");
