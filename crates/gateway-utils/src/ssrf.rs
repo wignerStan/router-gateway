@@ -19,6 +19,12 @@ pub enum Error {
 /// Validate that a URL does not point to a private, loopback, link-local,
 /// or cloud metadata address. Returns `Ok(())` if the URL is safe, or an
 /// error describing the rejected address.
+///
+/// # Errors
+///
+/// Returns [`Error::InvalidUrl`] if `url_str` cannot be parsed as a URL.
+/// Returns [`Error::NoHost`] if the parsed URL has no host component.
+/// Returns [`Error::PrivateIp`] if the host resolves to a private/reserved IP.
 pub fn validate_url_not_private(url_str: &str) -> Result<(), Error> {
     let parsed =
         url::Url::parse(url_str).map_err(|e| Error::InvalidUrl(format!("{url_str}: {e}")))?;
@@ -98,12 +104,11 @@ fn is_private_ip(ip: &IpAddr) -> bool {
 fn ipv6_to_v4_compat(v6: &std::net::Ipv6Addr) -> Option<std::net::Ipv4Addr> {
     let segments = v6.segments();
     if segments[0..6] == [0, 0, 0, 0, 0, 0] && (segments[6] != 0 || segments[7] != 0) {
-        Some(std::net::Ipv4Addr::new(
-            (segments[6] >> 8) as u8,
-            segments[6] as u8,
-            (segments[7] >> 8) as u8,
-            segments[7] as u8,
-        ))
+        let high = u8::try_from(segments[6] >> 8).ok()?;
+        let low = u8::try_from(segments[6]).ok()?;
+        let high2 = u8::try_from(segments[7] >> 8).ok()?;
+        let low2 = u8::try_from(segments[7]).ok()?;
+        Some(std::net::Ipv4Addr::new(high, low, high2, low2))
     } else {
         None
     }

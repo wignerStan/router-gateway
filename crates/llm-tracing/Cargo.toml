@@ -24,3 +24,6 @@ tracing = "0.1"
 
 [dev-dependencies]
 tokio = { version = "1.40", features = ["sync", "time", "macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

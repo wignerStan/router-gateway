@@ -324,6 +324,10 @@ ci-build:
 ci-type-check:
     cargo check --all --all-features
 
+# CI workspace lint inheritance check
+ci-lint-inheritance:
+    ./scripts/check-lint-inheritance.sh
+
 # ============================================
 # CLEAN TASKS
 # ============================================

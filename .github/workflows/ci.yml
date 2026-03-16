@@ -372,3 +372,14 @@ jobs:
           else
             echo "No unjustified #[allow(clippy::] found."
           fi
+
+  workspace-lint-inheritance:
+    name: Workspace Lint Inheritance
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check all workspace members inherit workspace lints
+        run: ./scripts/check-lint-inheritance.sh || echo "::warning::Some crates do not inherit workspace lints (see above)"
