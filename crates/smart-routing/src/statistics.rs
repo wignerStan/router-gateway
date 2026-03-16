@@ -39,7 +39,7 @@ pub enum TimeBucket {
 
 impl TimeBucket {
     /// Get time bucket from timestamp
-    pub fn from_timestamp(timestamp: DateTime<Utc>) -> Vec<TimeBucket> {
+    pub fn from_timestamp(timestamp: DateTime<Utc>) -> Vec<Self> {
         let hour = timestamp.hour();
         let weekday = timestamp.weekday().num_days_from_sunday() as u8;
         let is_peak = (PEAK_HOUR_START..PEAK_HOUR_END).contains(&hour);
@@ -49,52 +49,52 @@ impl TimeBucket {
 
         // Peak/off-peak
         if is_peak {
-            buckets.push(TimeBucket::Peak);
+            buckets.push(Self::Peak);
         } else {
-            buckets.push(TimeBucket::OffPeak);
+            buckets.push(Self::OffPeak);
         }
 
         // Weekday/weekend
         if is_weekend {
-            buckets.push(TimeBucket::Weekend);
+            buckets.push(Self::Weekend);
         } else {
-            buckets.push(TimeBucket::Weekday);
+            buckets.push(Self::Weekday);
         }
 
         // Compound buckets: weekday/weekend + peak/off-peak
         match (is_weekend, is_peak) {
-            (false, true) => buckets.push(TimeBucket::WeekdayPeak),
-            (false, false) => buckets.push(TimeBucket::WeekdayOffPeak),
-            (true, true) => buckets.push(TimeBucket::WeekendPeak),
-            (true, false) => buckets.push(TimeBucket::WeekendOffPeak),
+            (false, true) => buckets.push(Self::WeekdayPeak),
+            (false, false) => buckets.push(Self::WeekdayOffPeak),
+            (true, true) => buckets.push(Self::WeekendPeak),
+            (true, false) => buckets.push(Self::WeekendOffPeak),
         }
 
         // Specific hour
-        buckets.push(TimeBucket::Hour(hour as u8));
+        buckets.push(Self::Hour(hour as u8));
 
         // Specific day
-        buckets.push(TimeBucket::DayOfWeek(weekday));
+        buckets.push(Self::DayOfWeek(weekday));
 
         buckets
     }
 
     /// Get peak/off-peak bucket
-    pub fn peak_off_peak(timestamp: DateTime<Utc>) -> TimeBucket {
+    pub fn peak_off_peak(timestamp: DateTime<Utc>) -> Self {
         let hour = timestamp.hour();
         if (PEAK_HOUR_START..PEAK_HOUR_END).contains(&hour) {
-            TimeBucket::Peak
+            Self::Peak
         } else {
-            TimeBucket::OffPeak
+            Self::OffPeak
         }
     }
 
     /// Get weekday/weekend bucket
-    pub fn weekday_weekend(timestamp: DateTime<Utc>) -> TimeBucket {
+    pub fn weekday_weekend(timestamp: DateTime<Utc>) -> Self {
         let weekday = timestamp.weekday().num_days_from_sunday();
         if weekday == 0 || weekday == 6 {
-            TimeBucket::Weekend
+            Self::Weekend
         } else {
-            TimeBucket::Weekday
+            Self::Weekday
         }
     }
 }
@@ -198,7 +198,8 @@ fn update_bucket_stats(stats: &mut BucketStatistics, outcome: &ExecutionOutcome)
             stats.avg_latency_ms = latency;
         } else {
             // EWMA smoothing
-            stats.avg_latency_ms = EWMA_ALPHA * latency + (1.0 - EWMA_ALPHA) * stats.avg_latency_ms;
+            stats.avg_latency_ms =
+                EWMA_ALPHA.mul_add(latency, (1.0 - EWMA_ALPHA) * stats.avg_latency_ms);
         }
 
         if latency < stats.min_latency_ms {
@@ -209,7 +210,7 @@ fn update_bucket_stats(stats: &mut BucketStatistics, outcome: &ExecutionOutcome)
         }
     }
 
-    stats.total_tokens += outcome.total_tokens as u64;
+    stats.total_tokens += u64::from(outcome.total_tokens);
     if stats.total_requests > 0 {
         stats.avg_tokens = stats.total_tokens as f64 / stats.total_requests as f64;
     }
@@ -245,7 +246,7 @@ impl RouteStatistics {
     }
 
     /// Get all time bucket statistics
-    pub fn get_all_buckets(&self) -> &HashMap<TimeBucket, BucketStatistics> {
+    pub const fn get_all_buckets(&self) -> &HashMap<TimeBucket, BucketStatistics> {
         &self.time_buckets
     }
 }
@@ -391,7 +392,7 @@ impl StatisticsAggregator {
     }
 
     /// Get all route statistics
-    pub fn get_all_stats(&self) -> &HashMap<String, RouteStatistics> {
+    pub const fn get_all_stats(&self) -> &HashMap<String, RouteStatistics> {
         &self.route_stats
     }
 
@@ -784,7 +785,7 @@ mod tests {
         stats.update(&outcome_wp);
 
         // Record a weekend off-peak event (Sunday 2am)
-        let mut outcome_wo = outcome.clone();
+        let mut outcome_wo = outcome;
         outcome_wo.timestamp = DateTime::parse_from_rfc3339("2026-03-15T02:00:00Z")
             .unwrap()
             .with_timezone(&Utc);

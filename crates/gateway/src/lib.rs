@@ -59,7 +59,7 @@ pub async fn run() -> anyhow::Result<()> {
     // Get host and port from config before moving state
     let port = state.config.server.port;
     let host = &state.config.server.host;
-    let addr: SocketAddr = format!("{}:{}", host, port)
+    let addr: SocketAddr = format!("{host}:{port}")
         .parse()
         .context("Invalid host/port configuration")?;
     tracing::info!("Gateway listening on {}", addr);
@@ -93,27 +93,22 @@ pub fn load_config() -> anyhow::Result<GatewayConfig> {
         ["./gateway.yaml", "./config/gateway.yaml", "./gateway.yml"]
             .iter()
             .find(|path| std::path::Path::new(path).exists())
-            .map(|path| path.to_string())
+            .map(std::string::ToString::to_string)
     });
 
-    match config_path {
-        Some(path) => {
-            tracing::info!("Loading configuration from {}", path);
-            match GatewayConfig::from_file(&path) {
-                Ok(config) => Ok(config),
-                Err(e) => {
-                    anyhow::bail!(
-                        "Failed to load config from {}: {}. Please fix the configuration file.",
-                        path,
-                        e
-                    );
-                },
-            }
-        },
-        None => {
-            tracing::info!("No configuration file found, using defaults");
-            Ok(GatewayConfig::default())
-        },
+    if let Some(path) = config_path {
+        tracing::info!("Loading configuration from {}", path);
+        match GatewayConfig::from_file(&path) {
+            Ok(config) => Ok(config),
+            Err(e) => {
+                anyhow::bail!(
+                    "Failed to load config from {path}: {e}. Please fix the configuration file."
+                );
+            },
+        }
+    } else {
+        tracing::info!("No configuration file found, using defaults");
+        Ok(GatewayConfig::default())
     }
 }
 
@@ -122,7 +117,7 @@ pub fn load_config() -> anyhow::Result<GatewayConfig> {
 /// Shared by [`run()`] and test helpers to ensure production and test setups
 /// stay in sync. The `rate_limit` parameter overrides the default when
 /// provided.
-pub(crate) fn build_app_state(config: GatewayConfig, rate_limit: Option<u64>) -> AppState {
+pub fn build_app_state(config: GatewayConfig, rate_limit: Option<u64>) -> AppState {
     let smart_router = config
         .credentials
         .iter()
@@ -178,7 +173,7 @@ pub(crate) fn build_app_state(config: GatewayConfig, rate_limit: Option<u64>) ->
 ///
 /// Shared by [`run()`] and test helpers to guarantee the router structure
 /// never diverges between production and test builds.
-pub(crate) fn build_app_router(state: AppState) -> Router {
+pub fn build_app_router(state: AppState) -> Router {
     let public_routes = Router::new()
         .route("/", axum::routing::get(root))
         .route("/health", axum::routing::get(health_check));
@@ -209,48 +204,4 @@ pub(crate) fn build_app_router(state: AppState) -> Router {
         ))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
-}
-
-#[cfg(test)]
-#[allow(dead_code)]
-mod test_helpers {
-    use super::*;
-    use config::CredentialConfig;
-
-    /// Configurable fields for customizing test application state.
-    /// Fields set to `None` use sensible defaults.
-    pub(crate) struct TestOverrides {
-        pub auth_tokens: Vec<String>,
-        pub credentials: Vec<CredentialConfig>,
-        pub rate_limit: Option<u64>,
-    }
-
-    impl Default for TestOverrides {
-        fn default() -> Self {
-            Self {
-                auth_tokens: vec!["test-token".to_string()],
-                credentials: vec![],
-                rate_limit: None,
-            }
-        }
-    }
-
-    /// Builds an [`AppState`] from the given overrides, using sensible defaults
-    /// for any field not provided.
-    pub(crate) fn create_test_state(overrides: TestOverrides) -> AppState {
-        let mut config = GatewayConfig::default();
-        config.server.auth_tokens = overrides.auth_tokens;
-        config.credentials = overrides.credentials;
-        build_app_state(config, overrides.rate_limit)
-    }
-
-    /// Constructs the complete Axum router with all middleware layers in
-    /// production order. Returns a [`Router`] for use with
-    /// [`tower::ServiceExt::oneshot()`].
-    ///
-    /// Insert [`ConnectInfo<SocketAddr>`] into each test request's extensions
-    /// to satisfy the rate limiter's address extractor.
-    pub(crate) fn build_full_app(state: AppState) -> Router {
-        build_app_router(state)
-    }
 }

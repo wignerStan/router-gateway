@@ -636,7 +636,7 @@ mod counting_and_cleanup {
         // Add entries to exceed the limit
         for i in 0..10 {
             manager
-                .update_from_result(&format!("auth-{}", i), true, 200)
+                .update_from_result(&format!("auth-{i}"), true, 200)
                 .await;
         }
 

@@ -21,7 +21,7 @@ use smart_routing::{
 pub const DEFAULT_RATE_LIMIT: u64 = 60;
 
 /// Application state shared across handlers
-pub(crate) struct AppState {
+pub struct AppState {
     /// Gateway configuration
     pub config: GatewayConfig,
     /// Model registry for model information
@@ -59,7 +59,7 @@ impl Clone for AppState {
 }
 
 /// Default request classifier implementation
-pub(crate) struct DefaultRequestClassifier;
+pub struct DefaultRequestClassifier;
 
 impl RequestClassifier for DefaultRequestClassifier {
     fn classify(
@@ -95,7 +95,7 @@ impl RequestClassifier for DefaultRequestClassifier {
 
 /// Health status response
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct HealthStatus {
+pub struct HealthStatus {
     pub status: String,
     pub uptime_secs: u64,
     pub credential_count: usize,
@@ -106,7 +106,7 @@ pub(crate) struct HealthStatus {
 
 /// Model information for API response
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct ModelInfo {
+pub struct ModelInfo {
     pub id: String,
     pub provider: String,
     pub capabilities: Vec<String>,
@@ -115,14 +115,14 @@ pub(crate) struct ModelInfo {
 
 /// In-memory rate limiter tracking request counts per client IP
 /// within a sliding one-minute window.
-pub(crate) struct RateLimiter {
+pub struct RateLimiter {
     /// IP address -> (request count, window start time)
     buckets: Arc<Mutex<HashMap<String, (u64, Instant)>>>,
     max_requests: u64,
 }
 
 impl RateLimiter {
-    pub(crate) fn new(max_requests: u64) -> Self {
+    pub fn new(max_requests: u64) -> Self {
         Self {
             buckets: Arc::new(Mutex::new(HashMap::new())),
             max_requests,
@@ -131,8 +131,11 @@ impl RateLimiter {
 
     /// Check whether a request from the given IP should be allowed.
     /// Returns `true` if under the limit, `false` if rate limited.
-    pub(crate) fn check(&self, ip: &str) -> bool {
-        let mut buckets = self.buckets.lock().unwrap_or_else(|p| p.into_inner());
+    pub fn check(&self, ip: &str) -> bool {
+        let mut buckets = self
+            .buckets
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let now = Instant::now();
 
         let (count, window_start) = buckets.entry(ip.to_string()).or_insert((0, now));

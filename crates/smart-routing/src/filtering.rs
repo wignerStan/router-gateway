@@ -9,7 +9,7 @@ use model_registry::{PolicyContext, PolicyMatcher};
 use std::fmt;
 
 /// Filter result with reason for rejection
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FilterResult {
     /// Candidate passed all filters
     Accepted,
@@ -20,16 +20,16 @@ pub enum FilterResult {
 impl fmt::Display for FilterResult {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FilterResult::Accepted => write!(f, "accepted"),
-            FilterResult::Rejected { reason } => write!(f, "rejected: {}", reason),
+            Self::Accepted => write!(f, "accepted"),
+            Self::Rejected { reason } => write!(f, "rejected: {reason}"),
         }
     }
 }
 
 impl FilterResult {
     /// Check if candidate was accepted
-    pub fn is_accepted(&self) -> bool {
-        matches!(self, FilterResult::Accepted)
+    pub const fn is_accepted(&self) -> bool {
+        matches!(self, Self::Accepted)
     }
 }
 
@@ -46,7 +46,7 @@ pub struct ConstraintFilter {
 
 impl ConstraintFilter {
     /// Create a new constraint filter
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             disabled_providers: Vec::new(),
             policy_matcher: None,
@@ -105,7 +105,7 @@ impl ConstraintFilter {
         if !capability_support.is_supported() {
             if let Some(desc) = capability_support.missing_description() {
                 return FilterResult::Rejected {
-                    reason: format!("capability mismatch: missing {}", desc),
+                    reason: format!("capability mismatch: missing {desc}"),
                 };
             }
         }
@@ -187,7 +187,7 @@ mod tests {
     ) -> ModelInfo {
         ModelInfo {
             id: id.to_string(),
-            name: format!("Test Model {}", id),
+            name: format!("Test Model {id}"),
             provider: provider.to_string(),
             context_window,
             max_output_tokens: 4096,

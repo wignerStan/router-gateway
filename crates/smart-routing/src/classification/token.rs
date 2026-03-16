@@ -100,7 +100,7 @@ impl TokenEstimator {
         if let Some(max_tokens) = request
             .get("max_tokens")
             .or(request.get("max_completion_tokens"))
-            .and_then(|m| m.as_u64())
+            .and_then(serde_json::Value::as_u64)
         {
             return max_tokens as u32;
         }
@@ -127,8 +127,7 @@ mod tests {
         // Input: ~25 chars / 4 = ~7 tokens + 512 default output
         assert!(
             tokens > 500 && tokens < 550,
-            "Expected ~519 tokens, got {}",
-            tokens
+            "Expected ~519 tokens, got {tokens}"
         );
     }
 
@@ -145,8 +144,7 @@ mod tests {
         // Input: 10000 / 4 = 2500 tokens + 512 default output
         assert!(
             tokens > 3000 && tokens < 3100,
-            "Expected ~3012 tokens, got {}",
-            tokens
+            "Expected ~3012 tokens, got {tokens}"
         );
     }
 
@@ -163,8 +161,7 @@ mod tests {
         // Input: ~5 chars / 4 = ~2 tokens + 1024 max output
         assert!(
             tokens > 1020 && tokens < 1030,
-            "Expected ~1026 tokens, got {}",
-            tokens
+            "Expected ~1026 tokens, got {tokens}"
         );
     }
 
@@ -183,8 +180,7 @@ mod tests {
         // Total input: ~24 tokens + 512 default output
         assert!(
             tokens > 530 && tokens < 540,
-            "Expected ~536 tokens, got {}",
-            tokens
+            "Expected ~536 tokens, got {tokens}"
         );
     }
 
@@ -207,8 +203,7 @@ mod tests {
         // Input: ~20 chars / 4 = ~5 tokens + 512 default output
         assert!(
             tokens > 515 && tokens < 525,
-            "Expected ~517 tokens, got {}",
-            tokens
+            "Expected ~517 tokens, got {tokens}"
         );
     }
 
@@ -224,8 +219,7 @@ mod tests {
         // Input: ~11 chars / 4 = ~3 tokens + 512 default output
         assert!(
             tokens > 510 && tokens < 520,
-            "Expected ~515 tokens, got {}",
-            tokens
+            "Expected ~515 tokens, got {tokens}"
         );
     }
 
@@ -239,8 +233,7 @@ mod tests {
         // Input: ~16 chars / 4 = ~4 tokens + 512 default output
         assert!(
             tokens > 510 && tokens < 520,
-            "Expected ~516 tokens, got {}",
-            tokens
+            "Expected ~516 tokens, got {tokens}"
         );
     }
 
@@ -259,8 +252,7 @@ mod tests {
         // Total: 2500 tokens
         assert!(
             tokens > 2490 && tokens < 2510,
-            "Expected ~2500 tokens, got {}",
-            tokens
+            "Expected ~2500 tokens, got {tokens}"
         );
     }
 
@@ -339,8 +331,7 @@ mod tests {
         // Input: ~15 chars / 4 = ~4 tokens + 512 output
         assert!(
             tokens > 510 && tokens < 520,
-            "Should handle malformed image_url gracefully, got {}",
-            tokens
+            "Should handle malformed image_url gracefully, got {tokens}"
         );
     }
 
@@ -442,8 +433,7 @@ mod tests {
         // ~11 unicode chars / 4 = ~3 tokens + JSON overhead + 512 output
         assert!(
             tokens > 510 && tokens < 530,
-            "Should handle unicode content, got {}",
-            tokens
+            "Should handle unicode content, got {tokens}"
         );
     }
 
@@ -467,8 +457,7 @@ mod tests {
         // ~21 / 4 = ~6 tokens + 512 output
         assert!(
             tokens > 515 && tokens < 525,
-            "Should count multiple text parts, got {}",
-            tokens
+            "Should count multiple text parts, got {tokens}"
         );
     }
 }

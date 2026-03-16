@@ -4,7 +4,7 @@ use std::sync::{PoisonError, RwLock};
 
 use crate::info::{DataSource, ModelCapabilities, ModelInfo, RateLimits};
 
-/// ModelFetcher defines the interface for fetching model information.
+/// `ModelFetcher` defines the interface for fetching model information.
 #[async_trait]
 pub trait ModelFetcher: Send + Sync {
     /// Fetch retrieves model information for the given model ID.
@@ -17,7 +17,7 @@ pub trait ModelFetcher: Send + Sync {
         model_id: &str,
     ) -> Result<Option<ModelInfo>, Box<dyn std::error::Error + Send + Sync>>;
 
-    /// FetchMultiple retrieves model information for multiple model IDs.
+    /// `FetchMultiple` retrieves model information for multiple model IDs.
     /// Returns a map of model ID to `ModelInfo` for found models.
     ///
     /// # Errors
@@ -27,7 +27,7 @@ pub trait ModelFetcher: Send + Sync {
         model_ids: &[String],
     ) -> Result<HashMap<String, ModelInfo>, Box<dyn std::error::Error + Send + Sync>>;
 
-    /// ListAll returns all available models from this fetcher.
+    /// `ListAll` returns all available models from this fetcher.
     ///
     /// # Errors
     /// Returns an error if the fetch operation fails.
@@ -41,7 +41,7 @@ fn lock_err(e: PoisonError<impl std::fmt::Debug>) -> Box<dyn std::error::Error +
     Box::new(std::io::Error::other(format!("lock poisoned: {e}")))
 }
 
-/// StaticFetcher provides hardcoded model data for common models.
+/// `StaticFetcher` provides hardcoded model data for common models.
 pub struct StaticFetcher {
     models: RwLock<HashMap<String, ModelInfo>>,
 }
@@ -309,8 +309,7 @@ mod tests {
         let result = fetcher.fetch("test").await;
         assert!(
             result.is_err(),
-            "fetch should return Err on poisoned lock, got {:?}",
-            result
+            "fetch should return Err on poisoned lock, got {result:?}"
         );
     }
 
@@ -321,8 +320,7 @@ mod tests {
         let result = fetcher.fetch_multiple(&["test".to_string()]).await;
         assert!(
             result.is_err(),
-            "fetch_multiple should return Err on poisoned lock, got {:?}",
-            result
+            "fetch_multiple should return Err on poisoned lock, got {result:?}"
         );
     }
 
@@ -333,8 +331,7 @@ mod tests {
         let result = fetcher.list_all().await;
         assert!(
             result.is_err(),
-            "list_all should return Err on poisoned lock, got {:?}",
-            result
+            "list_all should return Err on poisoned lock, got {result:?}"
         );
     }
 }

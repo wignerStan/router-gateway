@@ -5,7 +5,9 @@
 //! context window, provider, modalities).
 
 use super::registry::PolicyRegistry;
-use super::types::*;
+use super::types::{
+    CapabilityCategory, ModalityCategory, PolicyContext, PolicyMatch, RoutingPolicy,
+};
 use crate::categories::ModelCategorization;
 use crate::info::ModelInfo;
 
@@ -15,24 +17,24 @@ pub struct PolicyMatcher {
 
 impl PolicyMatcher {
     /// Create a new policy matcher with the given registry
-    pub fn new(registry: PolicyRegistry) -> Self {
+    pub const fn new(registry: PolicyRegistry) -> Self {
         Self { registry }
     }
 
     /// Create a matcher with an empty registry
-    pub fn empty() -> Self {
+    pub const fn empty() -> Self {
         Self {
             registry: PolicyRegistry::new(),
         }
     }
 
     /// Get reference to the underlying registry
-    pub fn registry(&self) -> &PolicyRegistry {
+    pub const fn registry(&self) -> &PolicyRegistry {
         &self.registry
     }
 
     /// Get mutable reference to the underlying registry
-    pub fn registry_mut(&mut self) -> &mut PolicyRegistry {
+    pub const fn registry_mut(&mut self) -> &mut PolicyRegistry {
         &mut self.registry
     }
 
@@ -172,7 +174,7 @@ impl PolicyMatcher {
     }
 
     /// Check if model supports a modality
-    fn check_modality_match(&self, model: &ModelInfo, modality: &ModalityCategory) -> bool {
+    const fn check_modality_match(&self, model: &ModelInfo, modality: &ModalityCategory) -> bool {
         match modality {
             ModalityCategory::Text => true, // All models support text
             ModalityCategory::Image => model.capabilities.vision,
@@ -234,7 +236,7 @@ impl PolicyMatcher {
         }
 
         // Priority factor (higher priority = higher score)
-        let priority_factor = 1.0 + (policy.priority as f64 * 0.01);
+        let priority_factor = f64::from(policy.priority).mul_add(0.01, 1.0);
         score *= priority_factor;
 
         score
@@ -257,7 +259,7 @@ impl PolicyMatcher {
         let mut total_priority = 0;
 
         for m in &matches {
-            let priority_weight = 1.0 + (m.policy.priority as f64 * 0.1);
+            let priority_weight = f64::from(m.policy.priority).mul_add(0.1, 1.0);
             total_weight += m.score * priority_weight;
             total_priority += m.policy.priority;
         }

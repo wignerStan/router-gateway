@@ -1,4 +1,4 @@
-//! SQLite store read/write operations.
+//! `SQLite` store read/write operations.
 
 // ALLOW: Mutex/RwLock poisoning is an acceptable panic — propagates failure for
 // inconsistent shared state. All `.expect()` calls below are on cache locks that
@@ -161,12 +161,7 @@ impl SQLiteStore {
         db.execute(
             "INSERT INTO status_code_history (auth_id, status_code, latency_ms, success, timestamp)
             VALUES (?1, ?2, ?3, ?4, datetime('now'))",
-            rusqlite::params![
-                auth_id,
-                status_code,
-                latency_ms,
-                if success { 1 } else { 0 },
-            ],
+            rusqlite::params![auth_id, status_code, latency_ms, i32::from(success),],
         )
         .map_err(|e| SqliteError::query("write_status_history", e))?;
 
@@ -403,8 +398,7 @@ impl SQLiteStore {
                         consecutive_successes: row.get(9)?,
                         consecutive_failures: row.get(10)?,
                         last_request_time: DateTime::parse_from_rfc3339(&last_request_time_str)
-                            .map(|dt| dt.with_timezone(&Utc))
-                            .unwrap_or_else(|_| Utc::now()),
+                            .map_or_else(|_| Utc::now(), |dt| dt.with_timezone(&Utc)),
                         last_success_time: last_success_time_str
                             .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
                             .map(|dt| dt.with_timezone(&Utc)),
@@ -458,11 +452,9 @@ impl SQLiteStore {
                         consecutive_successes: row.get(2)?,
                         consecutive_failures: row.get(3)?,
                         last_status_change: DateTime::parse_from_rfc3339(&last_status_change_str)
-                            .map(|dt| dt.with_timezone(&Utc))
-                            .unwrap_or_else(|_| Utc::now()),
+                            .map_or_else(|_| Utc::now(), |dt| dt.with_timezone(&Utc)),
                         last_check_time: DateTime::parse_from_rfc3339(&last_check_time_str)
-                            .map(|dt| dt.with_timezone(&Utc))
-                            .unwrap_or_else(|_| Utc::now()),
+                            .map_or_else(|_| Utc::now(), |dt| dt.with_timezone(&Utc)),
                         unavailable_until: unavailable_until_str
                             .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
                             .map(|dt| dt.with_timezone(&Utc)),

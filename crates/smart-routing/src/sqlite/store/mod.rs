@@ -1,4 +1,4 @@
-//! SQLite storage backend with WAL mode for concurrent read/write.
+//! `SQLite` storage backend with WAL mode for concurrent read/write.
 
 mod operations;
 
@@ -18,7 +18,7 @@ struct CacheEntry {
     timestamp: DateTime<Utc>,
 }
 
-/// SQLite storage backend with WAL mode for concurrent read/write
+/// `SQLite` storage backend with WAL mode for concurrent read/write
 #[derive(Clone)]
 pub struct SQLiteStore {
     /// Database connection (wrapped in Arc for thread safety)
@@ -32,7 +32,7 @@ pub struct SQLiteStore {
     cache: Arc<RwLock<std::collections::HashMap<String, CacheEntry>>>,
 }
 
-/// SQLite configuration
+/// `SQLite` configuration
 #[derive(Clone, Debug)]
 pub struct SQLiteConfig {
     /// Database file path
@@ -63,7 +63,7 @@ impl Default for SQLiteConfig {
 }
 
 impl SQLiteStore {
-    /// Create a new SQLite store
+    /// Create a new `SQLite` store
     pub async fn new(config: SQLiteConfig) -> Result<Self> {
         let cfg = config.clone();
 
@@ -95,7 +95,7 @@ impl SQLiteStore {
         Ok(store)
     }
 
-    /// Configure SQLite pragmas
+    /// Configure `SQLite` pragmas
     async fn configure_pragmas(&self, config: &SQLiteConfig) -> Result<()> {
         let db = self.db.lock().await;
 

@@ -4,7 +4,7 @@ use serde_json::Value;
 /// Detector for LLM request format/protocol
 ///
 /// Analyzes the structure of a request to determine which provider's
-/// format it uses (OpenAI, Anthropic, Gemini, or Generic).
+/// format it uses (`OpenAI`, Anthropic, Gemini, or Generic).
 pub struct FormatDetector;
 
 impl FormatDetector {
@@ -12,7 +12,7 @@ impl FormatDetector {
     ///
     /// # Detection Rules
     ///
-    /// - **OpenAI**: Has `messages` array with role/content fields
+    /// - **`OpenAI`**: Has `messages` array with role/content fields
     /// - **Anthropic**: Has `messages` with user/assistant roles AND `system` field
     /// - **Gemini**: Has `contents` array with `parts` field
     /// - **Generic**: Unknown or ambiguous structure
@@ -36,7 +36,7 @@ impl FormatDetector {
         RequestFormat::Generic
     }
 
-    /// Check if request uses OpenAI format
+    /// Check if request uses `OpenAI` format
     fn is_openai_format(request: &Value) -> bool {
         request.get("messages").and_then(|m| m.as_array()).is_some()
     }

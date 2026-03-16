@@ -73,7 +73,11 @@ pub struct RouteExecutor {
 
 impl RouteExecutor {
     /// Create a new route executor
-    pub fn new(config: ExecutorConfig, metrics: MetricsCollector, health: HealthManager) -> Self {
+    pub const fn new(
+        config: ExecutorConfig,
+        metrics: MetricsCollector,
+        health: HealthManager,
+    ) -> Self {
         Self {
             config,
             metrics,
@@ -311,7 +315,7 @@ impl RouteExecutor {
                     AttemptResult::RetryableError {
                         status_code,
                         latency,
-                        error: format!("HTTP {}", status_code),
+                        error: format!("HTTP {status_code}"),
                     }
                 }
             },
@@ -345,17 +349,17 @@ impl RouteExecutor {
     }
 
     /// Get config
-    pub fn config(&self) -> &ExecutorConfig {
+    pub const fn config(&self) -> &ExecutorConfig {
         &self.config
     }
 
     /// Get metrics collector
-    pub fn metrics(&self) -> &MetricsCollector {
+    pub const fn metrics(&self) -> &MetricsCollector {
         &self.metrics
     }
 
     /// Get health manager
-    pub fn health(&self) -> &HealthManager {
+    pub const fn health(&self) -> &HealthManager {
         &self.health
     }
 }
