@@ -330,13 +330,13 @@ impl AttemptHistory {
 
     /// Get the number of attempts
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.attempts.len()
     }
 
     /// Check if empty
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.attempts.is_empty()
     }
 }

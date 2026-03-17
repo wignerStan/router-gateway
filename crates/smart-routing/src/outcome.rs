@@ -295,13 +295,13 @@ impl OutcomeRecorder {
 
     /// Get the number of recorded outcomes
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.outcomes.len()
     }
 
     /// Check if empty
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.outcomes.is_empty()
     }
 }

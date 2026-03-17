@@ -307,7 +307,7 @@ impl GatewayConfig {
 
     /// Check if authentication is enabled (at least one auth token configured).
     #[must_use]
-    pub fn is_auth_enabled(&self) -> bool {
+    pub const fn is_auth_enabled(&self) -> bool {
         !self.server.auth_tokens.is_empty()
     }
 }
