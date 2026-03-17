@@ -1,4 +1,9 @@
-#![allow(clippy::clone_on_ref_ptr, clippy::items_after_statements)]
+#![allow(
+    clippy::clone_on_ref_ptr,
+    clippy::items_after_statements,
+    // Intentional exact float comparisons in test assertions (e.g., assert_eq!(rate, 1.0))
+    clippy::float_cmp,
+)]
 //! Expanded integration tests for the llm-tracing package
 //!
 //! These tests provide comprehensive coverage of all public types and methods
@@ -13,8 +18,8 @@ use axum::{
 };
 use chrono::Utc;
 use llm_tracing::{
-    MemoryTraceCollector, ModelMetrics, ProviderMetrics, TraceCollector, TraceMetrics, TraceSpan,
-    TracingMiddleware, TracingMiddlewareBuilder,
+    MemoryTraceCollector, TraceCollector, TraceMetrics, TraceSpan, TracingMiddleware,
+    TracingMiddlewareBuilder,
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -91,7 +96,7 @@ fn make_test_app(middleware: TracingMiddleware) -> Router {
         .route("/not-found", get(not_found_handler))
         .route("/rate-limit", get(rate_limit_handler))
         .layer(axum::middleware::from_fn_with_state(
-            middleware.clone(),
+            middleware,
             llm_tracing::tracing_middleware,
         ))
 }
@@ -962,7 +967,7 @@ async fn test_middleware_multiple_sequential_requests() {
     assert_eq!(traces.len(), 10);
 
     // Verify all are successful
-    assert!(traces.iter().all(|t| t.is_success()));
+    assert!(traces.iter().all(llm_tracing::TraceSpan::is_success));
 
     // Verify request IDs
     for (i, trace) in traces.iter().enumerate() {
@@ -1030,7 +1035,7 @@ async fn test_e2e_multiple_providers_and_models() {
     let middleware = TracingMiddleware::new(collector.clone());
     let app = make_test_app(middleware);
 
-    let scenarios = vec![
+    let scenarios = [
         ("openai", "gpt-4"),
         ("openai", "gpt-3.5-turbo"),
         ("anthropic", "claude-3-opus"),

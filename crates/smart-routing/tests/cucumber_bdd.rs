@@ -1,4 +1,20 @@
-#![allow(clippy::unreadable_literal, missing_docs, clippy::expect_used)]
+#![allow(
+    clippy::unreadable_literal,
+    missing_docs,
+    clippy::expect_used,
+    // Cucumber step attributes use plain strings, not regex — trivial_regex is inherent
+    clippy::trivial_regex,
+    // Cucumber step functions use async fn for World trait compatibility
+    clippy::unused_async,
+    // Cucumber World trait requires &mut self even when world is only read
+    clippy::needless_pass_by_ref_mut,
+    // Common in test assertions and match exhaustiveness
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::used_underscore_binding,
+    // Intentional exact float comparisons in test assertions
+    clippy::float_cmp,
+)]
 // Cucumber v0.20 BDD test harness for smart-routing
 //
 // Step definitions mapping to the .feature files in docs/features/:
@@ -38,6 +54,7 @@ use std::sync::Arc;
 
 /// Result of classifying a request via the detectors.
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 struct ClassificationResult {
     vision_required: bool,
     tools_required: bool,
@@ -303,7 +320,7 @@ async fn given_unknown_format(world: &mut BddWorld) {
 
 // -- Given: token estimation steps --
 
-#[given(regex = r#"a request with a prompt containing (\d+) tokens"#)]
+#[given(regex = r"a request with a prompt containing (\d+) tokens")]
 async fn given_prompt_with_tokens(world: &mut BddWorld, tokens: u64) {
     // ~4 chars per token
     let chars = tokens * 4;
@@ -312,7 +329,7 @@ async fn given_prompt_with_tokens(world: &mut BddWorld, tokens: u64) {
     }));
 }
 
-#[given(regex = r#"a request with (\d+) input tokens"#)]
+#[given(regex = r"a request with (\d+) input tokens")]
 async fn given_input_tokens(world: &mut BddWorld, tokens: u64) {
     let chars = tokens * 4;
     world.current_request = Some(json!({
@@ -320,7 +337,7 @@ async fn given_input_tokens(world: &mut BddWorld, tokens: u64) {
     }));
 }
 
-#[given(regex = r#"an expected output of (\d+) tokens"#)]
+#[given(regex = r"an expected output of (\d+) tokens")]
 async fn given_expected_output(world: &mut BddWorld, tokens: u64) {
     world.expected_output_tokens = tokens as u32;
 }
@@ -382,11 +399,12 @@ async fn when_classified(world: &mut BddWorld) {
     let estimated_output_tokens = estimated_tokens.saturating_sub(estimated_input_tokens);
 
     // Reasoning detection
-    let mut thinking_required = false;
-    if let Some(ref reasoning_req) = world.reasoning_request {
+    let thinking_required = if let Some(ref reasoning_req) = world.reasoning_request {
         let inference = ReasoningInference::new();
-        thinking_required = inference.requires_reasoning(reasoning_req).await;
-    }
+        inference.requires_reasoning(reasoning_req).await
+    } else {
+        false
+    };
 
     world.classification_result = Some(ClassificationResult {
         vision_required,
@@ -495,7 +513,7 @@ async fn then_thinking_not_required(world: &mut BddWorld) {
     );
 }
 
-#[then(regex = r#"the format should be identified as (.+)"#)]
+#[then(regex = r"the format should be identified as (.+)")]
 async fn then_format_identified(world: &mut BddWorld, format_name: String) {
     let result = world
         .classification_result
@@ -511,7 +529,7 @@ async fn then_format_identified(world: &mut BddWorld, format_name: String) {
     assert_eq!(result.format, expected, "format should be {format_name}");
 }
 
-#[then(regex = r#"the estimated input tokens should be (\d+)"#)]
+#[then(regex = r"the estimated input tokens should be (\d+)")]
 async fn then_estimated_input_tokens(world: &mut BddWorld, expected_tokens: u64) {
     let result = world
         .classification_result
@@ -519,7 +537,7 @@ async fn then_estimated_input_tokens(world: &mut BddWorld, expected_tokens: u64)
         .expect("classification must be run first");
     // Allow ±20% tolerance due to character-based estimation
     let tolerance = (expected_tokens as f64 * 0.20) as u32;
-    let low = expected_tokens.saturating_sub(tolerance as u64) as u32;
+    let low = expected_tokens.saturating_sub(u64::from(tolerance)) as u32;
     let high = expected_tokens as u32 + tolerance;
     assert!(
         result.estimated_input_tokens >= low && result.estimated_input_tokens <= high,
@@ -565,8 +583,8 @@ async fn then_total_tokens_1500(world: &mut BddWorld) {
     let expected = result.estimated_input_tokens + world.expected_output_tokens;
     // Allow ±20% tolerance
     assert!(
-        result.estimated_tokens > (expected as f64 * 0.8) as u32
-            && result.estimated_tokens < (expected as f64 * 1.2) as u32,
+        result.estimated_tokens > (f64::from(expected) * 0.8) as u32
+            && result.estimated_tokens < (f64::from(expected) * 1.2) as u32,
         "total estimated tokens should be ~{expected} (got {})",
         result.estimated_tokens,
     );
@@ -683,7 +701,7 @@ async fn when_rate_limit(world: &mut BddWorld) {
         .await;
 }
 
-#[when(regex = r#"(\d+) consecutive failures occur"#)]
+#[when(regex = r"(\d+) consecutive failures occur")]
 async fn when_consecutive_failures(world: &mut BddWorld, count: u64) {
     let manager = world
         .health_manager
@@ -696,7 +714,7 @@ async fn when_consecutive_failures(world: &mut BddWorld, count: u64) {
     }
 }
 
-#[when(regex = r#"(\d+) consecutive successes occur"#)]
+#[when(regex = r"(\d+) consecutive successes occur")]
 async fn when_consecutive_successes(world: &mut BddWorld, count: u64) {
     let manager = world
         .health_manager
@@ -727,7 +745,7 @@ async fn when_system_recovers(world: &mut BddWorld) {
 
 // -- Then: health assertions --
 
-#[then(regex = r#"the credential should transition to (.+) state"#)]
+#[then(regex = r"the credential should transition to (.+) state")]
 async fn then_credential_state(world: &mut BddWorld, state_name: String) {
     let manager = world
         .health_manager
@@ -858,7 +876,7 @@ async fn given_non_vision_candidate(world: &mut BddWorld) {
     world.bandit_routes.push("non-vision-route".to_string());
 }
 
-#[given(regex = r#"a request requiring (\d+[Kk]) context"#)]
+#[given(regex = r"a request requiring (\d+[Kk]) context")]
 async fn given_large_context_request(world: &mut BddWorld, context: String) {
     let context_lower = context.to_lowercase();
     let tokens: u64 = if context_lower.ends_with('k') {
@@ -876,7 +894,7 @@ async fn given_large_context_request(world: &mut BddWorld, context: String) {
     }));
 }
 
-#[given(regex = r#"a route candidate with (\d+[Kk]) context limit"#)]
+#[given(regex = r"a route candidate with (\d+[Kk]) context limit")]
 async fn given_limited_context_candidate(world: &mut BddWorld, _limit: String) {
     world
         .bandit_routes
@@ -904,7 +922,7 @@ async fn given_premium_candidate(world: &mut BddWorld) {
 
 // -- Given: utility scenarios --
 
-#[given(regex = r#"a route candidate with (\d+)% historical success"#)]
+#[given(regex = r"a route candidate with (\d+)% historical success")]
 async fn given_high_success_candidate(world: &mut BddWorld, success_pct: u64) {
     let route = format!("route-{success_pct}pct");
     world.bandit_routes.push(route.clone());
@@ -914,14 +932,14 @@ async fn given_high_success_candidate(world: &mut BddWorld, success_pct: u64) {
             .bandit_policy
             .record_result(&route, true, success_rate);
     }
-    for _ in 0..(10 - (success_pct / 10) as u64) {
+    for _ in 0..(10 - (success_pct / 10)) {
         world
             .bandit_policy
             .record_result(&route, false, 1.0 - success_rate);
     }
 }
 
-#[given(regex = r#"a route candidate with (\d+)ms average latency"#)]
+#[given(regex = r"a route candidate with (\d+)ms average latency")]
 async fn given_high_latency_candidate(world: &mut BddWorld, latency_ms: u64) {
     let route = format!("route-{latency_ms}ms");
     world.bandit_routes.push(route.clone());
@@ -1051,7 +1069,7 @@ async fn given_new_session(world: &mut BddWorld) {
 #[given(regex = r#"a request with existing session "([^"]+)""#)]
 async fn given_existing_session(world: &mut BddWorld, session_id: String) {
     world.session_manager = SessionAffinityManager::new();
-    world.current_auth_id = session_id.clone();
+    world.current_auth_id = session_id;
 }
 
 #[given(regex = r#"session "([^"]+)" previously used provider "([^"]+)""#)]
@@ -1079,7 +1097,7 @@ async fn given_provider_unhealthy(world: &mut BddWorld, provider: String) {
 #[given(regex = r#"an ongoing conversation with session "([^"]+)""#)]
 async fn given_ongoing_conversation(world: &mut BddWorld, session_id: String) {
     world.session_manager = SessionAffinityManager::new();
-    world.current_auth_id = session_id.clone();
+    world.current_auth_id = session_id;
 }
 
 #[given(regex = r#"the conversation has (\d+) previous turns on provider "([^"]+)""#)]
@@ -1112,19 +1130,31 @@ async fn when_estimate_utility(_world: &mut BddWorld) {
 
 #[when("a route is selected")]
 async fn when_select_route(world: &mut BddWorld) {
-    let route_refs: Vec<&str> = world.bandit_routes.iter().map(|s| s.as_str()).collect();
+    let route_refs: Vec<&str> = world
+        .bandit_routes
+        .iter()
+        .map(std::string::String::as_str)
+        .collect();
     let _selected = world.bandit_policy.select_route(&route_refs);
 }
 
 #[when("a route decision is made")]
 async fn when_route_decision(world: &mut BddWorld) {
-    let route_refs: Vec<&str> = world.bandit_routes.iter().map(|s| s.as_str()).collect();
+    let route_refs: Vec<&str> = world
+        .bandit_routes
+        .iter()
+        .map(std::string::String::as_str)
+        .collect();
     let _selected = world.bandit_policy.select_route(&route_refs);
 }
 
 #[when("routes are selected")]
 async fn when_routes_selected_planning(world: &mut BddWorld) {
-    let route_refs: Vec<&str> = world.bandit_routes.iter().map(|s| s.as_str()).collect();
+    let route_refs: Vec<&str> = world
+        .bandit_routes
+        .iter()
+        .map(std::string::String::as_str)
+        .collect();
     if let Some(selected) = world.bandit_policy.select_route(&route_refs) {
         // Record the selection in session affinity if session exists
         let _ = world
@@ -1144,19 +1174,31 @@ async fn when_routes_selected_planning(world: &mut BddWorld) {
 
 #[when("primary and fallback are selected")]
 async fn when_primary_fallback(world: &mut BddWorld) {
-    let route_refs: Vec<&str> = world.bandit_routes.iter().map(|s| s.as_str()).collect();
+    let route_refs: Vec<&str> = world
+        .bandit_routes
+        .iter()
+        .map(std::string::String::as_str)
+        .collect();
     let _primary = world.bandit_policy.select_route(&route_refs);
 }
 
 #[when("fallback routes are planned")]
 async fn when_fallbacks_planned(world: &mut BddWorld) {
-    let route_refs: Vec<&str> = world.bandit_routes.iter().map(|s| s.as_str()).collect();
+    let route_refs: Vec<&str> = world
+        .bandit_routes
+        .iter()
+        .map(std::string::String::as_str)
+        .collect();
     let _primary = world.bandit_policy.select_route(&route_refs);
 }
 
 #[when("the next route is planned")]
 async fn when_next_route_planned(world: &mut BddWorld) {
-    let route_refs: Vec<&str> = world.bandit_routes.iter().map(|s| s.as_str()).collect();
+    let route_refs: Vec<&str> = world
+        .bandit_routes
+        .iter()
+        .map(std::string::String::as_str)
+        .collect();
     let _selected = world.bandit_policy.select_route(&route_refs);
 }
 
@@ -1193,8 +1235,7 @@ async fn then_capability_mismatch(world: &mut BddWorld) {
     let has_vision_request = world
         .current_request
         .as_ref()
-        .map(|r| ContentTypeDetector::detect_vision_required(r))
-        .unwrap_or(false);
+        .is_some_and(ContentTypeDetector::detect_vision_required);
     if has_vision_request && world.bandit_routes.iter().any(|r| r.contains("non-vision")) {
         // In a real system, the filter would remove non-vision routes
         world.bandit_routes.retain(|r| !r.contains("non-vision"));
@@ -1288,7 +1329,11 @@ async fn then_cost_penalized(world: &mut BddWorld) {
 
 #[then("uncertain routes have a chance of selection")]
 async fn then_exploration(world: &mut BddWorld) {
-    let route_refs: Vec<&str> = world.bandit_routes.iter().map(|s| s.as_str()).collect();
+    let route_refs: Vec<&str> = world
+        .bandit_routes
+        .iter()
+        .map(std::string::String::as_str)
+        .collect();
     let mut selected_counts: HashMap<String, u32> = HashMap::new();
     for _ in 0..200 {
         if let Some(sel) = world.bandit_policy.select_route(&route_refs) {
@@ -1311,7 +1356,11 @@ async fn then_exploration(world: &mut BddWorld) {
 
 #[then("the high-success route is likely selected")]
 async fn then_exploitation(world: &mut BddWorld) {
-    let route_refs: Vec<&str> = world.bandit_routes.iter().map(|s| s.as_str()).collect();
+    let route_refs: Vec<&str> = world
+        .bandit_routes
+        .iter()
+        .map(std::string::String::as_str)
+        .collect();
     let mut top_count = 0u32;
     for _ in 0..200 {
         if let Some(sel) = world.bandit_policy.select_route(&route_refs) {
@@ -1329,7 +1378,11 @@ async fn then_exploitation(world: &mut BddWorld) {
 
 #[then("fallbacks should prefer different providers")]
 async fn then_fallbacks_diverse_providers(world: &mut BddWorld) {
-    let route_refs: Vec<&str> = world.bandit_routes.iter().map(|s| s.as_str()).collect();
+    let route_refs: Vec<&str> = world
+        .bandit_routes
+        .iter()
+        .map(std::string::String::as_str)
+        .collect();
     // With diversity penalty, same-provider routes should be selected less
     let mut same_provider_count = 0u32;
     let mut other_count = 0u32;
@@ -1351,7 +1404,11 @@ async fn then_fallbacks_diverse_providers(world: &mut BddWorld) {
 
 #[then("a primary route should be selected")]
 async fn then_primary_selected(world: &mut BddWorld) {
-    let route_refs: Vec<&str> = world.bandit_routes.iter().map(|s| s.as_str()).collect();
+    let route_refs: Vec<&str> = world
+        .bandit_routes
+        .iter()
+        .map(std::string::String::as_str)
+        .collect();
     let selected = world.bandit_policy.select_route(&route_refs);
     assert!(selected.is_some(), "should select a primary route",);
 }
@@ -1389,7 +1446,7 @@ async fn then_any_provider(world: &mut BddWorld) {
     // and that a provider was selected (any provider is valid for new session).
     // The "no preference" check is implicitly verified by the Given step
     // creating a fresh SessionAffinityManager.
-    let provider = world
+    let _provider = world
         .session_manager
         .get_preferred_provider(&world.current_auth_id)
         .await;
@@ -1510,7 +1567,7 @@ async fn given_with_fallbacks(world: &mut BddWorld) {
     world.attempt_count = 0;
 }
 
-#[given(regex = r#"a request with retry budget of (\d+)"#)]
+#[given(regex = r"a request with retry budget of (\d+)")]
 async fn given_retry_budget(world: &mut BddWorld, budget: u64) {
     world.retry_budget = budget as u32;
     world.attempt_count = 0;
@@ -1760,7 +1817,7 @@ async fn then_error_immediate(world: &mut BddWorld) {
     assert_eq!(metrics.failure_count, 1, "auth error fails immediately");
 }
 
-#[then(regex = r#"exactly (\d+) attempts should be made"#)]
+#[then(regex = r"exactly (\d+) attempts should be made")]
 async fn then_exact_attempts(world: &mut BddWorld, expected: u64) {
     assert_eq!(
         world.attempt_count, expected as u32,
@@ -1776,7 +1833,7 @@ async fn then_final_error(world: &mut BddWorld) {
     );
 }
 
-#[then(regex = r#"only (\d+) attempts should be made"#)]
+#[then(regex = r"only (\d+) attempts should be made")]
 async fn then_only_attempts(world: &mut BddWorld, expected: u64) {
     assert_eq!(
         world.attempt_count, expected as u32,
@@ -1932,10 +1989,12 @@ async fn given_provider_no_history(world: &mut BddWorld, _provider: String) {
 
 #[given(regex = r#"a prior for "([^"]+)" with (\d+)% baseline success"#)]
 async fn given_provider_prior(world: &mut BddWorld, provider: String, success_pct: u64) {
-    let mut prior = BucketStatistics::default();
-    prior.success_count = success_pct;
-    prior.total_requests = 100;
-    prior.success_rate = success_pct as f64 / 100.0;
+    let prior = BucketStatistics {
+        success_count: success_pct,
+        total_requests: 100,
+        success_rate: success_pct as f64 / 100.0,
+        ..Default::default()
+    };
     world.priors.set_provider_prior(provider, prior);
 }
 
@@ -2124,7 +2183,7 @@ async fn then_no_weekday_effect(_world: &mut BddWorld) {
     // Verified by the time-bucket separation in BucketStatistics.
 }
 
-#[then(regex = r#"the prior success rate should be (\d+)%?"#)]
+#[then(regex = r"the prior success rate should be (\d+)%?")]
 async fn then_prior_success_rate(world: &mut BddWorld, expected_pct: u64) {
     let prior = world.priors.get_prior(Some("anthropic"), None);
     let rate = (prior.success_rate * 100.0) as u64;
@@ -2150,7 +2209,11 @@ async fn then_flagship_prior(world: &mut BddWorld) {
     world
         .bandit_policy
         .record_result("unknown-route", true, 0.9);
-    let route_refs: Vec<&str> = world.bandit_routes.iter().map(|s| s.as_str()).collect();
+    let route_refs: Vec<&str> = world
+        .bandit_routes
+        .iter()
+        .map(std::string::String::as_str)
+        .collect();
     let selected = world.bandit_policy.select_route(&route_refs);
     assert!(
         selected.is_some(),

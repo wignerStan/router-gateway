@@ -1,6 +1,6 @@
 //! E2E container tests using testcontainers-rs 0.25.0 with Podman backend.
 //!
-//! These tests spin up real PostgreSQL and Redis containers to verify
+//! These tests spin up real `PostgreSQL` and Redis containers to verify
 //! container lifecycle management and integration with the gateway.
 //!
 //! # Running

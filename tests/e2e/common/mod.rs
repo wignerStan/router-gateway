@@ -1,6 +1,6 @@
 //! Shared e2e test utilities for container-based testing.
 //!
-//! This module provides helpers for starting PostgreSQL and Redis containers
+//! This module provides helpers for starting `PostgreSQL` and Redis containers
 //! via testcontainers-rs 0.25.0, building connection strings with dynamic
 //! port assignment, and managing test timeouts.
 //!
@@ -21,7 +21,13 @@
 //! cleanup guarantees for CI environments. To disable Ryuk in CI, set
 //! `TESTCONTAINERS_RYUK_DISABLED=true`.
 
-#![allow(missing_docs, clippy::expect_used, clippy::panic)]
+#![allow(
+    missing_docs,
+    clippy::expect_used,
+    clippy::panic,
+    // Public constants reserved for future e2e test use
+    dead_code,
+)]
 
 use testcontainers::{runners::AsyncRunner, ContainerAsync};
 use testcontainers_modules::postgres::Postgres;
@@ -37,26 +43,26 @@ pub const CONTAINER_STARTUP_TIMEOUT_SECS: u64 = 30;
 /// Default timeout for individual test operations (seconds).
 pub const OPERATION_TIMEOUT_SECS: u64 = 10;
 
-/// PostgreSQL internal port inside the container.
+/// `PostgreSQL` internal port inside the container.
 pub const POSTGRES_PORT: u16 = 5432;
 
 /// Redis internal port inside the container.
 pub const REDIS_PORT: u16 = 6379;
 
-/// Default PostgreSQL superuser name (set by testcontainers-modules).
+/// Default `PostgreSQL` superuser name (set by testcontainers-modules).
 pub const POSTGRES_USER: &str = "postgres";
 
-/// Default PostgreSQL superuser password (set by testcontainers-modules).
+/// Default `PostgreSQL` superuser password (set by testcontainers-modules).
 pub const POSTGRES_PASSWORD: &str = "postgres";
 
-/// Default PostgreSQL database name (set by testcontainers-modules).
+/// Default `PostgreSQL` database name (set by testcontainers-modules).
 pub const POSTGRES_DB: &str = "postgres";
 
 // ---------------------------------------------------------------------------
 // Container Startup Helpers
 // ---------------------------------------------------------------------------
 
-/// Start a PostgreSQL container using the default image from testcontainers-modules.
+/// Start a `PostgreSQL` container using the default image from testcontainers-modules.
 ///
 /// The container uses default credentials (`postgres`/`postgres`) and the
 /// default database (`postgres`). It exposes port [`POSTGRES_PORT`] and
@@ -112,7 +118,7 @@ pub async fn start_redis() -> ContainerAsync<Redis> {
 // Connection String Builders
 // ---------------------------------------------------------------------------
 
-/// Build a PostgreSQL connection string using the container's dynamically
+/// Build a `PostgreSQL` connection string using the container's dynamically
 /// assigned host port.
 ///
 /// Uses `127.0.0.1` as the host, which is appropriate for local Docker/Podman.
