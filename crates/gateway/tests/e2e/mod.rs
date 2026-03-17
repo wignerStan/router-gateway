@@ -1,8 +1,7 @@
 //! E2E test entry point for the gateway crate.
 //!
-//! This file references the shared e2e utilities module and test cases
-//! located under `tests/e2e/` in the workspace root via symlinks in
-//! this test directory.
+//! This module references shared e2e utilities and test cases located
+//! under `tests/e2e/` in the workspace root via symlinks.
 //!
 //! All e2e tests are gated behind the `e2e` feature flag and will not
 //! be compiled during normal `cargo test` runs.
