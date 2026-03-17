@@ -26,6 +26,8 @@ help:
     @echo "║ DEV:     start, dev, cli, watch                            ║"
     @echo "║ BUILD:   build, build-release, docs                        ║"
     @echo "║ TEST:    test, test-package, test-coverage                 ║"
+    @echo "║          test-e2e, test-bdd, test-snapshot-review,         ║"
+    @echo "║          test-snapshot-accept                              ║"
     @echo "║ QUALITY: fmt, lint, type-check, qa, qa-full                ║"
     @echo "║ SECURITY: audit, security-scan                             ║"
     @echo "║ UTILITY: members, graph, outdated, env                     ║"
@@ -157,6 +159,22 @@ test-tracing:
 # Run gateway tests
 test-gateway:
     cargo test -p gateway
+
+# Run e2e tests with Podman (requires Podman and testcontainers)
+test-e2e:
+    DOCKER_HOST={{env_var_or_default("DOCKER_HOST", "unix:///run/podman/podman.sock")}} cargo test --features e2e -- e2e
+
+# Run BDD integration tests
+test-bdd:
+    cargo test --all bdd_integration
+
+# Review pending snapshot changes (requires cargo-insta)
+test-snapshot-review:
+    cargo insta review
+
+# Accept all pending snapshot changes (requires cargo-insta)
+test-snapshot-accept:
+    cargo insta accept
 
 # ============================================
 # RUNNING APPLICATIONS
