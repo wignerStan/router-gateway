@@ -72,14 +72,14 @@ jobs:
         run: just ci-lint
 
   msrv:
-    name: MSRV Check (1.85)
+    name: MSRV Check (1.88)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Rust 1.85
-        uses: dtolnay/rust-toolchain@1.85
+      - name: Set up Rust 1.88
+        uses: dtolnay/rust-toolchain@1.88
 
       - name: Cache cargo registry
         uses: Swatinem/rust-cache@v2
@@ -236,7 +236,6 @@ jobs:
       - name: Run e2e tests
         env:
           DOCKER_HOST: unix:///run/podman/podman.sock
-          TESTCONTAINERS_RYUK_DISABLED: "true"
         run: just test-e2e
 
   snapshot-check:
