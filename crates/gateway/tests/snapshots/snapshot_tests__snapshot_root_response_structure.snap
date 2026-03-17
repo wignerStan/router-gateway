@@ -1,0 +1,17 @@
+---
+source: crates/gateway/tests/snapshot_tests.rs
+assertion_line: 339
+expression: response
+---
+description: Smart routing gateway for LLM requests
+endpoints:
+  health: /health
+  models: /api/models
+  route: /api/route
+features:
+  - Smart Routing
+  - Model Registry
+  - LLM Tracing
+  - Health Management
+name: Gateway API
+version: 0.1.0

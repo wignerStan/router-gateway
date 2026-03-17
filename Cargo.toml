@@ -62,7 +62,7 @@ tempfile = "3"
 cucumber = "0.20"
 
 # Snapshot testing
-insta = { version = "1.46.3", features = ["yaml"] }
+insta = { version = "1.46.3", features = ["yaml", "redactions"] }
 
 # E2E container testing (exact pin — >=0.25.1 requires Rust 1.88, project MSRV is 1.85)
 testcontainers = { version = "=0.25.0", features = ["blocking", "http_wait"] }

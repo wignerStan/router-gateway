@@ -1,0 +1,11 @@
+---
+source: crates/gateway/tests/snapshot_tests.rs
+assertion_line: 244
+expression: status
+---
+status: healthy
+uptime_secs: "[uptime]"
+credential_count: 3
+healthy_count: 3
+degraded_count: 0
+unhealthy_count: 0

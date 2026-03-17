@@ -1,0 +1,8 @@
+---
+source: crates/gateway/tests/snapshot_tests.rs
+assertion_line: 372
+expression: error
+---
+error:
+  message: Invalid or expired API token
+  type: invalid_request_error

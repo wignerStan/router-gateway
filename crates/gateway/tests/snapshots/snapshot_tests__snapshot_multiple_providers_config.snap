@@ -1,0 +1,21 @@
+---
+source: crates/gateway/tests/snapshot_tests.rs
+assertion_line: 192
+expression: sorted_providers
+---
+custom-llm:
+  enabled: true
+  base_url: "https://custom-llm.example.com"
+  timeout_secs: ~
+  headers:
+    X-API-Version: 2024-01
+google:
+  enabled: false
+  base_url: ~
+  timeout_secs: ~
+  headers: {}
+openai:
+  enabled: true
+  base_url: "https://api.openai.com/v1"
+  timeout_secs: ~
+  headers: {}

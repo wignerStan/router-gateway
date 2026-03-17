@@ -1,0 +1,30 @@
+---
+source: crates/gateway/tests/snapshot_tests.rs
+assertion_line: 530
+expression: response
+---
+_gateway:
+  classification:
+    capabilities:
+      streaming: false
+      tools: false
+      vision: false
+    format: Chat
+  route:
+    credential_id: openai-primary
+    provider: openai
+    utility: "[utility]"
+choices:
+  - finish_reason: stop
+    index: 0
+    message:
+      content: "[Gateway mock response - route: openai-primary, provider: openai]"
+      role: assistant
+created: "[timestamp]"
+id: "[chat_id]"
+model: gpt-4
+object: chat.completion
+usage:
+  completion_tokens: 50
+  prompt_tokens: 50
+  total_tokens: 100

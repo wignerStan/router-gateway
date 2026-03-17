@@ -1,0 +1,8 @@
+---
+source: crates/gateway/tests/snapshot_tests.rs
+assertion_line: 394
+expression: error
+---
+error:
+  message: "Gateway is improperly configured: No authentication tokens available."
+  type: config_error

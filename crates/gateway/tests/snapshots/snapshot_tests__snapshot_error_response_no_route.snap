@@ -1,0 +1,8 @@
+---
+source: crates/gateway/tests/snapshot_tests.rs
+assertion_line: 350
+expression: error
+---
+error:
+  message: No suitable routes found. Configure credentials in gateway.yaml
+  type: no_route_available

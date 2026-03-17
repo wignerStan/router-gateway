@@ -52,6 +52,7 @@ http-body-util = "0.1"
 rstest = "0.25"
 pretty_assertions = "1.4"
 tempfile = "3"
+insta = { workspace = true }
 
 [lints]
 workspace = true

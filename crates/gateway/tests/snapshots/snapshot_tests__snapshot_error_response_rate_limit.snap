@@ -1,0 +1,8 @@
+---
+source: crates/gateway/tests/snapshot_tests.rs
+assertion_line: 361
+expression: error
+---
+error:
+  message: Too many requests. Please try again later.
+  type: rate_limit_error

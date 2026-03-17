@@ -1,0 +1,11 @@
+---
+source: crates/gateway/tests/snapshot_tests.rs
+assertion_line: 259
+expression: status
+---
+status: degraded
+uptime_secs: "[uptime]"
+credential_count: 4
+healthy_count: 2
+degraded_count: 1
+unhealthy_count: 1

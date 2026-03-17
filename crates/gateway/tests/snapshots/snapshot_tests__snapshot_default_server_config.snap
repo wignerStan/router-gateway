@@ -1,0 +1,10 @@
+---
+source: crates/gateway/tests/snapshot_tests.rs
+assertion_line: 35
+expression: config
+---
+port: 3000
+host: "[host]"
+timeout_secs: 120
+auth_tokens: []
+trust_proxy_headers: false

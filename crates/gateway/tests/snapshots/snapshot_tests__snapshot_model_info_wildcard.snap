@@ -1,0 +1,10 @@
+---
+source: crates/gateway/tests/snapshot_tests.rs
+assertion_line: 302
+expression: model
+---
+id: "openai:*"
+provider: openai
+capabilities:
+  - all
+context_window: 128000

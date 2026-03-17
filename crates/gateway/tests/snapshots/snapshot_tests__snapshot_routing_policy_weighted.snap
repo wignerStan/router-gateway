@@ -1,0 +1,9 @@
+---
+source: crates/gateway/tests/snapshot_tests.rs
+assertion_line: 199
+expression: config.routing
+---
+strategy: weighted
+session_affinity: true
+min_healthy_credentials: 1
+fallback_depth: 2

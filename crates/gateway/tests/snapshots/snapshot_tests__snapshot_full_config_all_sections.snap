@@ -1,0 +1,51 @@
+---
+source: crates/gateway/tests/snapshot_tests.rs
+assertion_line: 125
+expression: config_to_sorted_value(&config)
+---
+credentials:
+  - allowed_models:
+      - gpt-4
+      - gpt-3.5-turbo
+    api_key: sk-openai-key
+    base_url: ~
+    daily_quota: 10000
+    id: openai-primary
+    organization: ~
+    priority: 10
+    provider: openai
+    rate_limit: 60
+  - allowed_models: []
+    api_key: google-key-123
+    base_url: "https://generativelanguage.googleapis.com/v1beta"
+    daily_quota: ~
+    id: google-primary
+    organization: ~
+    priority: 8
+    provider: google
+    rate_limit: ~
+providers:
+  google:
+    base_url: "https://generativelanguage.googleapis.com/v1beta"
+    enabled: true
+    headers: {}
+    timeout_secs: ~
+  openai:
+    base_url: "https://api.openai.com/v1"
+    enabled: true
+    headers:
+      X-Custom-Header: custom-value
+    timeout_secs: 120
+routing:
+  fallback_depth: 3
+  min_healthy_credentials: 2
+  session_affinity: false
+  strategy: adaptive
+server:
+  auth_tokens:
+    - token-one
+    - token-two
+  host: "[host]"
+  port: 8080
+  timeout_secs: 90
+  trust_proxy_headers: true

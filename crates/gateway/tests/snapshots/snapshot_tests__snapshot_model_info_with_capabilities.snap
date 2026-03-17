@@ -1,0 +1,12 @@
+---
+source: crates/gateway/tests/snapshot_tests.rs
+assertion_line: 291
+expression: model
+---
+id: gpt-4
+provider: openai
+capabilities:
+  - streaming
+  - tools
+  - vision
+context_window: 128000

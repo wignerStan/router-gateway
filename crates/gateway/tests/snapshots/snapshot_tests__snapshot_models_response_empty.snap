@@ -1,0 +1,8 @@
+---
+source: crates/gateway/tests/snapshot_tests.rs
+assertion_line: 404
+expression: response
+---
+count: 0
+message: No models configured. Add credentials to gateway.yaml
+models: []
