@@ -1,7 +1,9 @@
 #![allow(
+    // ALLOW: Arc::clone in test setup is idiomatic — readability outweighs ref-count cost.
     clippy::clone_on_ref_ptr,
+    // ALLOW: Test helpers are defined after test functions for readability — statements after items is fine.
     clippy::items_after_statements,
-    // Intentional exact float comparisons in test assertions (e.g., assert_eq!(rate, 1.0))
+    // ALLOW: Intentional exact float comparisons in test assertions (e.g., assert_eq!(rate, 1.0)).
     clippy::float_cmp,
 )]
 //! Expanded integration tests for the llm-tracing package

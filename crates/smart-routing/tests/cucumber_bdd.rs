@@ -1,18 +1,23 @@
 #![allow(
+    // ALLOW: Test fixtures use numeric literals for clarity over readability concerns.
     clippy::unreadable_literal,
+    // ALLOW: Test modules omit doc comments — step functions are self-documenting via .feature files.
     missing_docs,
+    // ALLOW: Test assertions use expect for clearer failure messages on known-good setup.
     clippy::expect_used,
-    // Cucumber step attributes use plain strings, not regex — trivial_regex is inherent
+    // ALLOW: Cucumber step attributes use plain strings, not regex — trivial_regex is inherent.
     clippy::trivial_regex,
-    // Cucumber step functions use async fn for World trait compatibility
+    // ALLOW: Cucumber step functions use async fn for World trait compatibility.
     clippy::unused_async,
-    // Cucumber World trait requires &mut self even when world is only read
+    // ALLOW: Cucumber World trait requires &mut self even when world is only read.
     clippy::needless_pass_by_ref_mut,
-    // Common in test assertions and match exhaustiveness
+    // ALLOW: Common in test assertions and match exhaustiveness.
     clippy::unwrap_used,
+    // ALLOW: Acceptable in BDD test steps — panics indicate scenario failure, not runtime bugs.
     clippy::panic,
+    // ALLOW: Regex captures in Cucumber steps produce unused bindings for grouping only.
     clippy::used_underscore_binding,
-    // Intentional exact float comparisons in test assertions
+    // ALLOW: Intentional exact float comparisons in test assertions.
     clippy::float_cmp,
 )]
 // Cucumber v0.20 BDD test harness for smart-routing

@@ -1,3 +1,5 @@
+// ALLOW: Snapshot test modules omit doc comments — test names are self-documenting.
+// ALLOW: Snapshot serialization uses expect for clearer failure on known-valid config.
 #![allow(missing_docs, clippy::expect_used)]
 
 use gateway::config::{GatewayConfig, RoutingPolicyConfig, ServerConfig};
