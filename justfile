@@ -166,7 +166,7 @@ test-e2e:
 
 # Run BDD integration tests
 test-bdd:
-    cargo test --all bdd_integration
+    cargo test -p smart-routing --test cucumber_bdd -- --format pretty
 
 # Review pending snapshot changes (requires cargo-insta)
 test-snapshot-review:
