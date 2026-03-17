@@ -200,6 +200,81 @@ jobs:
           fi
 
   # ===========================================
+  # TIER 3: E2E & SNAPSHOT TESTS
+  # ===========================================
+
+  e2e:
+    name: E2E Tests (Podman)
+    runs-on: ubuntu-latest
+    needs: [test]
+    # Non-blocking: e2e infrastructure may not be available in all environments
+    continue-on-error: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: e2e
+
+      - name: Install just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Start Podman service
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq podman podman-docker
+          sudo systemctl enable --now podman.socket
+          echo "DOCKER_HOST=unix:///run/podman/podman.sock" >> "$GITHUB_ENV"
+
+      - name: Run e2e tests
+        env:
+          DOCKER_HOST: unix:///run/podman/podman.sock
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+        run: just test-e2e
+
+  snapshot-check:
+    name: Snapshot Review
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: snapshot
+
+      - name: Install cargo-insta
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-insta
+
+      - name: Run snapshot tests
+        run: cargo insta test
+
+      - name: Check for pending snapshots
+        run: |
+          PENDING=$(find . -name '*.snap.new' 2>/dev/null || true)
+          if [ -n "$PENDING" ]; then
+            echo "::error::Pending snapshot files detected. Run 'cargo insta review' to accept or reject changes."
+            echo "$PENDING"
+            exit 1
+          else
+            echo "No pending snapshot files. All snapshots are up to date."
+          fi
+
+  # ===========================================
   # TIER 4: BUILD ARTIFACTS
   # ===========================================
 
