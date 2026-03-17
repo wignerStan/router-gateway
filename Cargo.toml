@@ -68,6 +68,9 @@ insta = { version = "1.46.3", features = ["yaml"] }
 testcontainers = { version = "0.25.0", features = ["blocking", "http_wait"] }
 testcontainers-modules = { version = "0.13.0", features = ["postgres", "redis", "blocking", "http_wait"] }
 
+# Vendored OpenSSL — enables compilation in environments without system libssl-dev
+openssl-sys = { version = "0.9", features = ["vendored"] }
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"

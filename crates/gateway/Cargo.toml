@@ -28,6 +28,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1.0"
 reqwest = { version = "0.12", features = ["json"] }
+openssl-sys = { workspace = true }
 tokio-stream = "0.1"
 uuid = { version = "1.0", features = ["v4"] }
 
