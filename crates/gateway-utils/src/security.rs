@@ -88,4 +88,99 @@ mod tests {
         let tokens = vec!["first".to_string(), "last".to_string()];
         assert!(constant_time_token_matches("last", &tokens));
     }
+
+    #[test]
+    fn matches_empty_token_against_list() {
+        let tokens = vec!["nonempty".to_string()];
+        assert!(!constant_time_token_matches("", &tokens));
+    }
+
+    #[test]
+    fn matches_empty_token_in_list() {
+        let tokens = vec![String::new()];
+        assert!(constant_time_token_matches("", &tokens));
+    }
+
+    #[test]
+    fn matches_single_element_list_hit() {
+        let tokens = vec!["only".to_string()];
+        assert!(constant_time_token_matches("only", &tokens));
+    }
+
+    #[test]
+    fn matches_single_element_list_miss() {
+        let tokens = vec!["only".to_string()];
+        assert!(!constant_time_token_matches("other", &tokens));
+    }
+
+    #[test]
+    fn eq_identical_long_tokens() {
+        let long = "a".repeat(10_000);
+        assert!(constant_time_token_eq(&long, &long));
+    }
+
+    #[test]
+    fn eq_different_long_tokens_same_length() {
+        let a = "a".repeat(10_000);
+        let b = "b".repeat(10_000);
+        assert!(!constant_time_token_eq(&a, &b));
+    }
+
+    #[test]
+    fn eq_unicode_tokens() {
+        assert!(constant_time_token_eq("café", "café"));
+    }
+
+    #[test]
+    fn eq_unicode_tokens_different() {
+        assert!(!constant_time_token_eq("café", "cafe\u{0301}")); // NFC vs NFD
+    }
+
+    #[test]
+    fn eq_tokens_with_null_byte() {
+        assert!(!constant_time_token_eq("abc\x00def", "abcdef"));
+    }
+
+    #[test]
+    fn eq_single_byte_tokens() {
+        assert!(constant_time_token_eq("a", "a"));
+        assert!(!constant_time_token_eq("a", "b"));
+    }
+
+    #[test]
+    fn matches_unicode_token_in_list() {
+        let tokens = vec!["α".to_string(), "β".to_string()];
+        assert!(constant_time_token_matches("β", &tokens));
+    }
+
+    #[test]
+    fn matches_token_with_special_chars() {
+        let tokens = vec![
+            "Bearer abc123!".to_string(),
+            "key=value;other=thing".to_string(),
+        ];
+        assert!(constant_time_token_matches("Bearer abc123!", &tokens));
+    }
+
+    #[test]
+    fn matches_no_false_positive_on_prefix() {
+        let tokens = vec!["secret".to_string()];
+        assert!(!constant_time_token_matches("secret-longer", &tokens));
+    }
+
+    #[test]
+    fn matches_no_false_positive_on_suffix() {
+        let tokens = vec!["secret".to_string()];
+        assert!(!constant_time_token_matches("my-secret", &tokens));
+    }
+
+    #[rstest::rstest]
+    #[case("", "", true)]
+    #[case("a", "a", true)]
+    #[case("a", "b", false)]
+    #[case("hello", "world", false)]
+    #[case("same", "same", true)]
+    fn parameterized_token_eq(#[case] a: &str, #[case] b: &str, #[case] expected: bool) {
+        assert_eq!(constant_time_token_eq(a, b), expected);
+    }
 }

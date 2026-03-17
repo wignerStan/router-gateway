@@ -297,4 +297,121 @@ mod tests {
         let result = validate_url_not_private("file:///path/to/file");
         assert!(result.is_err());
     }
+
+    #[test]
+    fn allow_172_15_outside_private_range() {
+        // 172.15.x.x is just below the 172.16.0.0/12 private range.
+        let result = validate_url_not_private("http://172.15.255.255/api");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn allow_172_32_outside_private_range() {
+        // 172.32.x.x is just above the 172.31.255.255 upper bound.
+        let result = validate_url_not_private("http://172.32.0.0/api");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn reject_all_zeros_ipv6() {
+        let result = validate_url_not_private("http://[0:0:0:0:0:0:0:0]/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn reject_ipv4_mapped_all_zeros() {
+        let result = validate_url_not_private("http://[::ffff:0.0.0.0]/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn allow_public_ipv6_with_port() {
+        let result = validate_url_not_private("http://[2606:4700:4700::1111]:443/api");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn reject_ipv4_compatible_private_10() {
+        let result = validate_url_not_private("http://[::10.0.0.1]/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn reject_ipv4_compatible_cloud_metadata() {
+        let result = validate_url_not_private("http://[::169.254.169.254]/latest/meta-data/");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn error_message_contains_ip_for_private_ip() {
+        let result = validate_url_not_private("http://192.168.1.1/api");
+        let err = result.expect_err("should be an error");
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("192.168.1.1"),
+            "error should contain IP: {msg}"
+        );
+    }
+
+    #[test]
+    fn error_message_contains_url_for_invalid_url() {
+        let result = validate_url_not_private("://bad-scheme");
+        let err = result.expect_err("should be an error");
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("://bad-scheme"),
+            "error should contain URL: {msg}"
+        );
+    }
+
+    #[test]
+    fn error_message_contains_url_for_no_host() {
+        let result = validate_url_not_private("file:///no/host");
+        let err = result.expect_err("should be an error");
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("file:///no/host"),
+            "error should contain URL: {msg}"
+        );
+    }
+
+    #[test]
+    fn reject_ietf_protocol_assignments_192_0_0_0() {
+        let result = validate_url_not_private("http://192.0.0.0/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn allow_192_0_1_0_not_reserved() {
+        // 192.0.1.0/24 is not in the IETF reserved ranges we check.
+        let result = validate_url_not_private("http://192.0.1.0/api");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn reject_255_0_0_1_reserved() {
+        let result = validate_url_not_private("http://255.0.0.1/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn allow_public_domain_with_query_and_fragment() {
+        let result = validate_url_not_private("https://api.openai.com/v1/chat?model=gpt-4#section");
+        assert!(result.is_ok());
+    }
+
+    #[rstest::rstest]
+    #[case("http://127.0.0.1", true)]
+    #[case("http://10.0.0.1", true)]
+    #[case("http://192.168.0.1", true)]
+    #[case("http://1.1.1.1", false)]
+    #[case("http://8.8.8.8", false)]
+    #[case("https://api.example.com", false)]
+    #[case("http://169.254.1.1", true)]
+    #[case("http://[::1]", true)]
+    #[case("http://[2001:db8::1]", false)]
+    fn parameterized_url_validation(#[case] url: &str, #[case] should_reject: bool) {
+        let result = validate_url_not_private(url);
+        assert_eq!(result.is_err(), should_reject, "URL: {url}");
+    }
 }
