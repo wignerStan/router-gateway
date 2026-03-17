@@ -78,3 +78,9 @@ gitleaks-report.json
 
 patch_*.py
 patch_*
+
+# Insta pending snapshots
+*.snap.new
+
+# Auto Claude data directory
+.auto-claude/
