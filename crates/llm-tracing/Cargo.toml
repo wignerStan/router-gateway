@@ -24,6 +24,10 @@ tracing = "0.1"
 
 [dev-dependencies]
 tokio = { version = "1.40", features = ["sync", "time", "macros", "rt-multi-thread"] }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+rstest = "0.25"
+pretty_assertions = "1.4"
 
 [lints]
 workspace = true

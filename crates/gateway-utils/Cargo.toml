@@ -14,5 +14,9 @@ subtle = "2.6"
 url = "2.5"
 thiserror = "1.0"
 
+[dev-dependencies]
+rstest = "0.25"
+pretty_assertions = "1.4"
+
 [lints]
 workspace = true

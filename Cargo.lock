@@ -681,6 +681,8 @@ dependencies = [
 name = "gateway-utils"
 version = "0.1.0"
 dependencies = [
+ "pretty_assertions",
+ "rstest",
  "subtle",
  "thiserror",
  "url",
@@ -1185,6 +1187,9 @@ dependencies = [
  "axum",
  "chrono",
  "http",
+ "http-body-util",
+ "pretty_assertions",
+ "rstest",
  "serde",
  "serde_json",
  "thiserror",
@@ -2097,10 +2102,13 @@ dependencies = [
  "chrono",
  "futures",
  "model-registry",
+ "pretty_assertions",
  "rand",
+ "rstest",
  "rusqlite",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror",
  "tokio",
 ]
