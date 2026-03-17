@@ -14,7 +14,7 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/proxy/gateway"
-rust-version = "1.85"
+rust-version = "1.88"
 
 [workspace.dependencies]
 # Async runtime
@@ -64,7 +64,7 @@ cucumber = "0.20"
 # Snapshot testing
 insta = { version = "1.46.3", features = ["yaml", "redactions"] }
 
-# E2E container testing (exact pin — >=0.25.1 requires Rust 1.88, project MSRV is 1.85)
+# E2E container testing (exact pin — >=0.25.1 requires Rust 1.88, project MSRV is 1.88)
 testcontainers = { version = "=0.25.0", features = ["blocking", "http_wait"] }
 testcontainers-modules = { version = "=0.13.0", features = ["postgres", "redis", "blocking", "http_wait"] }
 
