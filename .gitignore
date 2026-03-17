@@ -82,5 +82,7 @@ patch_*
 # Insta pending snapshots
 *.snap.new
 
-# Auto Claude data directory
+# Auto Claude data directory and related files
 .auto-claude/
+.auto-claude-status
+.claude_settings.json
