@@ -1,24 +1,25 @@
+#![allow(missing_docs, clippy::expect_used)]
 // BDD (Behavior-Driven Development) tests for smart-routing
 //
-// This module contains Cucumber-style tests that verify the behavior of
-// the classification, health management, route planning, route execution,
+// This module contains BDD-style tests that verify the behavior of the
+// classification, health management, route planning, route execution,
 // and learning & statistics systems.
-
-use cucumber::{World, WorldInit};
-
-mod classification;
-mod health;
-
-// Main entry point for BDD tests
-#[tokio::main]
-async fn main() {
-    // Cucumber tests are typically run via the test harness
-    // The actual test execution is configured in the integration tests
-}
+//
+// Each test maps to a scenario in the .feature files under docs/features/:
+//   - request-classification.feature  (14 scenarios)
+//   - health-management.feature        (9 scenarios)
+//   - route-planning.feature           (17 scenarios)
+//   - route-execution.feature          (11 scenarios)
+//   - learning-statistics.feature      (10 scenarios)
+//
+// NOTE: This file serves as living documentation and comprehensive BDD-style
+// test coverage. The executable cucumber v0.20 harness that directly parses
+// the .feature files lives at crates/smart-routing/tests/cucumber_bdd.rs.
+// The root Cargo.toml is a virtual manifest, so this file is not compiled
+// by `cargo test --all`; the crate-level BDD tests ARE compiled and run.
 
 #[cfg(test)]
 mod bdd_integration {
-    use super::*;
 
     #[tokio::test]
     async fn test_bdd_classification_vision_detection() {
