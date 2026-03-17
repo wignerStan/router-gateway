@@ -188,40 +188,23 @@ providers:
     insta::assert_yaml_snapshot!(sorted_providers);
 }
 
-#[test]
-fn snapshot_routing_policy_weighted() {
-    let config = GatewayConfig::from_yaml("routing:\n  strategy: weighted\n")
-        .expect("failed to parse routing YAML");
-    insta::assert_yaml_snapshot!(config.routing);
+macro_rules! routing_policy_snapshot {
+    ($name:ident, $strategy:expr) => {
+        #[test]
+        fn $name() {
+            let config =
+                GatewayConfig::from_yaml(&format!("routing:\n  strategy: {}\n", $strategy))
+                    .expect("failed to parse routing YAML");
+            insta::assert_yaml_snapshot!(config.routing);
+        }
+    };
 }
 
-#[test]
-fn snapshot_routing_policy_adaptive() {
-    let config = GatewayConfig::from_yaml("routing:\n  strategy: adaptive\n")
-        .expect("failed to parse routing YAML");
-    insta::assert_yaml_snapshot!(config.routing);
-}
-
-#[test]
-fn snapshot_routing_policy_time_aware() {
-    let config = GatewayConfig::from_yaml("routing:\n  strategy: time_aware\n")
-        .expect("failed to parse routing YAML");
-    insta::assert_yaml_snapshot!(config.routing);
-}
-
-#[test]
-fn snapshot_routing_policy_quota_aware() {
-    let config = GatewayConfig::from_yaml("routing:\n  strategy: quota_aware\n")
-        .expect("failed to parse routing YAML");
-    insta::assert_yaml_snapshot!(config.routing);
-}
-
-#[test]
-fn snapshot_routing_policy_policy_aware() {
-    let config = GatewayConfig::from_yaml("routing:\n  strategy: policy_aware\n")
-        .expect("failed to parse routing YAML");
-    insta::assert_yaml_snapshot!(config.routing);
-}
+routing_policy_snapshot!(snapshot_routing_policy_weighted, "weighted");
+routing_policy_snapshot!(snapshot_routing_policy_adaptive, "adaptive");
+routing_policy_snapshot!(snapshot_routing_policy_time_aware, "time_aware");
+routing_policy_snapshot!(snapshot_routing_policy_quota_aware, "quota_aware");
+routing_policy_snapshot!(snapshot_routing_policy_policy_aware, "policy_aware");
 
 // ===================================================================
 // State / Response Type Snapshots
