@@ -1,8 +1,7 @@
 //! E2E test entry point for the gateway crate.
 //!
-//! This file references the shared e2e utilities module located at
-//! `tests/e2e/common/mod.rs` in the workspace root. The actual e2e
-//! test cases are added in subtask-4-2.
+//! This file references the shared e2e utilities module and test cases
+//! located under `tests/e2e/` in the workspace root via `#[path]`.
 //!
 //! All e2e tests are gated behind the `e2e` feature flag and will not
 //! be compiled during normal `cargo test` runs.
@@ -12,3 +11,7 @@
 #[cfg(feature = "e2e")]
 #[path = "../../../tests/e2e/common/mod.rs"]
 mod common;
+
+#[cfg(feature = "e2e")]
+#[path = "../../../tests/e2e/podman_e2e_tests.rs"]
+mod podman_e2e_tests;
