@@ -1,0 +1,6 @@
+---
+source: crates/smart-routing/tests/snapshot_tests.rs
+assertion_line: 663
+expression: "ErrorClass::from_status_code(503)"
+---
+ServerError

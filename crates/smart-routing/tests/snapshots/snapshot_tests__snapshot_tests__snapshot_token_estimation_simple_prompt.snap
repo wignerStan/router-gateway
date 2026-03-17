@@ -1,0 +1,6 @@
+---
+source: crates/smart-routing/tests/snapshot_tests.rs
+assertion_line: 425
+expression: "TokenEstimator::estimate(&request)"
+---
+517

@@ -1,0 +1,6 @@
+---
+source: crates/smart-routing/tests/snapshot_tests.rs
+assertion_line: 336
+expression: "ToolDetector::detect_tools_required(&request)"
+---
+false

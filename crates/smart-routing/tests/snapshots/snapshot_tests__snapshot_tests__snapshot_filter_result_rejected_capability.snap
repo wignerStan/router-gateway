@@ -1,0 +1,8 @@
+---
+source: crates/smart-routing/tests/snapshot_tests.rs
+assertion_line: 798
+expression: "FilterResult::Rejected\n{ reason: \"capability mismatch: missing vision\".to_string(), }"
+---
+Rejected {
+    reason: "capability mismatch: missing vision",
+}

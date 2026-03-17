@@ -1,0 +1,6 @@
+---
+source: crates/smart-routing/tests/snapshot_tests.rs
+assertion_line: 639
+expression: "ErrorClass::from_status_code(403)"
+---
+Auth

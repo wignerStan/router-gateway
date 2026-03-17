@@ -1,0 +1,16 @@
+---
+source: crates/smart-routing/tests/snapshot_tests.rs
+assertion_line: 873
+expression: outcome
+---
+route_id: route-1
+success: false
+latency_ms: 200
+prompt_tokens: 0
+completion_tokens: 0
+total_tokens: 0
+error_class: ServerError
+status_code: 500
+timestamp: "[timestamp]"
+used_fallback: false
+original_route_id: ~

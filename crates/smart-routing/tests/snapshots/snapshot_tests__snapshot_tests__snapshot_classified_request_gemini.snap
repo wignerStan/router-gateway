@@ -1,0 +1,13 @@
+---
+source: crates/smart-routing/tests/snapshot_tests.rs
+assertion_line: 140
+expression: request
+---
+required_capabilities:
+  vision: false
+  tools: false
+  streaming: false
+  thinking: false
+estimated_tokens: 800
+format: Gemini
+quality_preference: Balanced

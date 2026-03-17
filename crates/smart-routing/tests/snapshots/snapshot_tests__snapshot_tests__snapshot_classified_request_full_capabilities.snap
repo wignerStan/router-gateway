@@ -1,0 +1,13 @@
+---
+source: crates/smart-routing/tests/snapshot_tests.rs
+assertion_line: 85
+expression: request
+---
+required_capabilities:
+  vision: true
+  tools: true
+  streaming: true
+  thinking: false
+estimated_tokens: 2500
+format: Anthropic
+quality_preference: Quality

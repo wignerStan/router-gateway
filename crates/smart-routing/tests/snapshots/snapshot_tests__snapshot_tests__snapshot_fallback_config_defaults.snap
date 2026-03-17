@@ -1,0 +1,11 @@
+---
+source: crates/smart-routing/tests/snapshot_tests.rs
+assertion_line: 849
+expression: "FallbackConfig::default()"
+---
+FallbackConfig {
+    max_fallbacks: 5,
+    min_fallbacks: 2,
+    enable_provider_diversity: true,
+    prefer_diverse_providers: true,
+}

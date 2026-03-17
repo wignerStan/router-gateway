@@ -1,0 +1,11 @@
+---
+source: crates/smart-routing/tests/snapshot_tests.rs
+assertion_line: 703
+expression: "CapabilitySupport::Unsupported\n{\n    missing_vision: true, missing_tools: false, missing_streaming: false,\n    missing_thinking: false,\n}"
+---
+Unsupported {
+    missing_vision: true,
+    missing_tools: false,
+    missing_streaming: false,
+    missing_thinking: false,
+}

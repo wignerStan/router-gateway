@@ -1,0 +1,8 @@
+---
+source: crates/smart-routing/tests/snapshot_tests.rs
+assertion_line: 806
+expression: "FilterResult::Rejected\n{\n    reason:\n    \"context overflow: 200000 tokens exceeds model gpt-4 context window of 128000\".to_string(),\n}"
+---
+Rejected {
+    reason: "context overflow: 200000 tokens exceeds model gpt-4 context window of 128000",
+}

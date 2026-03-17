@@ -1,0 +1,16 @@
+---
+source: crates/smart-routing/tests/snapshot_tests.rs
+assertion_line: 883
+expression: outcome
+---
+route_id: route-1
+success: false
+latency_ms: 30000
+prompt_tokens: 0
+completion_tokens: 0
+total_tokens: 0
+error_class: Timeout
+status_code: 408
+timestamp: "[timestamp]"
+used_fallback: false
+original_route_id: ~

@@ -3351,6 +3351,7 @@ dependencies = [
  "chrono",
  "cucumber",
  "futures",
+ "insta",
  "model-registry",
  "pretty_assertions",
  "rand 0.8.5",

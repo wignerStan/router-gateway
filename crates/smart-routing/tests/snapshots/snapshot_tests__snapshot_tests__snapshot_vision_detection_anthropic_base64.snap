@@ -1,0 +1,6 @@
+---
+source: crates/smart-routing/tests/snapshot_tests.rs
+assertion_line: 305
+expression: "ContentTypeDetector::detect_vision_required(&request)"
+---
+true

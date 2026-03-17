@@ -1,0 +1,13 @@
+---
+source: crates/smart-routing/tests/snapshot_tests.rs
+assertion_line: 105
+expression: request
+---
+required_capabilities:
+  vision: false
+  tools: false
+  streaming: true
+  thinking: false
+estimated_tokens: 500
+format: OpenAI
+quality_preference: Speed
