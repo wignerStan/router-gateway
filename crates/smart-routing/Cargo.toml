@@ -30,7 +30,6 @@ cucumber = { workspace = true }
 tokio = { workspace = true }
 
 # Cucumber BDD test runner — uses custom harness (harness = false)
-# Step definitions for .feature files will be added in subsequent subtasks
 [[test]]
 name = "cucumber_bdd"
 harness = false
