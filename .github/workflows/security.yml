@@ -75,7 +75,9 @@ jobs:
         run: cargo install cargo-audit
 
       - name: Run cargo audit
-        run: cargo audit --ignore RUSTSEC-2024-0370
+        # RUSTSEC-2024-0370: proc-macro-error tree — no fix available for our dependency chain
+        # RUSTSEC-2025-0111: tokio-tar file smuggling — no fix available (testcontainers transitive dep, test-only)
+        run: cargo audit --ignore RUSTSEC-2024-0370 --ignore RUSTSEC-2025-0111
 
   cargo-deny:
     name: Cargo Deny

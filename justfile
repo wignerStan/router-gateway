@@ -201,8 +201,10 @@ run-config CONFIG:
 # ============================================
 
 # Audit dependencies for vulnerabilities
+# RUSTSEC-2024-0370: proc-macro-error — no fix available for our dependency chain
+# RUSTSEC-2025-0111: tokio-tar file smuggling — no fix available (testcontainers transitive dep, test-only)
 audit:
-    cargo audit
+    cargo audit --ignore RUSTSEC-2024-0370 --ignore RUSTSEC-2025-0111
 
 # Security scan (gitleaks)
 security-scan:
