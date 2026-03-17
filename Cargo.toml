@@ -32,7 +32,7 @@ anyhow = "1.0"
 
 # HTTP/Web
 axum = "0.7"
-tower = "0.5"
+tower = { version = "0.5", features = ["util"] }
 tower-http = "0.5"
 http = "1.0"
 
@@ -54,6 +54,19 @@ gateway-utils = { path = "crates/gateway-utils", version = "0.1.0" }
 smart-routing = { path = "crates/smart-routing", version = "0.1.0" }
 model-registry = { path = "crates/model-registry", version = "0.1.0" }
 llm-tracing = { path = "crates/llm-tracing", version = "0.1.0" }
+
+# Testing utilities
+rstest = "0.25"
+pretty_assertions = "1.4"
+tempfile = "3"
+cucumber = "0.20"
+
+# Snapshot testing
+insta = { version = "1.46.3", features = ["yaml"] }
+
+# E2E container testing (pinned — >0.25.0 requires Rust 1.88)
+testcontainers = { version = "0.25.0", features = ["blocking", "http_wait"] }
+testcontainers-modules = { version = "0.13.0", features = ["postgres", "redis", "blocking", "http_wait"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
