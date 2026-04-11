@@ -174,10 +174,10 @@ jobs:
           flags: unittests
           name: gateway-coverage
 
-      - name: Coverage threshold gate (80%)
+      - name: Coverage threshold gate (90%)
         run: |
           cargo llvm-cov \
-            --fail-under-lines 80 \
+            --fail-under-lines 90 \
             --ignore-filename-regex "src/main\.rs|src/bin/cli\.rs"
 
   # ===========================================

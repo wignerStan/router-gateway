@@ -22,7 +22,7 @@ help:
     @echo "╠════════════════════════════════════════════════════════════╣"
     @echo "║ DEV:     start, dev, cli, watch                            ║"
     @echo "║ BUILD:   build, build-release, docs                        ║"
-    @echo "║ TEST:    test, test-package, test-coverage                 ║"
+    @echo "║ TEST:    test, test-package, test-coverage, test-snapshots  ║"
     @echo "║ QUALITY: fmt, lint, check, qa, qa-lint, qa-full            ║"
     @echo "║ SECURITY: audit, security-scan                             ║"
     @echo "║ UTILITY: members, graph, outdated, env                     ║"
@@ -42,7 +42,7 @@ qa-lint: qa lint
     @echo "Tier 2 QA passed (lint checks)"
 
 # Tier 3: Full verification (>30s) - Use for CI / release
-qa-full: qa-lint test security-audit
+qa-full: qa-lint test test-coverage-check security-audit
     @echo "Tier 3 QA passed (full verification)"
 
 # ============================================
@@ -57,7 +57,8 @@ install:
 # Install development tools
 install-dev:
     cargo fetch
-    rustup component add clippy rustfmt
+    rustup component add clippy rustfmt llvm-tools-preview
+    cargo install cargo-nextest cargo-llvm-cov cargo-insta
 
 # ============================================
 # FAST DEVELOPMENT COMMANDS (<5s)
@@ -119,25 +120,33 @@ build-watch:
 # TESTING
 # ============================================
 
-# Run all tests
+# Run all tests (uses nextest for faster execution)
 test:
-    cargo test
+    cargo nextest run
 
 # Run tests with verbose output
 test-verbose:
-    cargo test -- --nocapture
+    cargo nextest run --success-output immediate
 
 # Fast unit tests only (skip integration tests)
 test-fast:
-    cargo test --lib
+    cargo nextest run --lib
 
-# Run tests with coverage (requires cargo-tarpaulin)
+# Run tests with coverage (requires cargo-llvm-cov and cargo-nextest)
 test-coverage:
-    cargo tarpaulin --all --out Xml --output-dir coverage
+    cargo llvm-cov nextest --lcov --output-path lcov.info --ignore-filename-regex "src/main\.rs|src/bin/cli\.rs"
+
+# Generate HTML coverage report
+test-coverage-html:
+    cargo llvm-cov nextest --html --ignore-filename-regex "src/main\.rs|src/bin/cli\.rs"
+
+# Check coverage threshold (hard gate, 90%)
+test-coverage-check:
+    cargo llvm-cov --fail-under-lines 90 --ignore-filename-regex "src/main\.rs|src/bin/cli\.rs"
 
 # Run tests matching pattern
 test-package PATTERN:
-    cargo test {{PATTERN}}
+    cargo nextest run -E '{{PATTERN}}'
 
 # Run doc tests
 test-doc:
@@ -145,23 +154,31 @@ test-doc:
 
 # Run specific test by name pattern
 test-filter PATTERN:
-    cargo test {{PATTERN}}
+    cargo nextest run -E '{{PATTERN}}'
 
 # Run routing module tests
 test-routing:
-    cargo test --lib routing
+    cargo nextest run --lib -E 'test(routing)'
 
 # Run registry module tests
 test-registry:
-    cargo test --lib registry
+    cargo nextest run --lib -E 'test(registry)'
 
 # Run tracing module tests
 test-tracing:
-    cargo test --lib tracing
+    cargo nextest run --lib -E 'test(tracing)'
 
 # Run gateway core tests
 test-gateway:
-    cargo test --lib -- --skip routing --skip registry --skip tracing --skip utils
+    cargo nextest run --lib -E 'not test(routing) and not test(registry) and not test(tracing) and not test(utils)'
+
+# Review pending insta snapshots
+test-snapshots:
+    cargo insta review
+
+# Accept all pending insta snapshots
+test-snapshots-accept:
+    cargo insta test --accept
 
 # ============================================
 # RUNNING APPLICATIONS
@@ -317,9 +334,9 @@ ci-fmt:
 ci-lint:
     cargo clippy --all-targets -- -D warnings
 
-# CI test (all features)
+# CI test (all features, nextest with CI profile)
 ci-test:
-    cargo test --all --all-features
+    cargo nextest run --all-features --profile ci
 
 # CI build (release)
 ci-build:
@@ -399,13 +416,22 @@ status: members env
 # Tiered Verification:
 #   Tier 1 (Quick <3s):  just qa           -> fmt-check, check
 #   Tier 2 (Lint <10s):  just qa-lint      -> qa, lint
-#   Tier 3 (Full >30s):  just qa-full      -> qa-lint, test, security-audit
+#   Tier 3 (Full >30s):  just qa-full      -> qa-lint, test, test-coverage-check, security-audit
 #
 # Quick Development Flow:
 #   just qa              # Quick feedback during development
 #   just qa-lint         # Lint check before push
-#   just test            # Run tests
+#   just test            # Run tests (nextest)
 #   just qa-full         # Full verification before release
+#
+# Coverage:
+#   just test-coverage        # Generate lcov.info
+#   just test-coverage-html   # Generate HTML report
+#   just test-coverage-check  # Hard gate: fail if < 90%
+#
+# Snapshots:
+#   just test-snapshots       # Review pending snapshots
+#   just test-snapshots-accept # Accept all pending snapshots
 #
 # Git Hooks (lefthook):
 #   pre-commit: fmt-check + cargo check -q
