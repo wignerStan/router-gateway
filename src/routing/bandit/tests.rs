@@ -584,3 +584,48 @@ mod tier_priors {
         );
     }
 }
+
+mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(64))]
+
+        #[test]
+        fn beta_sample_always_in_unit_interval(
+            alpha in 0.001_f64..1000.0,
+            beta in 0.001_f64..1000.0,
+        ) {
+            let sample = BanditPolicy::sample_beta(alpha, beta);
+            prop_assert!(sample >= 0.0 && sample <= 1.0,
+                "Beta({}, {}) = {}, expected [0, 1]", alpha, beta, sample);
+        }
+
+        #[test]
+        fn gamma_sample_always_positive_and_finite(
+            shape in 0.001_f64..100.0,
+        ) {
+            let sample = BanditPolicy::sample_gamma(shape);
+            prop_assert!(sample > 0.0 && sample.is_finite(),
+                "Gamma({}) = {}, expected positive finite", shape, sample);
+        }
+
+        #[test]
+        fn record_result_never_panics(
+            utility in prop_oneof![
+                Just(f64::NAN),
+                Just(f64::INFINITY),
+                Just(f64::NEG_INFINITY),
+                Just(0.0_f64),
+                Just(-0.0_f64),
+                any::<f64>(),
+            ],
+            success: bool,
+        ) {
+            let mut policy = BanditPolicy::new();
+            policy.record_result("route", success, utility);
+            // If we get here, no panic occurred
+        }
+    }
+}

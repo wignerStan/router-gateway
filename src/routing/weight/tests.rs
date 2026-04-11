@@ -1142,4 +1142,79 @@ mod tests {
             assert!(none_weight > 0.0 && none_weight <= 1.0);
         }
     }
+
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        fn arb_auth_info() -> impl Strategy<Value = AuthInfo> {
+            (any::<Option<i32>>(), any::<bool>(), any::<bool>()).prop_map(
+                |(priority, quota_exceeded, unavailable)| AuthInfo {
+                    id: "test-auth".to_string(),
+                    priority,
+                    quota_exceeded,
+                    unavailable,
+                    model_states: Vec::new(),
+                },
+            )
+        }
+
+        fn arb_metrics() -> impl Strategy<Value = AuthMetrics> {
+            (
+                0i64..10000,
+                0.0_f64..1.0,
+                prop_oneof![Just(f64::NAN), Just(f64::INFINITY), 0.0_f64..100000.0],
+            )
+                .prop_map(|(total, success_rate, latency)| {
+                    let success_count = (total as f64 * success_rate) as i64;
+                    AuthMetrics {
+                        total_requests: total,
+                        success_count,
+                        failure_count: total.saturating_sub(success_count),
+                        avg_latency_ms: latency,
+                        min_latency_ms: latency * 0.5,
+                        max_latency_ms: latency * 2.0,
+                        success_rate,
+                        error_rate: 1.0 - success_rate,
+                        consecutive_successes: 0,
+                        consecutive_failures: 0,
+                        last_request_time: chrono::Utc::now(),
+                        last_success_time: Some(chrono::Utc::now()),
+                        last_failure_time: None,
+                    }
+                })
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(64))]
+
+            #[test]
+            fn weight_always_non_negative(
+                auth in arb_auth_info(),
+                metrics in arb_metrics(),
+            ) {
+                let config = WeightConfig::default();
+                let calculator = DefaultWeightCalculator::new(config);
+                for status in [HealthStatus::Healthy, HealthStatus::Degraded, HealthStatus::Unhealthy] {
+                    let weight = calculator.calculate(&auth, Some(&metrics), status);
+                    prop_assert!(weight >= 0.0,
+                        "Weight {} is negative for status {:?}", weight, status);
+                    prop_assert!(!weight.is_nan(),
+                        "Weight is NaN for status {:?}", status);
+                }
+            }
+
+            #[test]
+            fn weight_bounded_above(
+                auth in arb_auth_info(),
+                metrics in arb_metrics(),
+            ) {
+                let config = WeightConfig::default();
+                let calculator = DefaultWeightCalculator::new(config);
+                let weight = calculator.calculate(&auth, Some(&metrics), HealthStatus::Healthy);
+                prop_assert!(weight <= 2.0,
+                    "Weight {} exceeds reasonable bound for Healthy status", weight);
+            }
+        }
+    }
 }

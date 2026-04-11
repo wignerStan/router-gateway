@@ -719,3 +719,38 @@ mod clone_behavior {
         );
     }
 }
+
+mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    async fn run_consecutive_failures_reset_on_success(threshold: i32, failures: i32) {
+        let config = HealthConfig {
+            unhealthy_threshold: threshold,
+            ..Default::default()
+        };
+        let manager = HealthManager::new(config);
+
+        for _ in 0..failures {
+            manager.update_from_result("auth", false, 500).await;
+        }
+        manager.update_from_result("auth", true, 200).await;
+
+        let health = manager.get_health("auth").await.unwrap();
+        assert_eq!(health.consecutive_failures, 0);
+        assert_eq!(health.consecutive_successes, 1);
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(32))]
+
+        #[test]
+        fn consecutive_failures_reset_on_success(
+            threshold in 1i32..100,
+            failures in 1i32..200,
+        ) {
+            let runtime = tokio::runtime::Runtime::new().unwrap();
+            runtime.block_on(run_consecutive_failures_reset_on_success(threshold, failures));
+        }
+    }
+}
