@@ -26,6 +26,12 @@ coverage/
 *.lcov
 .nyc_output
 
+# Nextest
+target/nextest/
+
+# Insta pending snapshots
+*.snap.new
+
 # Dependency directories
 node_modules/
 jspm_packages/

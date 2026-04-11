@@ -1,0 +1,26 @@
+# Nextest configuration for the gateway project
+# Docs: https://nexte.st/book/configuration.html
+
+[store]
+dir = "target/nextest"
+
+[profile.default]
+fail-fast = false
+status-level = "skip"
+success-output = "immediate"
+slow-timeout = { period = "60s", terminate-after = 3 }
+
+[profile.default.junit]
+path = "target/nextest/junit.xml"
+report-name = "gateway-tests"
+
+# CI-specific profile with retries for flaky async tests
+[profile.ci]
+inherit = "default"
+fail-fast = true
+retries = 2
+slow-timeout = { period = "120s", terminate-after = 2 }
+
+[profile.ci.junit]
+path = "target/nextest/junit.xml"
+report-name = "gateway-ci"
