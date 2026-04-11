@@ -1,5 +1,6 @@
 #![allow(missing_docs, clippy::expect_used)]
 use gateway::config::GatewayConfig;
+use rstest::rstest;
 use std::io::Write;
 use tempfile::NamedTempFile;
 
@@ -43,9 +44,9 @@ credentials:
     assert_eq!(config.credentials[0].priority, 10);
 }
 
-#[test]
-fn test_duplicate_credential_id_fails() {
-    let yaml = r"
+#[rstest]
+#[case::duplicate_credential_id(
+    r"
 credentials:
   - id: test-cred
     provider: anthropic
@@ -53,30 +54,41 @@ credentials:
   - id: test-cred
     provider: openai
     api_key: key2
-";
-    let result = GatewayConfig::from_yaml(yaml);
-    assert!(result.is_err());
-    assert!(
-        result
-            .unwrap_err()
-            .to_string()
-            .contains("Duplicate credential ID")
-    );
-}
-
-#[test]
-fn test_invalid_strategy_fails() {
-    let yaml = r"
+",
+    "duplicate credential id"
+)]
+#[case::invalid_strategy(
+    r"
 routing:
   strategy: invalid
-";
+",
+    "invalid routing strategy"
+)]
+#[case::empty_api_key(
+    r#"
+credentials:
+  - id: bad-cred
+    provider: openai
+    api_key: ""
+"#,
+    "empty api key"
+)]
+#[case::empty_provider(
+    r#"
+credentials:
+  - id: bad-cred
+    provider: ""
+    api_key: some-key
+"#,
+    "empty provider"
+)]
+fn test_config_validation_errors(#[case] yaml: &str, #[case] expected_message: &str) {
     let result = GatewayConfig::from_yaml(yaml);
     assert!(result.is_err());
+    let err_msg = result.unwrap_err().to_string();
     assert!(
-        result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid routing strategy")
+        err_msg.to_lowercase().contains(expected_message),
+        "expected error to contain '{expected_message}', got: {err_msg}"
     );
 }
 
@@ -415,32 +427,6 @@ providers:
         Some("https://custom-llm.example.com")
     );
     assert_eq!(custom.headers.get("X-API-Version").unwrap(), "2024-01");
-}
-
-#[test]
-fn test_empty_api_key_fails_validation() {
-    let yaml = r#"
-credentials:
-  - id: bad-cred
-    provider: openai
-    api_key: ""
-"#;
-    let result = GatewayConfig::from_yaml(yaml);
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("empty API key"));
-}
-
-#[test]
-fn test_empty_provider_fails_validation() {
-    let yaml = r#"
-credentials:
-  - id: bad-cred
-    provider: ""
-    api_key: some-key
-"#;
-    let result = GatewayConfig::from_yaml(yaml);
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("empty provider"));
 }
 
 // --- Trust Proxy Headers Tests ---
