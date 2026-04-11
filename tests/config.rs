@@ -1,5 +1,6 @@
 #![allow(missing_docs, clippy::expect_used)]
 use gateway::config::GatewayConfig;
+use insta::assert_yaml_snapshot;
 use rstest::rstest;
 use std::io::Write;
 use tempfile::NamedTempFile;
@@ -301,44 +302,9 @@ providers:
 ";
     let config = config_from_yaml_content(yaml_content);
 
-    // Server section
-    assert_eq!(config.server.port, 8080);
-    assert_eq!(config.server.host, "0.0.0.0");
-    assert_eq!(config.server.timeout_secs, 90);
-    assert_eq!(config.server.auth_tokens, vec!["token-one", "token-two"]);
-    assert!(config.server.trust_proxy_headers);
-
-    // Credentials section
-    assert_eq!(config.credentials.len(), 2);
-    assert_eq!(config.credentials[0].id, "openai-primary");
-    assert_eq!(
-        config.credentials[0].allowed_models,
-        vec!["gpt-4", "gpt-3.5-turbo"]
-    );
-    assert_eq!(config.credentials[1].id, "google-primary");
-    assert_eq!(config.credentials[1].provider, "google");
-
-    // Routing section
-    assert_eq!(config.routing.strategy, "adaptive");
-    assert!(!config.routing.session_affinity);
-    assert_eq!(config.routing.min_healthy_credentials, 2);
-    assert_eq!(config.routing.fallback_depth, 3);
-
-    // Providers section
-    let openai_provider = config.providers.get("openai").unwrap();
-    assert!(openai_provider.enabled);
-    assert_eq!(openai_provider.timeout_secs, Some(120));
-    assert_eq!(
-        openai_provider.headers.get("X-Custom-Header").unwrap(),
-        "custom-value"
-    );
-
-    let google_provider = config.providers.get("google").unwrap();
-    assert!(google_provider.enabled);
-    assert_eq!(
-        google_provider.base_url.as_deref(),
-        Some("https://generativelanguage.googleapis.com/v1beta")
-    );
+    assert_yaml_snapshot!("full_config_all_sections", &config, {
+        ".providers" => insta::sorted_redaction()
+    });
 }
 
 #[test]
@@ -367,18 +333,7 @@ credentials:
     let config = config_from_yaml_content(yaml_content);
 
     let cred = &config.credentials[0];
-    assert_eq!(cred.id, "full-cred");
-    assert_eq!(cred.provider, "openai");
-    assert_eq!(cred.api_key, "sk-comprehensive-key");
-    assert_eq!(
-        cred.base_url.as_deref(),
-        Some("https://custom.openai.proxy.com")
-    );
-    assert_eq!(cred.organization.as_deref(), Some("org-example-123"));
-    assert_eq!(cred.allowed_models, vec!["gpt-4", "gpt-4-turbo"]);
-    assert_eq!(cred.priority, 15);
-    assert_eq!(cred.daily_quota, Some(10000));
-    assert_eq!(cred.rate_limit, Some(60));
+    assert_yaml_snapshot!("credential_all_fields", cred);
 }
 
 #[test]
@@ -409,24 +364,9 @@ providers:
     let config = config_from_yaml_content(yaml_content);
 
     assert_eq!(config.providers.len(), 3);
-
-    let openai = config.providers.get("openai").unwrap();
-    assert!(openai.enabled);
-    assert_eq!(
-        openai.base_url.as_deref(),
-        Some("https://api.openai.com/v1")
-    );
-
-    let google = config.providers.get("google").unwrap();
-    assert!(!google.enabled);
-
-    let custom = config.providers.get("custom-llm").unwrap();
-    assert!(custom.enabled);
-    assert_eq!(
-        custom.base_url.as_deref(),
-        Some("https://custom-llm.example.com")
-    );
-    assert_eq!(custom.headers.get("X-API-Version").unwrap(), "2024-01");
+    assert_yaml_snapshot!("multiple_providers_config", &config, {
+        ".providers" => insta::sorted_redaction()
+    });
 }
 
 // --- Trust Proxy Headers Tests ---

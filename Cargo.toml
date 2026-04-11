@@ -76,6 +76,12 @@ rstest = "0.25"
 pretty_assertions = "1.4"
 http-body-util = "0.1"
 
+# Snapshot testing
+insta = { version = "1.42", features = ["yaml", "json", "redactions"] }
+
+# Property-based testing
+proptest = "1.6"
+
 [lints.rust]
 unsafe_code = "deny"
 missing_docs = "warn"
