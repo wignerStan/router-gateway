@@ -1,40 +1,47 @@
-[workspace]
-resolver = "2"
-members = [
-    "cli",
-    "crates/gateway",
-    "crates/gateway-utils",
-    "crates/smart-routing",
-    "crates/model-registry",
-    "crates/llm-tracing",
-]
-
-[workspace.package]
+[package]
+name = "gateway"
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
+description = "Local LLM gateway for intelligent request routing"
 repository = "https://github.com/proxy/gateway"
 rust-version = "1.85"
 
-[workspace.dependencies]
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "gateway"
+path = "src/main.rs"
+
+[[bin]]
+name = "gateway-cli"
+path = "src/bin/cli.rs"
+
+[dependencies]
 # Async runtime
 tokio = { version = "1.40", features = ["sync", "time", "rt", "rt-multi-thread", "macros"] }
 tokio-util = "0.7"
+tokio-stream = "0.1"
 async-trait = "0.1"
+futures = "0.3.32"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+serde_yaml_ng = "0.10"
 
 # Error handling
 thiserror = "1.0"
 anyhow = "1.0"
 
 # HTTP/Web
-axum = "0.7"
-tower = "0.5"
-tower-http = "0.5"
+axum = { version = "0.7", features = ["macros"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.5", features = ["trace", "cors", "set-header"] }
 http = "1.0"
+hyper = { version = "1.0", features = ["full"] }
+reqwest = { version = "0.12", features = ["json"] }
 
 # Observability
 tracing = "0.1"
@@ -45,21 +52,35 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # CLI
 clap = { version = "4.4", features = ["derive"] }
+colored = "2.1"
+tabled = "0.15"
 
 # Utilities
 uuid = { version = "1.0", features = ["v4", "serde"] }
+subtle = "2.6"
+url = "2.5"
+rand = "0.8"
 
-# Internal packages
-gateway-utils = { path = "crates/gateway-utils", version = "0.1.0" }
-smart-routing = { path = "crates/smart-routing", version = "0.1.0" }
-model-registry = { path = "crates/model-registry", version = "0.1.0" }
-llm-tracing = { path = "crates/llm-tracing", version = "0.1.0" }
+# Database
+rusqlite = { version = "0.31", features = ["bundled"] }
 
-[workspace.lints.rust]
-unsafe_code = "forbid"
+# Validation
+jsonschema = "0.22"
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.1"
+tempfile = "3"
+wiremock = "0.6"
+rstest = "0.25"
+pretty_assertions = "1.4"
+http-body-util = "0.1"
+
+[lints.rust]
+unsafe_code = "deny"
 missing_docs = "warn"
 
-[workspace.lints.clippy]
+[lints.clippy]
 all = { level = "deny", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }

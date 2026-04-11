@@ -1,2 +1,2 @@
 [alias]
-lint = "clippy --workspace --all-targets -- -D warnings"
+lint = "clippy --all-targets -- -D warnings"

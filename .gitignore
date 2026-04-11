@@ -90,5 +90,12 @@ patch_*
 .security-key
 logs/security/
 
+# BMad output
+_bmad-output/
+_bmad/
+
+# Claude Code plugin data
+.claude/
+
 # Lefthook local overrides
 lefthook-local.yml

@@ -1,11 +1,7 @@
-# Justfile for Rust Workspace Projects
+# Justfile for Rust Gateway Project
 # Production-ready task runner with Tiered Verification System
-# Aligned with Agentic Native principles
 
 set shell := ["bash", "-c"]
-
-# Workspace members for quick reference
-members := "cli crates/gateway crates/smart-routing crates/model-registry crates/llm-tracing"
 
 # ============================================
 # DEFAULT & HELP
@@ -107,9 +103,9 @@ build:
 build-release:
     cargo build --release
 
-# Build specific package
-build-package PACKAGE:
-    cargo build -p {{PACKAGE}}
+# Build specific binary
+build-bin BIN:
+    cargo build --bin {{BIN}}
 
 # Build with watch mode
 watch:
@@ -125,47 +121,47 @@ build-watch:
 
 # Run all tests
 test:
-    cargo test --all
+    cargo test
 
 # Run tests with verbose output
 test-verbose:
-    cargo test --all -- --nocapture
+    cargo test -- --nocapture
 
 # Fast unit tests only (skip integration tests)
 test-fast:
-    cargo test --all --lib
+    cargo test --lib
 
 # Run tests with coverage (requires cargo-tarpaulin)
 test-coverage:
     cargo tarpaulin --all --out Xml --output-dir coverage
 
-# Run tests for specific package
-test-package PACKAGE:
-    cargo test -p {{PACKAGE}}
+# Run tests matching pattern
+test-package PATTERN:
+    cargo test {{PATTERN}}
 
 # Run doc tests
 test-doc:
-    cargo test --doc --all
+    cargo test --doc
 
 # Run specific test by name pattern
 test-filter PATTERN:
-    cargo test --all {{PATTERN}}
+    cargo test {{PATTERN}}
 
-# Run smart-routing tests
+# Run routing module tests
 test-routing:
-    cargo test -p smart-routing
+    cargo test --lib routing
 
-# Run model-registry tests
+# Run registry module tests
 test-registry:
-    cargo test -p model-registry
+    cargo test --lib registry
 
-# Run tracing tests
+# Run tracing module tests
 test-tracing:
-    cargo test -p llm-tracing
+    cargo test --lib tracing
 
-# Run gateway tests
+# Run gateway core tests
 test-gateway:
-    cargo test -p gateway
+    cargo test --lib -- --skip routing --skip registry --skip tracing --skip utils
 
 # ============================================
 # RUNNING APPLICATIONS
@@ -181,7 +177,7 @@ dev:
 
 # Run CLI tool
 cli *ARGS:
-    cargo run --bin cli -- {{ARGS}}
+    cargo run --bin gateway-cli -- {{ARGS}}
 
 # Run gateway with specific config
 run-config CONFIG:
@@ -272,10 +268,10 @@ members:
 graph:
     cargo tree --duplicates || cargo tree
 
-# Show workspace structure
+# Show source structure
 structure:
-    @echo "📁 Workspace Structure:"
-    @find crates cli -name "Cargo.toml" 2>/dev/null | head -20
+    @echo "📁 Source Structure:"
+    @find src -name "*.rs" | head -40
 
 # Update all dependencies
 update:
@@ -388,7 +384,7 @@ check-time:
 # Show binary sizes
 binary-sizes:
     @echo "📊 Binary Sizes:"
-    @ls -lh target/debug/{gateway,my-cli} 2>/dev/null || echo "Build first with: just build"
+    @ls -lh target/debug/{gateway,gateway-cli} 2>/dev/null || echo "Build first with: just build"
 
 # Quick status check
 status: members env
