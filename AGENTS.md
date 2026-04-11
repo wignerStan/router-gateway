@@ -13,14 +13,18 @@ Directory names match Cargo package names throughout the workspace.
 
 ### Build and test commands
 
-| Task        | Command                  |
-| ----------- | ------------------------ |
-| Build       | `cargo build`            |
-| Test        | `cargo test --workspace` |
-| Run Gateway | `cargo run -p gateway`   |
-| Lint        | `cargo lint`             |
-| Format      | `cargo fmt`              |
-| All Checks  | `just qa`                |
+| Task              | Command                                      |
+| ----------------- | -------------------------------------------- |
+| Build             | `cargo build`                                |
+| Test              | `cargo nextest run`                          |
+| Test (unit only)  | `cargo nextest run --lib`                    |
+| Run Gateway       | `cargo run --bin gateway`                    |
+| Lint              | `cargo clippy --all-targets -- -D warnings`  |
+| Format            | `cargo fmt --all`                            |
+| Coverage          | `cargo llvm-cov nextest --html`              |
+| Coverage gate     | `cargo llvm-cov --fail-under-lines 90`       |
+| Quick Checks      | `just qa`                                    |
+| Full Checks       | `just qa-full`                               |
 
 ### Known Pitfalls
 
@@ -91,6 +95,10 @@ This project enforces production-level code style using `rustfmt` and `clippy`. 
 - **Sleeping**: Avoid `std::thread::sleep` in async contexts; always use `tokio::time::sleep`.
 - **Snapshot Testing**: Use snapshot testing (e.g., `cargo insta`) for output validation where appropriate.
 - **Test Errors**: Ensure unit tests exercise error conditions and not just the happy path.
+- **Test Runner**: Use `cargo nextest run` (not `cargo test`). Nextest provides faster parallel execution and better output. CI uses the `ci` profile with retries.
+- **Coverage**: Minimum 90% line coverage enforced in CI via `cargo llvm-cov`. Coverage excludes `src/main.rs` and `src/bin/cli.rs`.
+- **Snapshot Testing**: Use `insta` for structured output validation. Run `cargo insta test` then `cargo insta review` to review snapshots.
+- **Property-Based Testing**: Use `proptest` for numeric edge cases. All float-heavy modules (bandit, weight) have proptest suites.
 
 ## Security considerations
 
