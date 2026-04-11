@@ -29,6 +29,11 @@ coverage/
 # Nextest
 target/nextest/
 
+# Fuzzing (corpora can grow large; artifacts are crash reproductions)
+fuzz/corpus/
+fuzz/artifacts/
+fuzz/target/
+
 # Insta pending snapshots
 *.snap.new
 

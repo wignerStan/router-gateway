@@ -182,3 +182,63 @@ jobs:
           echo "| TruffleHog (Secrets) | ${{ needs.trufflehog.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Cargo Audit (CVEs) | ${{ needs.cargo-audit.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Cargo Deny (Policy) | ${{ needs.cargo-deny.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================
+  # DEEP SECURITY: Property Tests + Fuzz Targets
+  # Runs on schedule (weekly) and on-demand only.
+  # Not blocking PRs — these are depth-focused checks.
+  # ===========================================
+
+  security-deep:
+    name: Deep Security (Property + Fuzz)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: security-deep
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: Run property-based security tests
+        run: cargo nextest run -E 'test(proptests)'
+
+      - name: Set up Rust nightly for fuzzing
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install cargo-fuzz
+        run: cargo +nightly install cargo-fuzz
+
+      - name: Build fuzz targets
+        run: cargo +nightly fuzz build
+
+      - name: Run SSRF fuzzer (120s)
+        run: cargo +nightly fuzz run ssrf_url_fuzz -- -max_total_time=120
+
+      - name: Run config parse fuzzer (120s)
+        run: cargo +nightly fuzz run config_parse_fuzz -- -max_total_time=120
+
+      - name: Run token match fuzzer (120s)
+        run: cargo +nightly fuzz run token_match_fuzz -- -max_total_time=120
+
+      - name: Deep security summary
+        if: always()
+        run: |
+          echo "## 🛡️ Deep Security Scan Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Duration |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|----------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Property tests | ~30s |" >> $GITHUB_STEP_SUMMARY
+          echo "| SSRF fuzzer | 120s |" >> $GITHUB_STEP_SUMMARY
+          echo "| Config parse fuzzer | 120s |" >> $GITHUB_STEP_SUMMARY
+          echo "| Token match fuzzer | 120s |" >> $GITHUB_STEP_SUMMARY

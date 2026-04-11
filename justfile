@@ -23,7 +23,9 @@ help:
     @echo "║ DEV:     start, dev, cli, watch                            ║"
     @echo "║ BUILD:   build, build-release, docs                        ║"
     @echo "║ TEST:    test, test-package, test-coverage, test-snapshots  ║"
-    @echo "║ QUALITY: fmt, lint, check, qa, qa-lint, qa-full            ║"
+    @echo "║ BENCH:   bench, bench-target, bench-save                   ║"
+    @echo "║ FUZZ:    fuzz-ssrf, fuzz-config, fuzz-token, fuzz-all      ║"
+    @echo "║ QUALITY: fmt, lint, check, qa, qa-lint, qa-full, qa-security ║"
     @echo "║ SECURITY: audit, security-scan                             ║"
     @echo "║ UTILITY: members, graph, outdated, env                     ║"
     @echo "║ JQ:      jq-members, jq-deps, jq-features, jq-manifest     ║"
@@ -44,6 +46,12 @@ qa-lint: qa lint
 # Tier 3: Full verification (>30s) - Use for CI / release
 qa-full: qa-lint test test-coverage-check security-audit
     @echo "Tier 3 QA passed (full verification)"
+
+# Tier 4: Security deep (property tests + audit) - Use for releases / scheduled
+qa-security: test test-coverage-check
+    cargo nextest run -E 'test(proptests)'
+    cargo audit
+    @echo "Tier 4 QA passed (security deep)"
 
 # ============================================
 # SETUP & INSTALL
@@ -179,6 +187,51 @@ test-snapshots:
 # Accept all pending insta snapshots
 test-snapshots-accept:
     cargo insta test --accept
+
+# Run property-based tests
+test-property:
+    cargo nextest run -E 'test(proptests)'
+
+# ============================================
+# BENCHMARKS
+# ============================================
+
+# Run all benchmarks
+bench:
+    cargo bench
+
+# Run specific benchmark
+bench-target TARGET:
+    cargo bench --bench {{TARGET}}
+
+# Run benchmarks and save baseline
+bench-save:
+    cargo bench -- --save-baseline main
+
+# ============================================
+# FUZZING (requires nightly)
+# ============================================
+
+# Install cargo-fuzz and nightly toolchain
+install-fuzz:
+    rustup toolchain install nightly
+    cargo +nightly install cargo-fuzz
+
+# Run SSRF URL fuzzer (60s default)
+fuzz-ssrf:
+    cargo +nightly fuzz run ssrf_url_fuzz -- -max_total_time=60
+
+# Run config parse fuzzer (60s default)
+fuzz-config:
+    cargo +nightly fuzz run config_parse_fuzz -- -max_total_time=60
+
+# Run token match fuzzer (60s default)
+fuzz-token:
+    cargo +nightly fuzz run token_match_fuzz -- -max_total_time=60
+
+# Run all fuzzers sequentially (60s each)
+fuzz-all: fuzz-ssrf fuzz-config fuzz-token
+    @echo "All fuzz targets completed"
 
 # ============================================
 # RUNNING APPLICATIONS
@@ -417,17 +470,28 @@ status: members env
 #   Tier 1 (Quick <3s):  just qa           -> fmt-check, check
 #   Tier 2 (Lint <10s):  just qa-lint      -> qa, lint
 #   Tier 3 (Full >30s):  just qa-full      -> qa-lint, test, test-coverage-check, security-audit
+#   Tier 4 (Security):   just qa-security  -> test, test-coverage-check, property tests, audit
 #
 # Quick Development Flow:
 #   just qa              # Quick feedback during development
 #   just qa-lint         # Lint check before push
 #   just test            # Run tests (nextest)
 #   just qa-full         # Full verification before release
+#   just qa-security     # Deep security verification
 #
 # Coverage:
 #   just test-coverage        # Generate lcov.info
 #   just test-coverage-html   # Generate HTML report
 #   just test-coverage-check  # Hard gate: fail if < 90%
+#
+# Benchmarks:
+#   just bench                # Run all criterion benchmarks
+#   just bench-save           # Run and save baseline
+#
+# Fuzzing (requires nightly):
+#   just install-fuzz         # Install cargo-fuzz + nightly
+#   just fuzz-all             # Run all fuzzers (60s each)
+#   just fuzz-ssrf            # Run SSRF fuzzer only
 #
 # Snapshots:
 #   just test-snapshots       # Review pending snapshots

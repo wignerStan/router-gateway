@@ -102,4 +102,48 @@ mod tests {
         let expanded = expand_env_var("${SURELY_NONEXISTENT_VAR_XYZ}");
         assert_eq!(expanded, "");
     }
+
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(128))]
+
+            /// Strings without `${` pass through unchanged.
+            #[test]
+            fn no_expansion_marker_returns_input(input in "[^$]*") {
+                let result = expand_env_var(&input);
+                prop_assert_eq!(result, input);
+            }
+
+            /// Any string can be processed without panicking.
+            #[test]
+            fn malformed_patterns_never_panic(input in ".*") {
+                let _ = expand_env_var(&input);
+            }
+
+            /// Unclosed brace patterns are treated as literals.
+            #[test]
+            fn unclosed_brace_is_literal(prefix in "[^$]*", var in "[^}]*") {
+                let input = format!("{prefix}${{{var}");
+                let result = expand_env_var(&input);
+                prop_assert!(
+                    result.contains("${") || result == input,
+                    "Unclosed brace should preserve literal: input={input}, result={result}"
+                );
+            }
+
+            /// Nonexistent env vars expand to empty string.
+            #[test]
+            fn nonexistent_var_expands_to_empty(
+                prefix in "[a-z]{0,10}",
+                suffix in "[a-z]{0,10}",
+            ) {
+                let input = format!("{prefix}${{SURELY_NONEXISTENT_PROPTST_XYZ}}{suffix}");
+                let result = expand_env_var(&input);
+                prop_assert_eq!(result, format!("{prefix}{suffix}"));
+            }
+        }
+    }
 }

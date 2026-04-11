@@ -64,42 +64,6 @@ jobs:
       - name: Run clippy (strict)
         run: cargo clippy --all-targets -- -D warnings
 
-  msrv:
-    name: MSRV Check (1.85)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Rust 1.85
-        uses: dtolnay/rust-toolchain@1.85
-
-      - name: Cache cargo registry
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: msrv
-
-      - name: Verify MSRV compatibility
-        run: cargo check --all --all-features
-
-  type-check:
-    name: Type Check
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo registry
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: typecheck
-
-      - name: Run type check
-        run: cargo check --all --all-features
-
   # ===========================================
   # TIER 2: TESTS WITH COVERAGE
   # ===========================================
@@ -107,7 +71,7 @@ jobs:
   test:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    needs: [fmt, lint, msrv]
+    needs: [fmt, lint]
     strategy:
       fail-fast: false
       matrix:

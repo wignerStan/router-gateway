@@ -297,4 +297,69 @@ mod tests {
         let result = validate_url_not_private("file:///path/to/file");
         assert!(result.is_err());
     }
+
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(256))]
+
+            /// Arbitrary strings never cause a panic in validate_url_not_private.
+            #[test]
+            fn arbitrary_url_string_never_panics(url in "\\PC*") {
+                let _ = validate_url_not_private(&url);
+            }
+
+            /// Validation is deterministic: same URL always yields same result.
+            #[test]
+            fn validation_is_deterministic(
+                scheme in prop_oneof![Just("http://"), Just("https://")],
+                a in 1u8..=254u8,
+                b in 0u8..=255u8,
+                c in 0u8..=255u8,
+                d in 1u8..=254u8,
+            ) {
+                let url = format!("{scheme}{a}.{b}.{c}.{d}/api");
+                let r1 = validate_url_not_private(&url);
+                let r2 = validate_url_not_private(&url);
+                prop_assert_eq!(r1.is_ok(), r2.is_ok());
+            }
+
+            /// All loopback addresses (127.x.x.x) are rejected.
+            #[test]
+            fn all_loopback_rejected(
+                b in 0u8..=255u8,
+                c in 0u8..=255u8,
+                d in 1u8..=255u8,
+            ) {
+                let url = format!("http://127.{b}.{c}.{d}/api");
+                let result = validate_url_not_private(&url);
+                prop_assert!(result.is_err(), "Loopback 127.{b}.{c}.{d} should be rejected");
+            }
+
+            /// All 10.x.x.x private addresses are rejected.
+            #[test]
+            fn all_10_range_rejected(
+                b in 0u8..=255u8,
+                c in 0u8..=255u8,
+                d in 1u8..=255u8,
+            ) {
+                let url = format!("http://10.{b}.{c}.{d}/api");
+                let result = validate_url_not_private(&url);
+                prop_assert!(result.is_err(), "Private 10.{b}.{c}.{d} should be rejected");
+            }
+
+            /// Public domain names are always allowed.
+            #[test]
+            fn public_domains_always_allowed(
+                word in "[a-z][a-z0-9]{2,15}",
+                tld in prop_oneof![Just("com"), Just("org"), Just("io"), Just("net")],
+            ) {
+                let url = format!("https://{word}.{tld}/v1/chat/completions");
+                let result = validate_url_not_private(&url);
+                prop_assert!(result.is_ok(), "Domain {word}.{tld} should be allowed");
+            }
+        }
+    }
 }

@@ -82,6 +82,9 @@ insta = { version = "1.42", features = ["yaml", "json", "redactions"] }
 # Property-based testing
 proptest = "1.6"
 
+# Benchmarking
+criterion = { version = "0.5", features = ["html_reports"] }
+
 [lints.rust]
 unsafe_code = "deny"
 missing_docs = "warn"
@@ -113,3 +116,12 @@ cast_sign_loss = "allow"
 module_name_repetitions = "allow"
 similar_names = "allow"
 struct_excessive_bools = "allow"
+
+# Benchmark targets
+[[bench]]
+name = "routing_benchmark"
+harness = false
+
+[[bench]]
+name = "ssrf_benchmark"
+harness = false

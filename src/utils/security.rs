@@ -88,4 +88,50 @@ mod tests {
         let tokens = vec!["first".to_string(), "last".to_string()];
         assert!(constant_time_token_matches("last", &tokens));
     }
+
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(128))]
+
+            /// Token matching is commutative: result is the same regardless
+            /// of list order, preventing position-based timing leaks.
+            #[test]
+            fn token_matching_is_commutative(
+                token in "[a-zA-Z0-9]{1,30}",
+                t1 in "[a-zA-Z0-9]{1,30}",
+                t2 in "[a-zA-Z0-9]{1,30}",
+            ) {
+                let list1 = vec![t1.clone(), t2.clone()];
+                let list2 = vec![t2, t1];
+                prop_assert_eq!(
+                    constant_time_token_matches(&token, &list1),
+                    constant_time_token_matches(&token, &list2),
+                );
+            }
+
+            /// An empty list never matches any token.
+            #[test]
+            fn empty_list_always_false(token in "\\PC{0,100}") {
+                prop_assert!(!constant_time_token_matches(&token, &[]));
+            }
+
+            /// A token always matches itself in a single-element list.
+            #[test]
+            fn token_matches_itself(token in "[a-zA-Z0-9]{1,30}") {
+                let list = vec![token.clone()];
+                prop_assert!(constant_time_token_matches(&token, &list));
+            }
+
+            /// Any byte sequence as token never panics against an empty list.
+            #[test]
+            fn any_token_never_panics(token: Vec<u8>) {
+                let token_str = String::from_utf8_lossy(&token);
+                let result = constant_time_token_matches(&token_str, &[]);
+                prop_assert!(!result, "Empty list should never match");
+            }
+        }
+    }
 }
