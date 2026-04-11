@@ -89,3 +89,6 @@ patch_*
 .worktrees/
 .security-key
 logs/security/
+
+# Lefthook local overrides
+lefthook-local.yml

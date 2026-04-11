@@ -1,0 +1,14 @@
+# Lefthook Configuration
+# Three-layer verification: pre-commit (instant) -> pre-push (moderate) -> CI (full)
+
+pre-commit:
+  commands:
+    fmt:
+      run: cargo fmt --all -- --check
+    check:
+      run: cargo check -q
+
+pre-push:
+  commands:
+    clippy:
+      run: cargo clippy --all-targets -- -D warnings

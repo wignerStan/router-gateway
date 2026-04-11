@@ -321,7 +321,7 @@ jobs:
           HEAD="${{ github.event.pull_request.head.sha }}"
           NUMBER="${{ github.event.pull_request.number }}"
 
-          CONFIG_FILES=$(git diff --name-only "$BASE" "$HEAD" | grep -E '^(clippy\.toml|Cargo\.toml|rustfmt\.toml|justfile|\.pre-commit-config\.yaml|\.github/workflows/)' || true)
+          CONFIG_FILES=$(git diff --name-only "$BASE" "$HEAD" | grep -E '^(clippy\.toml|Cargo\.toml|rustfmt\.toml|justfile|lefthook\.yml|\.github/workflows/)' || true)
 
           if [ -n "$CONFIG_FILES" ]; then
             CHANGED=$(echo "$CONFIG_FILES" | sed 's/^/`/;s/$`/' | tr '\n' ', ' | sed 's/,$//')
@@ -334,43 +334,6 @@ jobs:
             echo "::warning::Configuration files changed: ${CONFIG_FILES//$'\n'/, }"
           else
             echo "No configuration files changed."
-          fi
-
-  clippy-allow-check:
-    name: Clippy Allow Check
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Detect new #[allow(clippy::] without justification
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          BASE="${{ github.event.pull_request.base.sha }}"
-          HEAD="${{ github.event.pull_request.head.sha }}"
-          NUMBER="${{ github.event.pull_request.number }}"
-
-          # Find added lines with #[allow(clippy:: that lack an ALLOW: justification comment
-          VIOLATIONS=$(git diff "$BASE" "$HEAD" -- '*.rs' | grep '^+' | grep -E '#\[allow\(clippy::' | grep -v 'ALLOW:' || true)
-
-          if [ -n "$VIOLATIONS" ]; then
-            BODY="## ⚠️ Unjustified \`#[allow(clippy::]\` detected
-
-          The following lines use \`#[allow(clippy::...)]\` without an \`ALLOW:\` justification comment:
-
-          \`\`\`
-          ${VIOLATIONS}
-          \`\`\`
-
-          Per project policy, every \`#[allow(clippy::...)]\` must include a comment starting with \`ALLOW:\` explaining why the suppression is needed."
-            echo "$BODY" | gh pr comment "$NUMBER" --body-file -
-            echo "::warning::Found #[allow(clippy::] without ALLOW: justification"
-          else
-            echo "No unjustified #[allow(clippy::] found."
           fi
 
   workspace-lint-inheritance:

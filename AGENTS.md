@@ -58,7 +58,7 @@ This project enforces production-level code style using `rustfmt` and `clippy`. 
 ### Error Handling
 
 - **Result over Panic**: Prefer returning `Result` and avoid `panic!`.
-- **No unwrap in production**: `unwrap()` is denied everywhere by clippy. Use `unwrap_or()` / `unwrap_or_else()` for default values, or `?` for error propagation.
+- **No unwrap in production**: `unwrap()` is denied in production code by clippy. Use `unwrap_or()` / `unwrap_or_else()` for default values, or `?` for error propagation.
 - **No expect in production**: `expect()` is denied in production code. If truly unavoidable (e.g., compile-time embedded data, type-state builders), use `#[allow(clippy::expect_used)]` with a comment explaining why.
 - **Error Types**: Use `thiserror` for library/crate level errors and reserve `anyhow` strictly for binaries/applications.
 - **Error Bubbling**: Use the `?` operator to bubble errors up.

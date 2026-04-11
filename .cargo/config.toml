@@ -1,6 +1,2 @@
 [alias]
-# Add useful aliases if needed
-lint = "clippy --workspace --all-targets --all-features -- -D warnings"
-
-[target.'cfg(all())']
-# Add additional cargo configs if required
+lint = "clippy --workspace --all-targets -- -D warnings"

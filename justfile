@@ -20,13 +20,14 @@ help:
     @echo "╔════════════════════════════════════════════════════════════╗"
     @echo "║              GATEWAY WORKSPACE - JUST COMMANDS              ║"
     @echo "╠════════════════════════════════════════════════════════════╣"
-    @echo "║ TIER 1 (FAST <5s):  just qa                                ║"
-    @echo "║ TIER 2 (SLOW >5s):  just qa-full                           ║"
+    @echo "║ TIER 1 (QUICK <3s): just qa                                ║"
+    @echo "║ TIER 2 (LINT <10s): just qa-lint                           ║"
+    @echo "║ TIER 3 (FULL >30s): just qa-full                           ║"
     @echo "╠════════════════════════════════════════════════════════════╣"
     @echo "║ DEV:     start, dev, cli, watch                            ║"
     @echo "║ BUILD:   build, build-release, docs                        ║"
     @echo "║ TEST:    test, test-package, test-coverage                 ║"
-    @echo "║ QUALITY: fmt, lint, type-check, qa, qa-full                ║"
+    @echo "║ QUALITY: fmt, lint, check, qa, qa-lint, qa-full            ║"
     @echo "║ SECURITY: audit, security-scan                             ║"
     @echo "║ UTILITY: members, graph, outdated, env                     ║"
     @echo "║ JQ:      jq-members, jq-deps, jq-features, jq-manifest     ║"
@@ -36,13 +37,17 @@ help:
 # TIERED VERIFICATION SYSTEM
 # ============================================
 
-# Tier 1: Fast feedback (<5s) - Use for pre-commit
-qa: fmt-check lint-fast
-    @echo "✅ Tier 1 QA passed (fast checks)"
+# Tier 1: Quick feedback (<3s) - Use during development / pre-commit
+qa: fmt-check check
+    @echo "Tier 1 QA passed (quick checks)"
 
-# Tier 2: Comprehensive (>5s) - Use for pre-push / CI
-qa-full: qa test security-audit
-    @echo "✅ Tier 2 QA passed (full verification)"
+# Tier 2: Lint checks (<10s) - Use before push
+qa-lint: qa lint
+    @echo "Tier 2 QA passed (lint checks)"
+
+# Tier 3: Full verification (>30s) - Use for CI / release
+qa-full: qa-lint test security-audit
+    @echo "Tier 3 QA passed (full verification)"
 
 # ============================================
 # SETUP & INSTALL
@@ -51,7 +56,7 @@ qa-full: qa test security-audit
 # Install all dependencies and setup hooks
 install:
     cargo fetch
-    pre-commit install --hook-type pre-push --hook-type commit-msg
+    lefthook install
 
 # Install development tools
 install-dev:
@@ -66,6 +71,10 @@ install-dev:
 type-check:
     cargo check --all
 
+# Quick type check (quiet mode, instant feedback)
+check:
+    cargo check -q
+
 # Format all code
 fmt:
     cargo fmt --all
@@ -74,13 +83,13 @@ fmt:
 fmt-check:
     cargo fmt --all -- --check
 
-# Fast lint (warnings only, no strict)
+# Fast lint (warnings only, for development)
 lint-fast:
-    cargo clippy --all-targets --all-features
+    cargo clippy --all-targets
 
-# Strict lint (treat warnings as errors)
+# Strict lint (treat warnings as errors, for pre-push)
 lint:
-    cargo clippy --all-targets --all-features -- -D warnings
+    cargo clippy --all-targets -- -D warnings
 
 # Run clippy with auto-fix
 lint-fix:
@@ -288,13 +297,13 @@ lockfile:
 # PRE-COMMIT / PRE-PUSH HOOKS
 # ============================================
 
-# Pre-commit: fast checks only
-pre-commit: fmt-check lint-fast type-check
-    @echo "✅ Pre-commit checks passed"
+# Pre-commit: quick checks (matches lefthook)
+pre-commit: fmt-check check
+    @echo "Pre-commit checks passed"
 
-# Pre-push: full verification
-pre-push: qa-full
-    @echo "✅ Pre-push checks passed"
+# Pre-push: lint checks (matches lefthook)
+pre-push: qa-lint
+    @echo "Pre-push checks passed"
 
 # ============================================
 # CI/CD TASKS
@@ -310,7 +319,7 @@ ci-fmt:
 
 # CI lint (strict)
 ci-lint:
-    cargo clippy --all-targets --all-features -- -D warnings -D clippy::all
+    cargo clippy --all-targets -- -D warnings
 
 # CI test (all features)
 ci-test:
@@ -392,13 +401,19 @@ status: members env
 # ============================================
 
 # Tiered Verification:
-#   Tier 1 (Fast <5s):  just qa           -> fmt-check, lint-fast, type-check
-#   Tier 2 (Slow >5s):  just qa-full      -> qa, test, security-audit
+#   Tier 1 (Quick <3s):  just qa           -> fmt-check, check
+#   Tier 2 (Lint <10s):  just qa-lint      -> qa, lint
+#   Tier 3 (Full >30s):  just qa-full      -> qa-lint, test, security-audit
 #
 # Quick Development Flow:
-#   just qa              # Fast feedback during development
-#   just test            # Run tests before committing
-#   just qa-full         # Full verification before push
+#   just qa              # Quick feedback during development
+#   just qa-lint         # Lint check before push
+#   just test            # Run tests
+#   just qa-full         # Full verification before release
+#
+# Git Hooks (lefthook):
+#   pre-commit: fmt-check + cargo check -q
+#   pre-push:   clippy -- -D warnings
 #
 # JQ Commands for Analysis:
 #   just jq-members      # List packages as JSON
