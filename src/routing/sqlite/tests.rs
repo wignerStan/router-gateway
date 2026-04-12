@@ -219,6 +219,238 @@ mod sqlite_tests {
             assert_eq!(metrics.total_requests, 20);
             assert_eq!(metrics.success_count, 18);
         }
+
+        #[tokio::test]
+        async fn test_load_metrics_nonexistent_returns_none() {
+            let config = SQLiteConfig {
+                database_path: ":memory:".to_string(),
+                ..Default::default()
+            };
+            let store = SQLiteStore::new(config).await.unwrap();
+            let result = store.load_metrics("nonexistent").await.unwrap();
+            assert!(result.is_none(), "Should return None for missing key");
+        }
+
+        #[tokio::test]
+        async fn test_load_health_nonexistent_returns_none() {
+            let config = SQLiteConfig {
+                database_path: ":memory:".to_string(),
+                ..Default::default()
+            };
+            let store = SQLiteStore::new(config).await.unwrap();
+            let result = store.load_health("nonexistent").await.unwrap();
+            assert!(result.is_none(), "Should return None for missing key");
+        }
+
+        #[tokio::test]
+        async fn test_metrics_upsert_overwrites() {
+            let config = SQLiteConfig {
+                database_path: ":memory:".to_string(),
+                ..Default::default()
+            };
+            let store = SQLiteStore::new(config).await.unwrap();
+
+            let metrics_v1 = AuthMetrics {
+                total_requests: 10,
+                success_count: 9,
+                failure_count: 1,
+                avg_latency_ms: 100.0,
+                min_latency_ms: 50.0,
+                max_latency_ms: 200.0,
+                success_rate: 0.9,
+                error_rate: 0.1,
+                consecutive_successes: 5,
+                consecutive_failures: 0,
+                last_request_time: Utc::now(),
+                last_success_time: Some(Utc::now()),
+                last_failure_time: None,
+            };
+            store
+                .write_metrics("auth-upsert", &metrics_v1)
+                .await
+                .unwrap();
+
+            let metrics_v2 = AuthMetrics {
+                total_requests: 50,
+                success_count: 45,
+                failure_count: 5,
+                avg_latency_ms: 80.0,
+                min_latency_ms: 30.0,
+                max_latency_ms: 150.0,
+                success_rate: 0.9,
+                error_rate: 0.1,
+                consecutive_successes: 20,
+                consecutive_failures: 0,
+                last_request_time: Utc::now(),
+                last_success_time: Some(Utc::now()),
+                last_failure_time: None,
+            };
+            store
+                .write_metrics("auth-upsert", &metrics_v2)
+                .await
+                .unwrap();
+
+            let loaded = store.load_metrics("auth-upsert").await.unwrap().unwrap();
+            assert_eq!(loaded.total_requests, 50);
+            assert_eq!(loaded.success_count, 45);
+        }
+
+        #[tokio::test]
+        async fn test_health_upsert_overwrites() {
+            let config = SQLiteConfig {
+                database_path: ":memory:".to_string(),
+                ..Default::default()
+            };
+            let store = SQLiteStore::new(config).await.unwrap();
+
+            let health_v1 = AuthHealth {
+                status: HealthStatus::Healthy,
+                consecutive_successes: 5,
+                consecutive_failures: 0,
+                last_status_change: Utc::now(),
+                last_check_time: Utc::now(),
+                unavailable_until: None,
+                error_counts: std::collections::HashMap::new(),
+            };
+            store.write_health("auth-upsert", &health_v1).await.unwrap();
+
+            let health_v2 = AuthHealth {
+                status: HealthStatus::Degraded,
+                consecutive_successes: 0,
+                consecutive_failures: 3,
+                last_status_change: Utc::now(),
+                last_check_time: Utc::now(),
+                unavailable_until: None,
+                error_counts: std::collections::HashMap::new(),
+            };
+            store.write_health("auth-upsert", &health_v2).await.unwrap();
+
+            let loaded = store.load_health("auth-upsert").await.unwrap().unwrap();
+            assert_eq!(loaded.status, HealthStatus::Degraded);
+            assert_eq!(loaded.consecutive_failures, 3);
+        }
+
+        #[tokio::test]
+        async fn test_health_with_error_counts() {
+            let config = SQLiteConfig {
+                database_path: ":memory:".to_string(),
+                ..Default::default()
+            };
+            let store = SQLiteStore::new(config).await.unwrap();
+
+            let mut error_counts = std::collections::HashMap::new();
+            error_counts.insert(500, 3);
+            error_counts.insert(429, 1);
+
+            let health = AuthHealth {
+                status: HealthStatus::Unhealthy,
+                consecutive_successes: 0,
+                consecutive_failures: 5,
+                last_status_change: Utc::now(),
+                last_check_time: Utc::now(),
+                unavailable_until: Some(Utc::now() + chrono::Duration::minutes(5)),
+                error_counts,
+            };
+            store.write_health("auth-errors", &health).await.unwrap();
+
+            let loaded = store.load_health("auth-errors").await.unwrap().unwrap();
+            assert_eq!(loaded.status, HealthStatus::Unhealthy);
+            assert_eq!(loaded.error_counts.get(&500), Some(&3));
+            assert_eq!(loaded.error_counts.get(&429), Some(&1));
+        }
+
+        #[tokio::test]
+        async fn test_load_all_health() {
+            let config = SQLiteConfig {
+                database_path: ":memory:".to_string(),
+                ..Default::default()
+            };
+            let store = SQLiteStore::new(config).await.unwrap();
+
+            for i in 1..=3 {
+                let health = AuthHealth {
+                    status: if i == 3 {
+                        HealthStatus::Unhealthy
+                    } else {
+                        HealthStatus::Healthy
+                    },
+                    consecutive_successes: i as i32,
+                    consecutive_failures: 0,
+                    last_status_change: Utc::now(),
+                    last_check_time: Utc::now(),
+                    unavailable_until: None,
+                    error_counts: std::collections::HashMap::new(),
+                };
+                store
+                    .write_health(&format!("auth-{i}"), &health)
+                    .await
+                    .unwrap();
+            }
+
+            let all_health = store.load_all_health().await.unwrap();
+            assert_eq!(all_health.len(), 3);
+            assert!(all_health.contains_key("auth-1"));
+            assert!(all_health.contains_key("auth-3"));
+            assert_eq!(
+                all_health.get("auth-3").unwrap().status,
+                HealthStatus::Unhealthy
+            );
+        }
+
+        #[tokio::test]
+        async fn test_cache_round_trip_metrics() {
+            let config = SQLiteConfig {
+                database_path: ":memory:".to_string(),
+                enable_cache: true,
+                ..Default::default()
+            };
+            let store = SQLiteStore::new(config).await.unwrap();
+
+            let metrics = AuthMetrics {
+                total_requests: 42,
+                success_count: 40,
+                failure_count: 2,
+                avg_latency_ms: 75.0,
+                min_latency_ms: 30.0,
+                max_latency_ms: 120.0,
+                success_rate: 0.95,
+                error_rate: 0.05,
+                consecutive_successes: 8,
+                consecutive_failures: 0,
+                last_request_time: Utc::now(),
+                last_success_time: Some(Utc::now()),
+                last_failure_time: None,
+            };
+            store.write_metrics("cached-auth", &metrics).await.unwrap();
+
+            // Load should hit cache (same process, cache is populated on write)
+            let loaded = store.load_metrics("cached-auth").await.unwrap().unwrap();
+            assert_eq!(loaded.total_requests, 42);
+            assert_eq!(loaded.success_count, 40);
+        }
+
+        #[tokio::test]
+        async fn test_get_history_stats_with_entries() {
+            let config = SQLiteConfig {
+                database_path: ":memory:".to_string(),
+                ..Default::default()
+            };
+            let store = SQLiteStore::new(config).await.unwrap();
+
+            store
+                .write_status_history("auth-1", 200, 50.0, true)
+                .await
+                .unwrap();
+            store
+                .write_status_history("auth-1", 500, 200.0, false)
+                .await
+                .unwrap();
+
+            let (count, min_ts) = store.get_history_stats().await.unwrap();
+            assert_eq!(count, 2);
+            // min_ts may be None if the database stores timestamps in a format
+            // that doesn't parse as RFC3339 — just verify the count is correct.
+        }
     }
 
     mod collectors {

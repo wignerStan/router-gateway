@@ -176,3 +176,83 @@ impl BanditPolicy {
         }
     }
 }
+
+#[cfg(test)]
+mod mod_tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn bandit_config_default_values() {
+        let config = BanditConfig::default();
+        assert!((config.exploration_rate - 0.3).abs() < f64::EPSILON);
+        assert!((config.prior_successes - 1.0).abs() < f64::EPSILON);
+        assert!((config.prior_failures - 1.0).abs() < f64::EPSILON);
+        assert_eq!(config.min_samples_for_thompson, 5);
+        assert!(config.use_utility_weighting);
+        assert!((config.sample_decay - 0.99).abs() < f64::EPSILON);
+        assert!(config.tier_priors.is_none());
+    }
+
+    #[test]
+    fn route_stats_default_has_optimistic_prior() {
+        let stats = RouteStats::default();
+        assert!((stats.successes - 1.0).abs() < f64::EPSILON);
+        assert!((stats.failures - 1.0).abs() < f64::EPSILON);
+        assert_eq!(stats.pulls, 0);
+        assert!((stats.last_utility - 0.5).abs() < f64::EPSILON);
+        assert!((stats.diversity_penalty).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn tier_default_is_standard() {
+        assert_eq!(Tier::default(), Tier::Standard);
+    }
+
+    #[test]
+    fn tier_priors_get_returns_correct_values() {
+        let priors = TierPriors::default();
+        assert_eq!(priors.get(Tier::Flagship), (5.0, 1.0));
+        assert_eq!(priors.get(Tier::Standard), (2.0, 2.0));
+        assert_eq!(priors.get(Tier::Fast), (1.0, 3.0));
+    }
+
+    #[test]
+    fn bandit_policy_new_has_default_config() {
+        let policy = BanditPolicy::new();
+        assert!((policy.config.exploration_rate - 0.3).abs() < f64::EPSILON);
+        assert!(policy.route_stats.is_empty());
+        assert!(policy.route_tiers.is_empty());
+    }
+
+    #[test]
+    fn bandit_policy_with_custom_config() {
+        let config = BanditConfig {
+            exploration_rate: 0.5,
+            prior_successes: 2.0,
+            prior_failures: 0.5,
+            diversity_weight: 0.2,
+            min_samples_for_thompson: 10,
+            use_utility_weighting: false,
+            sample_decay: 0.95,
+            tier_priors: Some(TierPriors::default()),
+        };
+        let policy = BanditPolicy::with_config(config.clone());
+        assert!((policy.config.exploration_rate - 0.5).abs() < f64::EPSILON);
+        assert_eq!(policy.config.min_samples_for_thompson, 10);
+        assert!(policy.config.tier_priors.is_some());
+    }
+
+    #[test]
+    fn bandit_policy_with_utility_estimator() {
+        let estimator = UtilityEstimator::new();
+        let policy = BanditPolicy::with_utility_estimator(BanditConfig::default(), estimator);
+        assert!(policy.route_stats.is_empty());
+    }
+
+    #[test]
+    fn bandit_policy_default_trait() {
+        let policy = BanditPolicy::default();
+        assert!((policy.config.exploration_rate - 0.3).abs() < f64::EPSILON);
+    }
+}

@@ -80,3 +80,58 @@ impl Default for FallbackPlanner {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod constructor_tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn fallback_config_default_values() {
+        let config = FallbackConfig::default();
+        assert_eq!(config.max_fallbacks, 5);
+        assert_eq!(config.min_fallbacks, 2);
+        assert!(config.enable_provider_diversity);
+        assert!(config.prefer_diverse_providers);
+    }
+
+    #[test]
+    fn planner_new_has_default_config() {
+        let planner = FallbackPlanner::new();
+        assert_eq!(planner.config().max_fallbacks, 5);
+        assert_eq!(planner.config().min_fallbacks, 2);
+    }
+
+    #[test]
+    fn planner_with_custom_config() {
+        let config = FallbackConfig {
+            max_fallbacks: 10,
+            min_fallbacks: 1,
+            enable_provider_diversity: false,
+            prefer_diverse_providers: false,
+        };
+        let planner = FallbackPlanner::with_config(config.clone());
+        assert_eq!(planner.config().max_fallbacks, 10);
+        assert_eq!(planner.config().min_fallbacks, 1);
+        assert!(!planner.config().enable_provider_diversity);
+    }
+
+    #[test]
+    fn planner_set_config_updates_config() {
+        let mut planner = FallbackPlanner::new();
+        let new_config = FallbackConfig {
+            max_fallbacks: 3,
+            min_fallbacks: 1,
+            enable_provider_diversity: false,
+            prefer_diverse_providers: false,
+        };
+        planner.set_config(new_config);
+        assert_eq!(planner.config().max_fallbacks, 3);
+    }
+
+    #[test]
+    fn planner_default_trait() {
+        let planner = FallbackPlanner::default();
+        assert_eq!(planner.config().max_fallbacks, 5);
+    }
+}
