@@ -237,7 +237,7 @@ mod mod_tests {
             sample_decay: 0.95,
             tier_priors: Some(TierPriors::default()),
         };
-        let policy = BanditPolicy::with_config(config.clone());
+        let policy = BanditPolicy::with_config(config);
         assert!((policy.config.exploration_rate - 0.5).abs() < f64::EPSILON);
         assert_eq!(policy.config.min_samples_for_thompson, 10);
         assert!(policy.config.tier_priors.is_some());

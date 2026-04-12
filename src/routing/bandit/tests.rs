@@ -598,7 +598,7 @@ mod proptests {
             beta in 0.001_f64..1000.0,
         ) {
             let sample = BanditPolicy::sample_beta(alpha, beta);
-            prop_assert!(sample >= 0.0 && sample <= 1.0,
+            prop_assert!((0.0..=1.0).contains(&sample),
                 "Beta({}, {}) = {}, expected [0, 1]", alpha, beta, sample);
         }
 

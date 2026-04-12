@@ -868,4 +868,462 @@ mod tests {
             assert_eq!(selected, Some("same-auth".to_string()));
         }
     }
+
+    mod with_policy_constructor {
+        use super::*;
+        use crate::registry::PolicyRegistry;
+
+        #[tokio::test]
+        async fn test_with_policy_enabled_uses_policy_calculator() {
+            let mut config = SmartRoutingConfig::default();
+            config.policy.enabled = true;
+
+            let registry = PolicyRegistry::new();
+            let selector = SmartSelector::with_policy(config, registry);
+
+            // Verify policy_matcher is set when policy is enabled
+            assert!(
+                selector.policy_matcher().is_some(),
+                "with_policy should set a policy matcher when policy is enabled"
+            );
+
+            // Verify functional behavior: selection works with policy-aware routing
+            let auths = vec![AuthInfo {
+                id: "policy-auth".to_string(),
+                priority: Some(5),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            }];
+
+            selector.metrics().initialize_auth("policy-auth").await;
+
+            let model = create_test_model();
+            let context = crate::registry::PolicyContext::default();
+
+            let selected = selector.pick_with_policy(auths, &model, &context).await;
+            assert_eq!(
+                selected,
+                Some("policy-auth".to_string()),
+                "Should select the only available auth with policy-aware routing"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_with_policy_disabled_uses_default_calculator() {
+            let config = SmartRoutingConfig::default();
+            // Default config has policy.enabled = false
+
+            let registry = PolicyRegistry::new();
+            let selector = SmartSelector::with_policy(config.clone(), registry);
+
+            // Even with disabled policy, matcher is still set (but uses DefaultWeightCalculator)
+            assert!(
+                selector.policy_matcher().is_some(),
+                "with_policy should set a policy matcher even when policy is disabled"
+            );
+
+            // Verify config reflects disabled policy
+            assert!(
+                !selector.config().policy.enabled,
+                "Config should have policy disabled"
+            );
+
+            // Selection should still work with default weight calculator
+            let auths = vec![
+                AuthInfo {
+                    id: "auth-a".to_string(),
+                    priority: Some(0),
+                    quota_exceeded: false,
+                    unavailable: false,
+                    model_states: Vec::new(),
+                },
+                AuthInfo {
+                    id: "auth-b".to_string(),
+                    priority: Some(0),
+                    quota_exceeded: false,
+                    unavailable: false,
+                    model_states: Vec::new(),
+                },
+            ];
+
+            for auth in &auths {
+                selector.metrics().initialize_auth(&auth.id).await;
+            }
+
+            let selected = selector.pick(auths).await;
+            assert!(
+                selected.is_some(),
+                "Should select an auth even with disabled policy config"
+            );
+            let id = selected.expect("should have a selection");
+            assert!(
+                ["auth-a", "auth-b"].contains(&id.as_str()),
+                "Selected auth should be one of the available auths"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_with_policy_multiple_auths_with_policy_enabled() {
+            let mut config = SmartRoutingConfig::default();
+            config.policy.enabled = true;
+            config.weight.priority_weight = 0.8;
+
+            let registry = PolicyRegistry::new();
+            let selector = SmartSelector::with_policy(config, registry);
+
+            let auths = vec![
+                AuthInfo {
+                    id: "high-priority".to_string(),
+                    priority: Some(100),
+                    quota_exceeded: false,
+                    unavailable: false,
+                    model_states: Vec::new(),
+                },
+                AuthInfo {
+                    id: "low-priority".to_string(),
+                    priority: Some(-100),
+                    quota_exceeded: false,
+                    unavailable: false,
+                    model_states: Vec::new(),
+                },
+            ];
+
+            for auth in &auths {
+                selector.metrics().initialize_auth(&auth.id).await;
+            }
+
+            let model = create_test_model();
+            let context = crate::registry::PolicyContext::default();
+
+            // Run multiple selections and verify the high-priority auth dominates
+            let mut high_count = 0;
+            let mut low_count = 0;
+            for _ in 0..200 {
+                let id = selector
+                    .pick_with_policy(auths.clone(), &model, &context)
+                    .await
+                    .expect("should select an auth");
+                if id == "high-priority" {
+                    high_count += 1;
+                } else {
+                    low_count += 1;
+                }
+            }
+
+            assert!(
+                high_count > low_count,
+                "High-priority auth should be selected more often (high: {high_count}, low: {low_count})"
+            );
+        }
+    }
+
+    mod set_policy_registry {
+        use super::*;
+        use crate::registry::PolicyRegistry;
+
+        #[tokio::test]
+        async fn test_set_policy_registry_enables_policy_matcher() {
+            let config = SmartRoutingConfig::default();
+            let mut selector = SmartSelector::new(config);
+
+            assert!(
+                selector.policy_matcher().is_none(),
+                "New selector should not have a policy matcher"
+            );
+
+            let registry = PolicyRegistry::new();
+            selector.set_policy_registry(registry);
+
+            assert!(
+                selector.policy_matcher().is_some(),
+                "set_policy_registry should enable the policy matcher"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_set_policy_registry_with_enabled_config_swaps_calculator() {
+            let mut config = SmartRoutingConfig::default();
+            config.policy.enabled = true;
+
+            let mut selector = SmartSelector::new(config);
+
+            let registry = PolicyRegistry::new();
+            selector.set_policy_registry(registry);
+
+            // Verify selection still works after swapping to policy-aware calculator
+            let auths = vec![AuthInfo {
+                id: "swapped-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            }];
+
+            selector.metrics().initialize_auth("swapped-auth").await;
+
+            let model = create_test_model();
+            let context = crate::registry::PolicyContext::default();
+
+            let selected = selector.pick_with_policy(auths, &model, &context).await;
+            assert_eq!(
+                selected,
+                Some("swapped-auth".to_string()),
+                "Selection should work after set_policy_registry swaps the calculator"
+            );
+        }
+    }
+
+    mod getters {
+        use super::*;
+
+        #[tokio::test]
+        async fn test_health_getter_returns_manager() {
+            let config = SmartRoutingConfig::default();
+            let selector = SmartSelector::new(config);
+
+            // Verify health manager is accessible and functional
+            selector
+                .health()
+                .update_from_result("auth1", true, 200)
+                .await;
+            let status = selector.health().get_status("auth1").await;
+            assert_eq!(
+                status,
+                crate::routing::health::HealthStatus::Healthy,
+                "Health getter should return the same manager that records results"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_config_getter_returns_config() {
+            let config = SmartRoutingConfig {
+                strategy: "adaptive".to_string(),
+                ..Default::default()
+            };
+            let selector = SmartSelector::new(config);
+
+            assert_eq!(
+                selector.config().strategy,
+                "adaptive",
+                "Config getter should return the constructor config"
+            );
+            assert!(
+                selector.config().enabled,
+                "Config should have enabled=true by default"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_metrics_getter_returns_collector() {
+            let config = SmartRoutingConfig::default();
+            let selector = SmartSelector::new(config);
+
+            selector.metrics().initialize_auth("auth1").await;
+            selector
+                .metrics()
+                .record_result("auth1", true, 50.0, 200)
+                .await;
+
+            let metrics = selector.metrics().get_metrics("auth1").await;
+            assert!(
+                metrics.is_some(),
+                "Metrics getter should return the same collector that records results"
+            );
+            let m = metrics.expect("should have metrics");
+            assert_eq!(m.total_requests, 1);
+            assert_eq!(m.success_count, 1);
+        }
+
+        #[tokio::test]
+        async fn test_policy_matcher_returns_none_for_new_selector() {
+            let config = SmartRoutingConfig::default();
+            let selector = SmartSelector::new(config);
+
+            assert!(
+                selector.policy_matcher().is_none(),
+                "New selector without policy should return None for policy_matcher"
+            );
+        }
+    }
+
+    mod record_result {
+        use super::*;
+        use tokio::time::{Duration, timeout};
+
+        #[tokio::test]
+        async fn test_record_result_updates_metrics_and_health() {
+            let config = SmartRoutingConfig::default();
+            let selector = SmartSelector::new(config);
+
+            selector.metrics().initialize_auth("rec-auth").await;
+
+            selector.record_result("rec-auth", true, 150.0, 200);
+
+            // record_result spawns a task, give it time to complete
+            let result = timeout(Duration::from_millis(500), async {
+                loop {
+                    let m = selector.metrics().get_metrics("rec-auth").await;
+                    if m.is_some_and(|metrics| metrics.total_requests > 0) {
+                        return;
+                    }
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await;
+
+            assert!(
+                result.is_ok(),
+                "record_result should eventually update metrics"
+            );
+
+            let metrics = selector
+                .metrics()
+                .get_metrics("rec-auth")
+                .await
+                .expect("should have metrics");
+            assert_eq!(metrics.total_requests, 1);
+            assert_eq!(metrics.success_count, 1);
+        }
+    }
+
+    mod selection_same_priority {
+        use super::*;
+
+        #[tokio::test]
+        async fn test_selection_with_all_same_priority_distributes() {
+            let config = SmartRoutingConfig::default();
+            let selector = SmartSelector::new(config);
+
+            let auths: Vec<AuthInfo> = (0..5)
+                .map(|i| AuthInfo {
+                    id: format!("auth-{i}"),
+                    priority: Some(3),
+                    quota_exceeded: false,
+                    unavailable: false,
+                    model_states: Vec::new(),
+                })
+                .collect();
+
+            for auth in &auths {
+                selector.metrics().initialize_auth(&auth.id).await;
+            }
+
+            let mut selections: std::collections::HashMap<String, usize> =
+                std::collections::HashMap::new();
+            for _ in 0..200 {
+                let id = selector.pick(auths.clone()).await.expect("should select");
+                *selections.entry(id).or_insert(0) += 1;
+            }
+
+            // With all same priority, at least 3 of 5 auths should be selected
+            assert!(
+                selections.len() >= 3,
+                "With identical priorities, selection should distribute across auths (got {} unique)",
+                selections.len()
+            );
+        }
+
+        #[tokio::test]
+        async fn test_quota_exceeded_auths_deprioritized_in_selection() {
+            let config = SmartRoutingConfig::default();
+            let selector = SmartSelector::new(config);
+
+            let auths = vec![
+                AuthInfo {
+                    id: "healthy-1".to_string(),
+                    priority: Some(0),
+                    quota_exceeded: false,
+                    unavailable: false,
+                    model_states: Vec::new(),
+                },
+                AuthInfo {
+                    id: "healthy-2".to_string(),
+                    priority: Some(0),
+                    quota_exceeded: false,
+                    unavailable: false,
+                    model_states: Vec::new(),
+                },
+                AuthInfo {
+                    id: "quota-1".to_string(),
+                    priority: Some(0),
+                    quota_exceeded: true,
+                    unavailable: false,
+                    model_states: Vec::new(),
+                },
+                AuthInfo {
+                    id: "quota-2".to_string(),
+                    priority: Some(0),
+                    quota_exceeded: true,
+                    unavailable: false,
+                    model_states: Vec::new(),
+                },
+            ];
+
+            for auth in &auths {
+                selector.metrics().initialize_auth(&auth.id).await;
+            }
+
+            let mut healthy_count = 0usize;
+            let mut quota_count = 0usize;
+
+            for _ in 0..500 {
+                let id = selector.pick(auths.clone()).await.expect("should select");
+                if id.starts_with("healthy") {
+                    healthy_count += 1;
+                } else {
+                    quota_count += 1;
+                }
+            }
+
+            assert!(
+                healthy_count > quota_count * 4,
+                "Healthy auths should dominate over quota-exceeded auths (healthy: {healthy_count}, quota: {quota_count})"
+            );
+        }
+    }
+
+    mod clone_with_policy {
+        use super::*;
+        use crate::registry::PolicyRegistry;
+
+        #[tokio::test]
+        async fn test_clone_preserves_policy_matcher() {
+            let mut config = SmartRoutingConfig::default();
+            config.policy.enabled = true;
+
+            let registry = PolicyRegistry::new();
+            let selector = SmartSelector::with_policy(config, registry);
+
+            assert!(
+                selector.policy_matcher().is_some(),
+                "Original should have policy matcher"
+            );
+
+            let cloned = selector.clone();
+
+            assert!(
+                cloned.policy_matcher().is_some(),
+                "Cloned selector should preserve policy matcher"
+            );
+
+            // Cloned selector should still be functional
+            let auths = vec![AuthInfo {
+                id: "clone-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            }];
+
+            cloned.metrics().initialize_auth("clone-auth").await;
+
+            let selected = cloned.pick(auths).await;
+            assert_eq!(
+                selected,
+                Some("clone-auth".to_string()),
+                "Cloned selector should be functional"
+            );
+        }
+    }
 }

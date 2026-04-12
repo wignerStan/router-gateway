@@ -548,26 +548,22 @@ impl SQLiteStore {
     ///
     /// Returns an error if the query or row mapping fails.
     pub async fn get_history_stats(&self) -> Result<(i64, Option<DateTime<Utc>>)> {
-        let result = {
-            let db = self.db.lock().await;
+        let db = self.db.lock().await;
 
-            let mut stmt = db
-                .prepare("SELECT COUNT(*), MIN(timestamp) FROM status_code_history")
-                .map_err(|e| SqliteError::query("prepare_history_stats_query", e))?;
+        let mut stmt = db
+            .prepare("SELECT COUNT(*), MIN(timestamp) FROM status_code_history")
+            .map_err(|e| SqliteError::query("prepare_history_stats_query", e))?;
 
-            stmt.query_row([], |row| {
-                let count: i64 = row.get(0)?;
-                let min_timestamp_str: Option<String> = row.get(1)?;
+        stmt.query_row([], |row| {
+            let count: i64 = row.get(0)?;
+            let min_timestamp_str: Option<String> = row.get(1)?;
 
-                let min_timestamp = min_timestamp_str
-                    .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
-                    .map(|dt| dt.with_timezone(&Utc));
+            let min_timestamp = min_timestamp_str
+                .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
+                .map(|dt| dt.with_timezone(&Utc));
 
-                Ok((count, min_timestamp))
-            })
-            .map_err(|e| SqliteError::query("get_history_stats", e))
-        };
-
-        result
+            Ok((count, min_timestamp))
+        })
+        .map_err(|e| SqliteError::query("get_history_stats", e))
     }
 }

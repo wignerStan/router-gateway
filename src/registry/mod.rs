@@ -13,6 +13,7 @@ pub mod info;
 /// Multi-dimensional routing policy configuration.
 pub mod policy;
 /// Thread-safe model registry with caching and coalesced fetches.
+#[allow(clippy::module_inception)]
 pub mod registry;
 
 pub use categories::{

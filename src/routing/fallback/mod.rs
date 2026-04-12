@@ -110,7 +110,7 @@ mod constructor_tests {
             enable_provider_diversity: false,
             prefer_diverse_providers: false,
         };
-        let planner = FallbackPlanner::with_config(config.clone());
+        let planner = FallbackPlanner::with_config(config);
         assert_eq!(planner.config().max_fallbacks, 10);
         assert_eq!(planner.config().min_fallbacks, 1);
         assert!(!planner.config().enable_provider_diversity);

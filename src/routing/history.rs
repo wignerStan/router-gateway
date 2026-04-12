@@ -720,4 +720,932 @@ mod tests {
         assert!(tracking.get_statistics("route-1").is_none());
         assert!(!tracking.get_attempts("route-1").is_empty());
     }
+
+    // --- DecisionContext builder methods ---
+
+    #[test]
+    fn test_decision_context_with_weights() {
+        let mut weights = HashMap::new();
+        weights.insert("route-1".to_string(), 0.8);
+        weights.insert("route-2".to_string(), 0.6);
+
+        let context = DecisionContext::new(
+            "req-1".to_string(),
+            "model-1".to_string(),
+            vec!["route-1".to_string(), "route-2".to_string()],
+            SelectionMode::Adaptive,
+            "route-1".to_string(),
+        )
+        .with_weights(weights);
+
+        pretty_assertions::assert_eq!(context.get_weight("route-1"), Some(0.8));
+        pretty_assertions::assert_eq!(context.get_weight("route-2"), Some(0.6));
+        pretty_assertions::assert_eq!(context.get_weight("route-999"), None);
+    }
+
+    #[test]
+    fn test_decision_context_with_reasoning() {
+        let context = DecisionContext::new(
+            "req-1".to_string(),
+            "model-1".to_string(),
+            vec!["route-1".to_string()],
+            SelectionMode::Manual,
+            "route-1".to_string(),
+        )
+        .with_reasoning("User override".to_string());
+
+        pretty_assertions::assert_eq!(context.reasoning, Some("User override".to_string()));
+    }
+
+    #[test]
+    fn test_decision_context_no_reasoning_by_default() {
+        let context = DecisionContext::new(
+            "req-1".to_string(),
+            "model-1".to_string(),
+            vec!["route-1".to_string()],
+            SelectionMode::Weighted,
+            "route-1".to_string(),
+        );
+
+        assert!(context.reasoning.is_none());
+    }
+
+    #[test]
+    fn test_decision_context_get_predicted_utility_missing() {
+        let context = DecisionContext::new(
+            "req-1".to_string(),
+            "model-1".to_string(),
+            vec!["route-1".to_string()],
+            SelectionMode::Weighted,
+            "route-1".to_string(),
+        );
+
+        pretty_assertions::assert_eq!(context.get_predicted_utility("nonexistent"), None);
+    }
+
+    #[test]
+    fn test_decision_context_builder_chain() {
+        let mut utilities = HashMap::new();
+        utilities.insert("route-1".to_string(), 0.95);
+
+        let mut weights = HashMap::new();
+        weights.insert("route-1".to_string(), 0.7);
+
+        let context = DecisionContext::new(
+            "req-1".to_string(),
+            "model-1".to_string(),
+            vec!["route-1".to_string()],
+            SelectionMode::Thompson,
+            "route-1".to_string(),
+        )
+        .with_predicted_utilities(utilities)
+        .with_weights(weights)
+        .with_reasoning("Highest utility".to_string());
+
+        pretty_assertions::assert_eq!(context.get_predicted_utility("route-1"), Some(0.95));
+        pretty_assertions::assert_eq!(context.get_weight("route-1"), Some(0.7));
+        pretty_assertions::assert_eq!(context.reasoning, Some("Highest utility".to_string()));
+        pretty_assertions::assert_eq!(context.selection_mode, SelectionMode::Thompson);
+    }
+
+    // --- SelectionMode variants ---
+
+    #[test]
+    fn test_selection_mode_equality_and_hash() {
+        let mode1 = SelectionMode::Weighted;
+        let mode2 = SelectionMode::Weighted;
+        let mode3 = SelectionMode::Thompson;
+
+        assert_eq!(mode1, mode2);
+        assert_ne!(mode1, mode3);
+
+        let mut map = HashMap::new();
+        map.insert(mode1, 1);
+        map.insert(mode3, 2);
+        pretty_assertions::assert_eq!(map.len(), 2);
+        pretty_assertions::assert_eq!(map.get(&mode2), Some(&1));
+    }
+
+    // --- RouteAttempt ---
+
+    #[test]
+    fn test_route_attempt_duration() {
+        let decision_context = DecisionContext::new(
+            "req-1".to_string(),
+            "model-1".to_string(),
+            vec!["route-1".to_string()],
+            SelectionMode::Weighted,
+            "route-1".to_string(),
+        );
+
+        let outcome = ExecutionOutcome::success("route-1".to_string(), 250.0, 10, 5, 200);
+        let attempt = RouteAttempt::new("req-1".to_string(), decision_context, outcome);
+
+        // Duration should be non-negative (outcome timestamp >= decision timestamp)
+        let duration = attempt.duration();
+        assert!(
+            duration.num_milliseconds() >= 0,
+            "Duration should be non-negative"
+        );
+    }
+
+    #[test]
+    fn test_route_attempt_used_fallback_true() {
+        let decision_context = DecisionContext::new(
+            "req-1".to_string(),
+            "model-1".to_string(),
+            vec!["route-1".to_string()],
+            SelectionMode::Fallback,
+            "route-1".to_string(),
+        );
+
+        let outcome = ExecutionOutcome::failure(
+            "route-1".to_string(),
+            200.0,
+            500,
+            true,
+            Some("route-original".to_string()),
+        );
+        let attempt = RouteAttempt::new("req-1".to_string(), decision_context, outcome);
+
+        assert!(attempt.used_fallback());
+        assert!(!attempt.is_successful());
+    }
+
+    #[test]
+    fn test_route_attempt_attempt_id_format() {
+        let decision_context = DecisionContext::new(
+            "req-1".to_string(),
+            "model-1".to_string(),
+            vec!["route-1".to_string()],
+            SelectionMode::Weighted,
+            "route-1".to_string(),
+        );
+
+        let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
+        let attempt = RouteAttempt::new("req-1".to_string(), decision_context, outcome);
+
+        // Attempt ID should be "timestamp-nanos_remainder" format
+        assert!(
+            attempt.attempt_id.contains('-'),
+            "Attempt ID should contain a dash: {}",
+            attempt.attempt_id
+        );
+    }
+
+    // --- AttemptHistory with_limit and edge cases ---
+
+    #[test]
+    fn test_attempt_history_with_limit_zero_uses_default() {
+        let history = AttemptHistory::with_limit(0);
+        // Should default to 100_000 when zero is passed
+        pretty_assertions::assert_eq!(history.max_attempts, 100_000);
+    }
+
+    #[test]
+    fn test_attempt_history_with_limit_custom() {
+        let history = AttemptHistory::with_limit(50);
+        pretty_assertions::assert_eq!(history.max_attempts, 50);
+    }
+
+    #[test]
+    fn test_attempt_history_eviction_when_over_limit() {
+        let mut history = AttemptHistory::with_limit(3);
+
+        for i in 0..5 {
+            let decision_context = DecisionContext::new(
+                format!("req-{i}"),
+                "model-1".to_string(),
+                vec!["route-1".to_string()],
+                SelectionMode::Weighted,
+                "route-1".to_string(),
+            );
+            let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
+            let attempt = RouteAttempt::new(format!("req-{i}"), decision_context, outcome);
+            history.record(attempt);
+        }
+
+        // Should only keep the last 3 (req-2, req-3, req-4)
+        pretty_assertions::assert_eq!(history.len(), 3);
+
+        let attempts = history.get_all_attempts();
+        pretty_assertions::assert_eq!(attempts[0].request_id, "req-2");
+        pretty_assertions::assert_eq!(attempts[1].request_id, "req-3");
+        pretty_assertions::assert_eq!(attempts[2].request_id, "req-4");
+    }
+
+    #[test]
+    fn test_attempt_history_eviction_drains_multiple() {
+        let mut history = AttemptHistory::with_limit(2);
+
+        for i in 0..10 {
+            let decision_context = DecisionContext::new(
+                format!("req-{i}"),
+                "model-1".to_string(),
+                vec!["route-1".to_string()],
+                SelectionMode::Weighted,
+                "route-1".to_string(),
+            );
+            let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
+            let attempt = RouteAttempt::new(format!("req-{i}"), decision_context, outcome);
+            history.record(attempt);
+        }
+
+        pretty_assertions::assert_eq!(history.len(), 2);
+        let attempts = history.get_all_attempts();
+        pretty_assertions::assert_eq!(attempts[0].request_id, "req-8");
+        pretty_assertions::assert_eq!(attempts[1].request_id, "req-9");
+    }
+
+    #[test]
+    fn test_attempt_history_default() {
+        let history = AttemptHistory::default();
+        assert!(history.is_empty());
+        pretty_assertions::assert_eq!(history.len(), 0);
+    }
+
+    // --- get_attempts_for_request ---
+
+    #[test]
+    fn test_get_attempts_for_request_found() {
+        let mut history = AttemptHistory::new();
+
+        // Record attempts with different request IDs
+        for req_id in &["req-a", "req-b", "req-a"] {
+            let decision_context = DecisionContext::new(
+                req_id.to_string(),
+                "model-1".to_string(),
+                vec!["route-1".to_string()],
+                SelectionMode::Weighted,
+                "route-1".to_string(),
+            );
+            let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
+            let attempt = RouteAttempt::new(req_id.to_string(), decision_context, outcome);
+            history.record(attempt);
+        }
+
+        let results = history.get_attempts_for_request("req-a");
+        pretty_assertions::assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn test_get_attempts_for_request_not_found() {
+        let history = AttemptHistory::new();
+        let results = history.get_attempts_for_request("nonexistent");
+        assert!(results.is_empty());
+    }
+
+    // --- get_attempts_for_model ---
+
+    #[test]
+    fn test_get_attempts_for_model_found() {
+        let mut history = AttemptHistory::new();
+
+        for (i, model) in ["gpt-4", "claude-3", "gpt-4"].iter().enumerate() {
+            let decision_context = DecisionContext::new(
+                format!("req-{i}"),
+                model.to_string(),
+                vec!["route-1".to_string()],
+                SelectionMode::Weighted,
+                "route-1".to_string(),
+            );
+            let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
+            let attempt = RouteAttempt::new(format!("req-{i}"), decision_context, outcome);
+            history.record(attempt);
+        }
+
+        let results = history.get_attempts_for_model("gpt-4");
+        pretty_assertions::assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn test_get_attempts_for_model_not_found() {
+        let history = AttemptHistory::new();
+        let results = history.get_attempts_for_model("nonexistent");
+        assert!(results.is_empty());
+    }
+
+    // --- get_attempts_by_selection_mode ---
+
+    #[test]
+    fn test_get_attempts_by_selection_mode_found() {
+        let mut history = AttemptHistory::new();
+
+        let modes = [
+            SelectionMode::Weighted,
+            SelectionMode::Thompson,
+            SelectionMode::TimeAware,
+            SelectionMode::Weighted,
+        ];
+
+        for (i, mode) in modes.iter().enumerate() {
+            let decision_context = DecisionContext::new(
+                format!("req-{i}"),
+                "model-1".to_string(),
+                vec!["route-1".to_string()],
+                mode.clone(),
+                "route-1".to_string(),
+            );
+            let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
+            let attempt = RouteAttempt::new(format!("req-{i}"), decision_context, outcome);
+            history.record(attempt);
+        }
+
+        let weighted = history.get_attempts_by_selection_mode(&SelectionMode::Weighted);
+        pretty_assertions::assert_eq!(weighted.len(), 2);
+
+        let thompson = history.get_attempts_by_selection_mode(&SelectionMode::Thompson);
+        pretty_assertions::assert_eq!(thompson.len(), 1);
+
+        let quota = history.get_attempts_by_selection_mode(&SelectionMode::QuotaAware);
+        assert!(quota.is_empty());
+    }
+
+    // --- get_recent_attempts edge cases ---
+
+    #[test]
+    fn test_get_recent_attempts_n_greater_than_len() {
+        let mut history = AttemptHistory::new();
+
+        let decision_context = DecisionContext::new(
+            "req-1".to_string(),
+            "model-1".to_string(),
+            vec!["route-1".to_string()],
+            SelectionMode::Weighted,
+            "route-1".to_string(),
+        );
+        let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
+        let attempt = RouteAttempt::new("req-1".to_string(), decision_context, outcome);
+        history.record(attempt);
+
+        // Request more than stored
+        let recent = history.get_recent_attempts(10);
+        pretty_assertions::assert_eq!(recent.len(), 1);
+    }
+
+    #[test]
+    fn test_get_recent_attempts_n_zero() {
+        let mut history = AttemptHistory::new();
+
+        let decision_context = DecisionContext::new(
+            "req-1".to_string(),
+            "model-1".to_string(),
+            vec!["route-1".to_string()],
+            SelectionMode::Weighted,
+            "route-1".to_string(),
+        );
+        let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
+        let attempt = RouteAttempt::new("req-1".to_string(), decision_context, outcome);
+        history.record(attempt);
+
+        let recent = history.get_recent_attempts(0);
+        assert!(recent.is_empty());
+    }
+
+    #[test]
+    fn test_get_recent_attempts_empty_history() {
+        let history = AttemptHistory::new();
+        let recent = history.get_recent_attempts(5);
+        assert!(recent.is_empty());
+    }
+
+    #[test]
+    fn test_get_recent_attempts_returns_newest() {
+        let mut history = AttemptHistory::new();
+
+        for i in 0..5 {
+            let decision_context = DecisionContext::new(
+                format!("req-{i}"),
+                "model-1".to_string(),
+                vec!["route-1".to_string()],
+                SelectionMode::Weighted,
+                "route-1".to_string(),
+            );
+            let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
+            let attempt = RouteAttempt::new(format!("req-{i}"), decision_context, outcome);
+            history.record(attempt);
+        }
+
+        let recent = history.get_recent_attempts(2);
+        pretty_assertions::assert_eq!(recent.len(), 2);
+        pretty_assertions::assert_eq!(recent[0].request_id, "req-3");
+        pretty_assertions::assert_eq!(recent[1].request_id, "req-4");
+    }
+
+    // --- get_attempts_in_range ---
+
+    #[test]
+    fn test_get_attempts_in_range_found() {
+        let mut history = AttemptHistory::new();
+        let now = Utc::now();
+        let _one_hour_ago = now - chrono::Duration::hours(1);
+        let two_hours_ago = now - chrono::Duration::hours(2);
+
+        // Create an attempt whose started_at will be based on decision_context.timestamp
+        let decision_context = DecisionContext::new(
+            "req-1".to_string(),
+            "model-1".to_string(),
+            vec!["route-1".to_string()],
+            SelectionMode::Weighted,
+            "route-1".to_string(),
+        );
+
+        let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
+        let attempt = RouteAttempt::new("req-1".to_string(), decision_context, outcome);
+        history.record(attempt);
+
+        // Use a wide range that should include the recent attempt
+        let results =
+            history.get_attempts_in_range(two_hours_ago, now + chrono::Duration::hours(1));
+        pretty_assertions::assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_get_attempts_in_range_none_match() {
+        let mut history = AttemptHistory::new();
+        let now = Utc::now();
+        let far_future = now + chrono::Duration::days(365);
+
+        let decision_context = DecisionContext::new(
+            "req-1".to_string(),
+            "model-1".to_string(),
+            vec!["route-1".to_string()],
+            SelectionMode::Weighted,
+            "route-1".to_string(),
+        );
+        let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
+        let attempt = RouteAttempt::new("req-1".to_string(), decision_context, outcome);
+        history.record(attempt);
+
+        // Range far in the future should find nothing
+        let results =
+            history.get_attempts_in_range(far_future, far_future + chrono::Duration::hours(1));
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_get_attempts_in_range_empty_history() {
+        let history = AttemptHistory::new();
+        let now = Utc::now();
+        let results = history.get_attempts_in_range(now, now);
+        assert!(results.is_empty());
+    }
+
+    // --- get_all_attempts and clear ---
+
+    #[test]
+    fn test_get_all_attempts() {
+        let mut history = AttemptHistory::new();
+
+        for i in 0..3 {
+            let decision_context = DecisionContext::new(
+                format!("req-{i}"),
+                "model-1".to_string(),
+                vec!["route-1".to_string()],
+                SelectionMode::Weighted,
+                "route-1".to_string(),
+            );
+            let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
+            let attempt = RouteAttempt::new(format!("req-{i}"), decision_context, outcome);
+            history.record(attempt);
+        }
+
+        let all = history.get_all_attempts();
+        pretty_assertions::assert_eq!(all.len(), 3);
+    }
+
+    #[test]
+    fn test_clear_empties_history() {
+        let mut history = AttemptHistory::new();
+
+        let decision_context = DecisionContext::new(
+            "req-1".to_string(),
+            "model-1".to_string(),
+            vec!["route-1".to_string()],
+            SelectionMode::Weighted,
+            "route-1".to_string(),
+        );
+        let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
+        let attempt = RouteAttempt::new("req-1".to_string(), decision_context, outcome);
+        history.record(attempt);
+
+        pretty_assertions::assert_eq!(history.len(), 1);
+        history.clear();
+        assert!(history.is_empty());
+        pretty_assertions::assert_eq!(history.len(), 0);
+    }
+
+    #[test]
+    fn test_is_empty_on_new_history() {
+        let history = AttemptHistory::new();
+        assert!(history.is_empty());
+    }
+
+    // --- get_success_rate_for_route returning None ---
+
+    #[test]
+    fn test_get_success_rate_for_route_none_when_empty() {
+        let history = AttemptHistory::new();
+        assert!(history.get_success_rate_for_route("route-1").is_none());
+    }
+
+    #[test]
+    fn test_get_success_rate_for_route_none_when_route_not_present() {
+        let mut history = AttemptHistory::new();
+
+        let decision_context = DecisionContext::new(
+            "req-1".to_string(),
+            "model-1".to_string(),
+            vec!["route-1".to_string()],
+            SelectionMode::Weighted,
+            "route-1".to_string(),
+        );
+        let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
+        let attempt = RouteAttempt::new("req-1".to_string(), decision_context, outcome);
+        history.record(attempt);
+
+        assert!(history.get_success_rate_for_route("route-999").is_none());
+    }
+
+    // --- get_avg_latency_for_route returning None ---
+
+    #[test]
+    fn test_get_avg_latency_for_route_none_when_empty() {
+        let history = AttemptHistory::new();
+        assert!(history.get_avg_latency_for_route("route-1").is_none());
+    }
+
+    #[test]
+    fn test_get_avg_latency_for_route_none_when_route_not_present() {
+        let mut history = AttemptHistory::new();
+
+        let decision_context = DecisionContext::new(
+            "req-1".to_string(),
+            "model-1".to_string(),
+            vec!["route-1".to_string()],
+            SelectionMode::Weighted,
+            "route-1".to_string(),
+        );
+        let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
+        let attempt = RouteAttempt::new("req-1".to_string(), decision_context, outcome);
+        history.record(attempt);
+
+        assert!(history.get_avg_latency_for_route("route-999").is_none());
+    }
+
+    // --- get_fallback_rate_for_route ---
+
+    #[test]
+    fn test_get_fallback_rate_for_route_none_when_empty() {
+        let history = AttemptHistory::new();
+        assert!(history.get_fallback_rate_for_route("route-1").is_none());
+    }
+
+    #[test]
+    fn test_get_fallback_rate_for_route_with_fallbacks() {
+        let mut history = AttemptHistory::new();
+
+        // 2 attempts with fallback, 1 without
+        for i in 0..3 {
+            let decision_context = DecisionContext::new(
+                format!("req-{i}"),
+                "model-1".to_string(),
+                vec!["route-1".to_string()],
+                SelectionMode::Fallback,
+                "route-1".to_string(),
+            );
+
+            let used_fallback = i < 2;
+            let outcome = if used_fallback {
+                ExecutionOutcome::failure(
+                    "route-1".to_string(),
+                    200.0,
+                    500,
+                    true,
+                    Some("route-original".to_string()),
+                )
+            } else {
+                ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200)
+            };
+
+            let attempt = RouteAttempt::new(format!("req-{i}"), decision_context, outcome);
+            history.record(attempt);
+        }
+
+        let fallback_rate = history
+            .get_fallback_rate_for_route("route-original")
+            .expect("should have a fallback rate");
+        // 2 out of 3 used fallback, but effective_route for fallback attempts is "route-original"
+        // For the non-fallback success, effective_route is "route-1"
+        pretty_assertions::assert_eq!(fallback_rate, 1.0);
+    }
+
+    #[test]
+    fn test_get_fallback_rate_for_route_no_fallbacks() {
+        let mut history = AttemptHistory::new();
+
+        let decision_context = DecisionContext::new(
+            "req-1".to_string(),
+            "model-1".to_string(),
+            vec!["route-1".to_string()],
+            SelectionMode::Weighted,
+            "route-1".to_string(),
+        );
+        let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
+        let attempt = RouteAttempt::new("req-1".to_string(), decision_context, outcome);
+        history.record(attempt);
+
+        let fallback_rate = history
+            .get_fallback_rate_for_route("route-1")
+            .expect("should have a fallback rate");
+        pretty_assertions::assert_eq!(fallback_rate, 0.0);
+    }
+
+    // --- calculate_metrics_for_route ---
+
+    #[test]
+    fn test_calculate_metrics_for_route_none_when_empty() {
+        let history = AttemptHistory::new();
+        assert!(history.calculate_metrics_for_route("route-1").is_none());
+    }
+
+    #[test]
+    fn test_calculate_metrics_single_entry() {
+        let mut history = AttemptHistory::new();
+
+        let decision_context = DecisionContext::new(
+            "req-1".to_string(),
+            "model-1".to_string(),
+            vec!["route-1".to_string()],
+            SelectionMode::Weighted,
+            "route-1".to_string(),
+        );
+        let outcome = ExecutionOutcome::success("route-1".to_string(), 150.0, 10, 5, 200);
+        let attempt = RouteAttempt::new("req-1".to_string(), decision_context, outcome);
+        history.record(attempt);
+
+        let metrics = history
+            .calculate_metrics_for_route("route-1")
+            .expect("should have metrics");
+
+        pretty_assertions::assert_eq!(metrics.total_attempts, 1);
+        pretty_assertions::assert_eq!(metrics.successful_attempts, 1);
+        pretty_assertions::assert_eq!(metrics.failed_attempts, 0);
+        pretty_assertions::assert_eq!(metrics.fallback_attempts, 0);
+        pretty_assertions::assert_eq!(metrics.success_rate, 1.0);
+        // With one entry, all percentiles equal the single latency
+        pretty_assertions::assert_eq!(metrics.avg_latency_ms, 150.0);
+        pretty_assertions::assert_eq!(metrics.p50_latency_ms, 150.0);
+        pretty_assertions::assert_eq!(metrics.p95_latency_ms, 150.0);
+        pretty_assertions::assert_eq!(metrics.p99_latency_ms, 150.0);
+    }
+
+    #[test]
+    fn test_calculate_metrics_mixed_outcomes() {
+        let mut history = AttemptHistory::new();
+
+        // Record 4 successes and 1 failure for route-1
+        let outcomes: Vec<ExecutionOutcome> = vec![
+            ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200),
+            ExecutionOutcome::success("route-1".to_string(), 200.0, 10, 5, 200),
+            ExecutionOutcome::success("route-1".to_string(), 300.0, 10, 5, 200),
+            ExecutionOutcome::success("route-1".to_string(), 400.0, 10, 5, 200),
+            ExecutionOutcome::failure("route-1".to_string(), 500.0, 500, false, None),
+        ];
+
+        for (i, outcome) in outcomes.into_iter().enumerate() {
+            let decision_context = DecisionContext::new(
+                format!("req-{i}"),
+                "model-1".to_string(),
+                vec!["route-1".to_string()],
+                if i % 2 == 0 {
+                    SelectionMode::Weighted
+                } else {
+                    SelectionMode::Thompson
+                },
+                "route-1".to_string(),
+            );
+            let attempt = RouteAttempt::new(format!("req-{i}"), decision_context, outcome);
+            history.record(attempt);
+        }
+
+        let metrics = history
+            .calculate_metrics_for_route("route-1")
+            .expect("should have metrics");
+
+        pretty_assertions::assert_eq!(metrics.total_attempts, 5);
+        pretty_assertions::assert_eq!(metrics.successful_attempts, 4);
+        pretty_assertions::assert_eq!(metrics.failed_attempts, 1);
+        pretty_assertions::assert_eq!(metrics.success_rate, 0.8);
+
+        // Latencies sorted: [100, 200, 300, 400, 500]
+        // avg = 300.0
+        let expected_avg = (100.0 + 200.0 + 300.0 + 400.0 + 500.0) / 5.0;
+        pretty_assertions::assert_eq!(metrics.avg_latency_ms, expected_avg);
+
+        // p50: index = (5 * 50 / 100).min(4) = 2.min(4) = 2 -> 300.0
+        pretty_assertions::assert_eq!(metrics.p50_latency_ms, 300.0);
+        // p95: index = (5 * 95 / 100).min(4) = 4.min(4) = 4 -> 500.0
+        pretty_assertions::assert_eq!(metrics.p95_latency_ms, 500.0);
+        // p99: index = (5 * 99 / 100).min(4) = 4.min(4) = 4 -> 500.0
+        pretty_assertions::assert_eq!(metrics.p99_latency_ms, 500.0);
+    }
+
+    #[test]
+    fn test_calculate_metrics_selection_mode_distribution_strings() {
+        let mut history = AttemptHistory::new();
+
+        let decision_context = DecisionContext::new(
+            "req-1".to_string(),
+            "model-1".to_string(),
+            vec!["route-1".to_string()],
+            SelectionMode::QuotaAware,
+            "route-1".to_string(),
+        );
+        let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
+        let attempt = RouteAttempt::new("req-1".to_string(), decision_context, outcome);
+        history.record(attempt);
+
+        let metrics = history
+            .calculate_metrics_for_route("route-1")
+            .expect("should have metrics");
+
+        // Selection mode distribution keys should be Debug-formatted strings
+        let expected_key = format!("{:?}", SelectionMode::QuotaAware);
+        pretty_assertions::assert_eq!(
+            metrics.selection_mode_distribution.get(&expected_key),
+            Some(&1)
+        );
+    }
+
+    // --- Multiple providers filtering ---
+
+    #[test]
+    fn test_multiple_providers_filtered_correctly() {
+        let mut history = AttemptHistory::new();
+
+        // Record attempts for route-1, route-2, and route-3
+        for (i, route) in ["route-1", "route-2", "route-1", "route-3", "route-2"]
+            .iter()
+            .enumerate()
+        {
+            let decision_context = DecisionContext::new(
+                format!("req-{i}"),
+                "model-1".to_string(),
+                vec![route.to_string()],
+                SelectionMode::Weighted,
+                route.to_string(),
+            );
+            let outcome = ExecutionOutcome::success(route.to_string(), 100.0, 10, 5, 200);
+            let attempt = RouteAttempt::new(format!("req-{i}"), decision_context, outcome);
+            history.record(attempt);
+        }
+
+        pretty_assertions::assert_eq!(history.len(), 5);
+
+        let route1 = history.get_attempts_for_route("route-1");
+        let route2 = history.get_attempts_for_route("route-2");
+        let route3 = history.get_attempts_for_route("route-3");
+        let route_none = history.get_attempts_for_route("route-999");
+
+        pretty_assertions::assert_eq!(route1.len(), 2);
+        pretty_assertions::assert_eq!(route2.len(), 2);
+        pretty_assertions::assert_eq!(route3.len(), 1);
+        assert!(route_none.is_empty());
+    }
+
+    // --- TrackingSystem ---
+
+    #[test]
+    fn test_tracking_system_default() {
+        let tracking = TrackingSystem::default();
+        assert!(tracking.history.is_empty());
+    }
+
+    #[test]
+    fn test_tracking_system_with_config() {
+        let history = AttemptHistory::with_limit(50);
+        let statistics = StatisticsAggregator::new();
+        let tracking = TrackingSystem::with_config(statistics, history);
+
+        pretty_assertions::assert_eq!(tracking.history.max_attempts, 50);
+    }
+
+    #[test]
+    fn test_tracking_system_record_outcome() {
+        let mut tracking = TrackingSystem::new();
+
+        let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
+        tracking.record_outcome(&outcome);
+
+        // Statistics should be updated even without a RouteAttempt
+        assert!(tracking.get_statistics("route-1").is_some());
+        // But history should still be empty (record_outcome only updates statistics)
+        assert!(tracking.history.is_empty());
+    }
+
+    #[test]
+    fn test_tracking_system_reset_all() {
+        let mut tracking = TrackingSystem::new();
+
+        // Record via attempt (updates both statistics and history)
+        let decision_context = DecisionContext::new(
+            "req-1".to_string(),
+            "model-1".to_string(),
+            vec!["route-1".to_string()],
+            SelectionMode::Weighted,
+            "route-1".to_string(),
+        );
+        let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
+        let attempt = RouteAttempt::new("req-1".to_string(), decision_context, outcome);
+        tracking.record_attempt(attempt);
+
+        // Record outcome only (updates statistics only)
+        let outcome2 = ExecutionOutcome::success("route-2".to_string(), 150.0, 20, 10, 200);
+        tracking.record_outcome(&outcome2);
+
+        assert!(tracking.get_statistics("route-1").is_some());
+        assert!(tracking.get_statistics("route-2").is_some());
+        pretty_assertions::assert_eq!(tracking.history.len(), 1);
+
+        tracking.reset_all();
+
+        // Everything should be cleared
+        assert!(tracking.get_statistics("route-1").is_none());
+        assert!(tracking.get_statistics("route-2").is_none());
+        assert!(tracking.history.is_empty());
+    }
+
+    #[test]
+    fn test_tracking_system_get_attempt_metrics_none_for_unknown_route() {
+        let tracking = TrackingSystem::new();
+        assert!(tracking.get_attempt_metrics("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_tracking_system_get_attempts_empty_for_unknown_route() {
+        let tracking = TrackingSystem::new();
+        assert!(tracking.get_attempts("nonexistent").is_empty());
+    }
+
+    // --- Fallback effective_route integration ---
+
+    #[test]
+    fn test_fallback_attempts_filter_by_effective_route() {
+        let mut history = AttemptHistory::new();
+
+        // A failure with fallback: route_id=fallback, effective_route=original
+        let decision_context = DecisionContext::new(
+            "req-1".to_string(),
+            "model-1".to_string(),
+            vec!["fallback-route".to_string()],
+            SelectionMode::Fallback,
+            "fallback-route".to_string(),
+        );
+        let outcome = ExecutionOutcome::failure(
+            "fallback-route".to_string(),
+            300.0,
+            500,
+            true,
+            Some("original-route".to_string()),
+        );
+        let attempt = RouteAttempt::new("req-1".to_string(), decision_context, outcome);
+        history.record(attempt);
+
+        // Should find the attempt via the original (effective) route
+        let by_original = history.get_attempts_for_route("original-route");
+        pretty_assertions::assert_eq!(by_original.len(), 1);
+
+        // Should NOT find it via the fallback route_id
+        let by_fallback = history.get_attempts_for_route("fallback-route");
+        assert!(by_fallback.is_empty());
+    }
+
+    // --- All SelectionMode variants ---
+
+    #[rstest::rstest]
+    #[case(SelectionMode::Weighted)]
+    #[case(SelectionMode::Thompson)]
+    #[case(SelectionMode::TimeAware)]
+    #[case(SelectionMode::QuotaAware)]
+    #[case(SelectionMode::Adaptive)]
+    #[case(SelectionMode::Fallback)]
+    #[case(SelectionMode::Manual)]
+    fn test_all_selection_mode_variants(#[case] mode: SelectionMode) {
+        let mut history = AttemptHistory::new();
+
+        let decision_context = DecisionContext::new(
+            "req-1".to_string(),
+            "model-1".to_string(),
+            vec!["route-1".to_string()],
+            mode.clone(),
+            "route-1".to_string(),
+        );
+        let outcome = ExecutionOutcome::success("route-1".to_string(), 100.0, 10, 5, 200);
+        let attempt = RouteAttempt::new("req-1".to_string(), decision_context, outcome);
+        history.record(attempt);
+
+        let results = history.get_attempts_by_selection_mode(&mode);
+        pretty_assertions::assert_eq!(results.len(), 1);
+    }
 }

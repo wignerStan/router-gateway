@@ -1163,7 +1163,7 @@ mod tests {
             (
                 0i64..10000,
                 0.0_f64..1.0,
-                prop_oneof![Just(f64::NAN), Just(f64::INFINITY), 0.0_f64..100000.0],
+                prop_oneof![Just(f64::NAN), Just(f64::INFINITY), 0.0_f64..100_000.0],
             )
                 .prop_map(|(total, success_rate, latency)| {
                     let success_count = (total as f64 * success_rate) as i64;

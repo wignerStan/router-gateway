@@ -2,8 +2,11 @@ use super::matcher::PolicyMatcher;
 use super::registry::PolicyRegistry;
 use super::templates;
 use super::types::*;
-use crate::registry::categories::{CapabilityCategory, CostCategory, ProviderCategory};
+use crate::registry::categories::{
+    CapabilityCategory, ContextWindowCategory, CostCategory, ProviderCategory, TierCategory,
+};
 use crate::registry::info::{DataSource, ModelCapabilities, ModelInfo, RateLimits};
+use pretty_assertions::assert_eq;
 
 fn create_test_model(id: &str, provider: &str, price: f64, context: usize) -> ModelInfo {
     ModelInfo {
@@ -884,5 +887,947 @@ fn test_condition_missing_context_value() {
     assert!(
         !policy.matches(&context_no_tenant),
         "Should not match when context value is None"
+    );
+}
+
+// ========================================
+// Additional PolicyMatcher Tests — Context Conditions
+// ========================================
+
+#[test]
+fn test_matcher_evaluate_with_time_of_day_condition() {
+    let mut registry = PolicyRegistry::new();
+    let mut policy = RoutingPolicy::new("work_hours", "Work Hours").with_priority(10);
+    // Use "in" operator for string-based comparison of hour values
+    policy.conditions.push(PolicyCondition {
+        condition_type: PolicyConditionType::TimeOfDay,
+        value: "9,10,11,12,13,14,15,16,17".to_string(),
+        operator: "in".to_string(),
+    });
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+    let model = create_test_model("test", "test", 3.0, 200_000);
+
+    // Within work hours (14 is in the list)
+    let ctx_work = PolicyContext {
+        hour_of_day: Some(14),
+        ..Default::default()
+    };
+    let policies = matcher.evaluate(&model, &ctx_work);
+    assert_eq!(policies.len(), 1, "should match during work hours");
+
+    // Outside work hours (22 is not in the list)
+    let ctx_off = PolicyContext {
+        hour_of_day: Some(22),
+        ..Default::default()
+    };
+    let policies = matcher.evaluate(&model, &ctx_off);
+    assert!(policies.is_empty(), "should not match outside work hours");
+}
+
+#[test]
+fn test_matcher_evaluate_with_day_of_week_condition() {
+    let mut registry = PolicyRegistry::new();
+    let mut policy = RoutingPolicy::new("weekday", "Weekday Only").with_priority(10);
+    policy.conditions.push(PolicyCondition {
+        condition_type: PolicyConditionType::DayOfWeek,
+        value: "1,2,3,4,5".to_string(),
+        operator: "in".to_string(),
+    });
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+    let model = create_test_model("test", "test", 3.0, 200_000);
+
+    // Wednesday (day 3)
+    let ctx_weekday = PolicyContext {
+        day_of_week: Some(3),
+        ..Default::default()
+    };
+    let policies = matcher.evaluate(&model, &ctx_weekday);
+    assert_eq!(policies.len(), 1, "should match on weekday");
+
+    // Sunday (day 0)
+    let ctx_weekend = PolicyContext {
+        day_of_week: Some(0),
+        ..Default::default()
+    };
+    let policies = matcher.evaluate(&model, &ctx_weekend);
+    assert!(policies.is_empty(), "should not match on weekend");
+}
+
+#[test]
+fn test_matcher_evaluate_with_token_count_condition() {
+    let mut registry = PolicyRegistry::new();
+    let mut policy = RoutingPolicy::new("large_req", "Large Request Policy").with_priority(10);
+    policy.conditions.push(PolicyCondition {
+        condition_type: PolicyConditionType::TokenCount,
+        value: "5000".to_string(),
+        operator: "gt".to_string(),
+    });
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+    let model = create_test_model("test", "test", 3.0, 200_000);
+
+    // Large request
+    let ctx_large = PolicyContext {
+        token_count: Some(10_000),
+        ..Default::default()
+    };
+    let policies = matcher.evaluate(&model, &ctx_large);
+    assert_eq!(policies.len(), 1, "should match for large token count");
+
+    // Small request
+    let ctx_small = PolicyContext {
+        token_count: Some(100),
+        ..Default::default()
+    };
+    let policies = matcher.evaluate(&model, &ctx_small);
+    assert!(
+        policies.is_empty(),
+        "should not match for small token count"
+    );
+}
+
+#[test]
+fn test_matcher_evaluate_no_conditions_always_matches() {
+    let mut registry = PolicyRegistry::new();
+    // Policy with no conditions and no filters — matches everything
+    registry.add(RoutingPolicy::new("catch_all", "Catch All").with_priority(1));
+
+    let matcher = PolicyMatcher::new(registry);
+    let model = create_test_model("test", "test", 3.0, 200_000);
+    let context = PolicyContext::default();
+
+    let policies = matcher.evaluate(&model, &context);
+    assert_eq!(
+        policies.len(),
+        1,
+        "policy with no conditions should always match"
+    );
+}
+
+// ========================================
+// Multiple Policies — Priority Ordering
+// ========================================
+
+#[test]
+fn test_matcher_evaluate_best_highest_priority_wins() {
+    let mut registry = PolicyRegistry::new();
+
+    registry.add(
+        RoutingPolicy::new("low", "Low")
+            .with_priority(1)
+            .with_action("prefer"),
+    );
+    registry.add(
+        RoutingPolicy::new("mid", "Mid")
+            .with_priority(50)
+            .with_action("prefer"),
+    );
+    registry.add(
+        RoutingPolicy::new("high", "High")
+            .with_priority(100)
+            .with_action("prefer"),
+    );
+
+    let matcher = PolicyMatcher::new(registry);
+    let model = create_test_model("test", "test", 3.0, 200_000);
+    let context = PolicyContext::default();
+
+    let best = matcher
+        .evaluate_best(&model, &context)
+        .expect("should have a match");
+    assert_eq!(best.policy.id, "high", "highest priority policy should win");
+}
+
+#[test]
+fn test_matcher_disabled_policies_are_skipped() {
+    let mut registry = PolicyRegistry::new();
+
+    let mut disabled = RoutingPolicy::new("disabled", "Disabled").with_priority(100);
+    disabled.enabled = false;
+    registry.add(disabled);
+
+    registry.add(
+        RoutingPolicy::new("active", "Active")
+            .with_priority(1)
+            .with_action("prefer"),
+    );
+
+    let matcher = PolicyMatcher::new(registry);
+    let model = create_test_model("test", "test", 3.0, 200_000);
+    let context = PolicyContext::default();
+
+    let best = matcher
+        .evaluate_best(&model, &context)
+        .expect("should match active policy");
+    assert_eq!(
+        best.policy.id, "active",
+        "disabled policy should be skipped, active one should match"
+    );
+}
+
+// ========================================
+// Dimension Filter Tests — context_windows, costs, modalities
+// ========================================
+
+#[test]
+fn test_matcher_context_window_filter_match() {
+    let mut registry = PolicyRegistry::new();
+    let mut policy = RoutingPolicy::new("large_ctx", "Large Context").with_priority(10);
+    policy
+        .filters
+        .context_windows
+        .push(ContextWindowCategory::Large);
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+
+    // Model with 200K context -> Large category
+    let large_model = create_test_model("test", "test", 3.0, 200_000);
+    let context = PolicyContext::default();
+    let policies = matcher.evaluate(&large_model, &context);
+    assert_eq!(policies.len(), 1, "large context model should match");
+
+    // Model with 16K context -> Small category
+    let small_model = create_test_model("small", "test", 3.0, 16_000);
+    let policies = matcher.evaluate(&small_model, &context);
+    assert!(
+        policies.is_empty(),
+        "small context model should not match large filter"
+    );
+}
+
+#[test]
+fn test_matcher_cost_filter_match() {
+    let mut registry = PolicyRegistry::new();
+    let mut policy = RoutingPolicy::new("budget", "Budget Only").with_priority(10);
+    policy.filters.costs.push(CostCategory::Economy);
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+    let context = PolicyContext::default();
+
+    // Economy model (price <= 1.0)
+    let economy_model = create_test_model("cheap", "test", 0.5, 100_000);
+    let policies = matcher.evaluate(&economy_model, &context);
+    assert_eq!(policies.len(), 1, "economy model should match");
+
+    // Standard model (price >= 1.0)
+    let standard_model = create_test_model("std", "test", 3.0, 100_000);
+    let policies = matcher.evaluate(&standard_model, &context);
+    assert!(
+        policies.is_empty(),
+        "standard cost model should not match economy filter"
+    );
+}
+
+#[test]
+fn test_matcher_modality_image_match() {
+    let mut registry = PolicyRegistry::new();
+    let mut policy = RoutingPolicy::new("image_pol", "Image Required").with_priority(10);
+    policy.filters.modalities.push(ModalityCategory::Image);
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+    let context = PolicyContext::default();
+
+    // Model with vision capability
+    let vision_model = create_test_model("vis", "test", 3.0, 200_000);
+    let policies = matcher.evaluate(&vision_model, &context);
+    assert_eq!(
+        policies.len(),
+        1,
+        "vision model should match image modality"
+    );
+
+    // Model without vision capability
+    let mut text_model = create_test_model("text", "test", 3.0, 200_000);
+    text_model.capabilities.vision = false;
+    let policies = matcher.evaluate(&text_model, &context);
+    assert!(
+        policies.is_empty(),
+        "non-vision model should not match image modality"
+    );
+}
+
+#[test]
+fn test_matcher_modality_video_depends_on_vision() {
+    let mut registry = PolicyRegistry::new();
+    let mut policy = RoutingPolicy::new("video_pol", "Video Required").with_priority(10);
+    policy.filters.modalities.push(ModalityCategory::Video);
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+    let context = PolicyContext::default();
+
+    // Vision model should match video modality (inferred from vision capability)
+    let vision_model = create_test_model("vis", "test", 3.0, 200_000);
+    let policies = matcher.evaluate(&vision_model, &context);
+    assert_eq!(
+        policies.len(),
+        1,
+        "vision model should match video modality"
+    );
+
+    // Non-vision model should not match
+    let mut no_vision = create_test_model("no-vis", "test", 3.0, 200_000);
+    no_vision.capabilities.vision = false;
+    let policies = matcher.evaluate(&no_vision, &context);
+    assert!(
+        policies.is_empty(),
+        "non-vision model should not match video modality"
+    );
+}
+
+#[test]
+fn test_matcher_modality_audio_never_matches() {
+    let mut registry = PolicyRegistry::new();
+    let mut policy = RoutingPolicy::new("audio_pol", "Audio Required").with_priority(10);
+    policy.filters.modalities.push(ModalityCategory::Audio);
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+    let model = create_test_model("test", "test", 3.0, 200_000);
+    let context = PolicyContext::default();
+
+    let policies = matcher.evaluate(&model, &context);
+    assert!(
+        policies.is_empty(),
+        "audio modality should never match (not supported by models)"
+    );
+}
+
+#[test]
+fn test_matcher_modality_embedding_never_matches() {
+    let mut registry = PolicyRegistry::new();
+    let mut policy = RoutingPolicy::new("embed_pol", "Embedding Required").with_priority(10);
+    policy.filters.modalities.push(ModalityCategory::Embedding);
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+    let model = create_test_model("test", "test", 3.0, 200_000);
+    let context = PolicyContext::default();
+
+    let policies = matcher.evaluate(&model, &context);
+    assert!(policies.is_empty(), "embedding modality should never match");
+}
+
+#[test]
+fn test_matcher_modality_text_always_matches() {
+    let mut registry = PolicyRegistry::new();
+    let mut policy = RoutingPolicy::new("text_pol", "Text Required").with_priority(10);
+    policy.filters.modalities.push(ModalityCategory::Text);
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+    let model = create_test_model("test", "test", 3.0, 200_000);
+    let context = PolicyContext::default();
+
+    let policies = matcher.evaluate(&model, &context);
+    assert_eq!(policies.len(), 1, "text modality should always match");
+}
+
+#[test]
+fn test_matcher_modality_code_always_matches() {
+    let mut registry = PolicyRegistry::new();
+    let mut policy = RoutingPolicy::new("code_pol", "Code Required").with_priority(10);
+    policy.filters.modalities.push(ModalityCategory::Code);
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+    let model = create_test_model("test", "test", 3.0, 200_000);
+    let context = PolicyContext::default();
+
+    let policies = matcher.evaluate(&model, &context);
+    assert_eq!(policies.len(), 1, "code modality should always match");
+}
+
+// ========================================
+// Capability Exclude Mode
+// ========================================
+
+#[test]
+fn test_matcher_capability_exclude_mode() {
+    let mut registry = PolicyRegistry::new();
+    let policy = RoutingPolicy::new("no_vision", "No Vision")
+        .with_priority(10)
+        .with_capability(CapabilityCategory::Vision, "exclude")
+        .with_action("prefer");
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+    let context = PolicyContext::default();
+
+    // Vision model should be excluded
+    let vision_model = create_test_model("vis", "test", 3.0, 200_000);
+    let policies = matcher.evaluate(&vision_model, &context);
+    assert!(
+        policies.is_empty(),
+        "vision model should be excluded by exclude mode"
+    );
+
+    // Non-vision model should match
+    let mut text_model = create_test_model("text", "test", 3.0, 200_000);
+    text_model.capabilities.vision = false;
+    let policies = matcher.evaluate(&text_model, &context);
+    assert_eq!(policies.len(), 1, "non-vision model should match");
+}
+
+#[test]
+fn test_matcher_capability_thinking_require_and_exclude() {
+    let mut registry = PolicyRegistry::new();
+
+    // Require thinking
+    let require_thinking = RoutingPolicy::new("req_think", "Require Thinking")
+        .with_priority(10)
+        .with_capability(CapabilityCategory::Thinking, "require")
+        .with_action("prefer");
+    registry.add(require_thinking);
+
+    let matcher = PolicyMatcher::new(registry);
+    let context = PolicyContext::default();
+
+    // Model without thinking should not match "require"
+    let no_thinking = create_test_model("no-think", "test", 3.0, 200_000);
+    let policies = matcher.evaluate(&no_thinking, &context);
+    assert!(
+        policies.is_empty(),
+        "model without thinking should not match require filter"
+    );
+
+    // Model with thinking should match
+    let mut has_thinking = create_test_model("thinker", "test", 3.0, 200_000);
+    has_thinking.capabilities.thinking = true;
+    let policies = matcher.evaluate(&has_thinking, &context);
+    assert_eq!(policies.len(), 1, "thinking model should match require");
+}
+
+#[test]
+fn test_matcher_capability_streaming_require() {
+    let mut registry = PolicyRegistry::new();
+    let policy = RoutingPolicy::new("stream_req", "Streaming Required")
+        .with_priority(10)
+        .with_capability(CapabilityCategory::Streaming, "require")
+        .with_action("prefer");
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+    let context = PolicyContext::default();
+
+    // Default test model has streaming=true
+    let streaming_model = create_test_model("test", "test", 3.0, 200_000);
+    let policies = matcher.evaluate(&streaming_model, &context);
+    assert_eq!(policies.len(), 1, "streaming model should match require");
+
+    // Disable streaming
+    let mut no_stream = create_test_model("no-stream", "test", 3.0, 200_000);
+    no_stream.capabilities.streaming = false;
+    let policies = matcher.evaluate(&no_stream, &context);
+    assert!(
+        policies.is_empty(),
+        "non-streaming model should not match require"
+    );
+}
+
+#[test]
+fn test_matcher_capability_unknown_mode_does_not_filter() {
+    let mut registry = PolicyRegistry::new();
+    let mut policy = RoutingPolicy::new("weird_mode", "Weird Mode").with_priority(10);
+    policy.filters.capabilities.push(CapabilityFilter {
+        capability: CapabilityCategory::Vision,
+        mode: "bogus_mode".to_string(),
+    });
+    policy.action.action_type = "prefer".to_string();
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+    let context = PolicyContext::default();
+
+    // Unknown mode should not cause filtering (neither require nor exclude)
+    let vision_model = create_test_model("vis", "test", 3.0, 200_000);
+    let policies = matcher.evaluate(&vision_model, &context);
+    assert_eq!(
+        policies.len(),
+        1,
+        "unknown capability mode should not filter"
+    );
+
+    let mut no_vision = create_test_model("no-vis", "test", 3.0, 200_000);
+    no_vision.capabilities.vision = false;
+    let policies = matcher.evaluate(&no_vision, &context);
+    assert_eq!(
+        policies.len(),
+        1,
+        "unknown capability mode should not filter on either side"
+    );
+}
+
+// ========================================
+// Action Constraint Tests
+// ========================================
+
+#[test]
+fn test_matcher_action_max_cost_per_million() {
+    let mut registry = PolicyRegistry::new();
+    let mut policy = RoutingPolicy::new("budget_cap", "Budget Cap").with_priority(10);
+    policy.action.action_type = "prefer".to_string();
+    policy.action.max_cost_per_million = Some(5.0);
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+    let context = PolicyContext::default();
+
+    // Model under the cost cap
+    let cheap = create_test_model("cheap", "test", 3.0, 100_000);
+    let policies = matcher.evaluate(&cheap, &context);
+    assert_eq!(policies.len(), 1, "model under cost cap should match");
+
+    // Model over the cost cap
+    let expensive = create_test_model("expensive", "test", 10.0, 100_000);
+    let policies = matcher.evaluate(&expensive, &context);
+    assert!(policies.is_empty(), "model over cost cap should not match");
+}
+
+#[test]
+fn test_matcher_action_min_context_window() {
+    let mut registry = PolicyRegistry::new();
+    let mut policy = RoutingPolicy::new("big_ctx", "Big Context").with_priority(10);
+    policy.action.action_type = "prefer".to_string();
+    policy.action.min_context_window = Some(128_000);
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+    let context = PolicyContext::default();
+
+    // Model meeting the minimum
+    let large = create_test_model("large", "test", 3.0, 200_000);
+    let policies = matcher.evaluate(&large, &context);
+    assert_eq!(policies.len(), 1, "model meeting min context should match");
+
+    // Model below the minimum
+    let small = create_test_model("small", "test", 3.0, 64_000);
+    let policies = matcher.evaluate(&small, &context);
+    assert!(
+        policies.is_empty(),
+        "model below min context should not match"
+    );
+}
+
+#[test]
+fn test_matcher_action_avoid_model_id() {
+    let mut registry = PolicyRegistry::new();
+    let mut policy = RoutingPolicy::new("avoid_old", "Avoid Old Models").with_priority(10);
+    policy.action.action_type = "prefer".to_string();
+    policy.action.avoid.push("gpt-3.5".to_string());
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+    let context = PolicyContext::default();
+
+    // Model matching avoid pattern
+    let avoided = create_test_model("gpt-3.5-turbo", "test", 3.0, 100_000);
+    let policies = matcher.evaluate(&avoided, &context);
+    assert!(
+        policies.is_empty(),
+        "model matching avoid pattern should not match"
+    );
+
+    // Model not matching avoid pattern
+    let safe = create_test_model("gpt-4", "test", 3.0, 100_000);
+    let policies = matcher.evaluate(&safe, &context);
+    assert_eq!(policies.len(), 1, "safe model should match");
+}
+
+#[test]
+fn test_matcher_action_avoid_provider() {
+    let mut registry = PolicyRegistry::new();
+    let mut policy = RoutingPolicy::new("avoid_prov", "Avoid Provider").with_priority(10);
+    policy.action.action_type = "prefer".to_string();
+    policy.action.avoid.push("untrusted".to_string());
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+    let context = PolicyContext::default();
+
+    // Provider matching avoid pattern
+    let avoided = create_test_model("model-1", "untrusted", 3.0, 100_000);
+    let policies = matcher.evaluate(&avoided, &context);
+    assert!(
+        policies.is_empty(),
+        "model from avoided provider should not match"
+    );
+
+    // Safe provider
+    let safe = create_test_model("model-2", "trusted", 3.0, 100_000);
+    let policies = matcher.evaluate(&safe, &context);
+    assert_eq!(policies.len(), 1, "model from safe provider should match");
+}
+
+// ========================================
+// Score Calculation Tests
+// ========================================
+
+#[test]
+fn test_matcher_score_prefer_action_type() {
+    let mut registry = PolicyRegistry::new();
+    registry.add(
+        RoutingPolicy::new("pref", "Prefer")
+            .with_priority(10)
+            .with_action("prefer"),
+    );
+
+    let matcher = PolicyMatcher::new(registry);
+    let model = create_test_model("test", "test", 3.0, 200_000);
+    let context = PolicyContext::default();
+
+    let policies = matcher.evaluate(&model, &context);
+    assert_eq!(policies.len(), 1);
+    // "prefer" action base score = 1.5, scaled by priority factor (1.0 + 10*0.01 = 1.10)
+    let expected_score = 1.5 * 1.10;
+    assert!(
+        (policies[0].score - expected_score).abs() < 0.001,
+        "prefer score should be ~{expected_score:.3}, got {:.3}",
+        policies[0].score
+    );
+}
+
+#[test]
+fn test_matcher_score_avoid_action_type() {
+    let mut registry = PolicyRegistry::new();
+    registry.add(
+        RoutingPolicy::new("avoid", "Avoid")
+            .with_priority(5)
+            .with_action("avoid"),
+    );
+
+    let matcher = PolicyMatcher::new(registry);
+    let model = create_test_model("test", "test", 3.0, 200_000);
+    let context = PolicyContext::default();
+
+    let policies = matcher.evaluate(&model, &context);
+    assert_eq!(policies.len(), 1);
+    // "avoid" action base score = 0.5, priority factor = 1.0 + 5*0.01 = 1.05
+    let expected_score = 0.5 * 1.05;
+    assert!(
+        (policies[0].score - expected_score).abs() < 0.001,
+        "avoid score should be ~{expected_score:.3}, got {:.3}",
+        policies[0].score
+    );
+}
+
+#[test]
+fn test_matcher_score_block_action_type() {
+    let mut registry = PolicyRegistry::new();
+    let mut policy = RoutingPolicy::new("block_pol", "Block").with_priority(10);
+    policy.action.action_type = "block".to_string();
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+    let model = create_test_model("test", "test", 3.0, 200_000);
+    let context = PolicyContext::default();
+
+    let policies = matcher.evaluate(&model, &context);
+    // "block" action type is not excluded from evaluate, but score is 0.0
+    assert_eq!(policies.len(), 1);
+    // Base score for "block" = 0.0
+    let expected_score = 0.0 * (1.0 + 10.0_f64.mul_add(0.01, 1.0));
+    assert!(
+        (policies[0].score - expected_score).abs() < 0.001,
+        "block score should be ~{expected_score:.3}, got {:.3}",
+        policies[0].score
+    );
+}
+
+#[test]
+fn test_matcher_score_weight_action_type_uses_weight_factor() {
+    let mut registry = PolicyRegistry::new();
+    registry.add(
+        RoutingPolicy::new("weight_pol", "Weight")
+            .with_priority(10)
+            .with_action("weight")
+            .with_weight_factor(2.5),
+    );
+
+    let matcher = PolicyMatcher::new(registry);
+    let model = create_test_model("test", "test", 3.0, 200_000);
+    let context = PolicyContext::default();
+
+    let policies = matcher.evaluate(&model, &context);
+    assert_eq!(policies.len(), 1);
+    // "weight" uses weight_factor as base score = 2.5, priority factor = 1.10
+    let expected_score = 2.5 * 1.10;
+    assert!(
+        (policies[0].score - expected_score).abs() < 0.001,
+        "weight score should be ~{expected_score:.3}, got {:.3}",
+        policies[0].score
+    );
+}
+
+#[test]
+fn test_matcher_score_unknown_action_type_defaults_to_one() {
+    let mut registry = PolicyRegistry::new();
+    let mut policy = RoutingPolicy::new("unknown_action", "Unknown").with_priority(0);
+    policy.action.action_type = "teleport".to_string();
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+    let model = create_test_model("test", "test", 3.0, 200_000);
+    let context = PolicyContext::default();
+
+    let policies = matcher.evaluate(&model, &context);
+    assert_eq!(policies.len(), 1);
+    // Unknown action type => base score = 1.0, priority factor = 1.0 + 0*0.01 = 1.0
+    let expected_score = 1.0;
+    assert!(
+        (policies[0].score - expected_score).abs() < 0.001,
+        "unknown action score should be ~{expected_score:.3}, got {:.3}",
+        policies[0].score
+    );
+}
+
+#[test]
+fn test_matcher_score_preferred_provider_bonus() {
+    let mut registry = PolicyRegistry::new();
+    let mut policy = RoutingPolicy::new("pref_openai", "Prefer OpenAI").with_priority(0);
+    policy.action.action_type = "prefer".to_string();
+    policy
+        .action
+        .preferred_providers
+        .push(ProviderCategory::OpenAI);
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+    let context = PolicyContext::default();
+
+    // OpenAI model gets bonus
+    let openai_model = create_test_model("gpt-4", "openai", 30.0, 128_000);
+    let policies = matcher.evaluate(&openai_model, &context);
+    assert_eq!(policies.len(), 1);
+    // base=1.5, preferred_provider bonus=1.2x, priority_factor=1.0
+    let expected_score = 1.5 * 1.2 * 1.0;
+    assert!(
+        (policies[0].score - expected_score).abs() < 0.001,
+        "preferred provider score should be ~{expected_score:.3}, got {:.3}",
+        policies[0].score
+    );
+
+    // Non-OpenAI model does not get bonus
+    let other_model = create_test_model("test", "anthropic", 3.0, 200_000);
+    let policies = matcher.evaluate(&other_model, &context);
+    assert_eq!(policies.len(), 1);
+    let expected_no_bonus = 1.5 * 1.0;
+    assert!(
+        (policies[0].score - expected_no_bonus).abs() < 0.001,
+        "non-preferred provider score should be ~{expected_no_bonus:.3}, got {:.3}",
+        policies[0].score
+    );
+}
+
+#[test]
+fn test_matcher_score_preferred_model_bonus() {
+    let mut registry = PolicyRegistry::new();
+    let mut policy = RoutingPolicy::new("pref_model", "Prefer Specific").with_priority(0);
+    policy.action.action_type = "prefer".to_string();
+    policy.action.preferred_models.push("claude".to_string());
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+    let context = PolicyContext::default();
+
+    // Model ID contains "claude" — gets bonus
+    let claude_model = create_test_model("claude-sonnet-4", "anthropic", 3.0, 200_000);
+    let policies = matcher.evaluate(&claude_model, &context);
+    assert_eq!(policies.len(), 1);
+    // base=1.5, preferred_model bonus=1.3x, priority_factor=1.0
+    let expected_score = 1.5 * 1.3;
+    assert!(
+        (policies[0].score - expected_score).abs() < 0.001,
+        "preferred model score should be ~{expected_score:.3}, got {:.3}",
+        policies[0].score
+    );
+}
+
+#[test]
+fn test_matcher_score_prefer_capability_bonus() {
+    let mut registry = PolicyRegistry::new();
+    let policy = RoutingPolicy::new("pref_vision", "Prefer Vision")
+        .with_priority(0)
+        .with_capability(CapabilityCategory::Vision, "prefer")
+        .with_action("prefer");
+    registry.add(policy);
+
+    let matcher = PolicyMatcher::new(registry);
+    let context = PolicyContext::default();
+
+    // Vision model gets the prefer bonus
+    let vision_model = create_test_model("vis", "test", 3.0, 200_000);
+    let policies = matcher.evaluate(&vision_model, &context);
+    assert_eq!(policies.len(), 1);
+    // base=1.5, prefer cap bonus=1.1x, priority_factor=1.0
+    let expected_score = 1.5 * 1.1;
+    assert!(
+        (policies[0].score - expected_score).abs() < 0.001,
+        "prefer capability bonus score should be ~{expected_score:.3}, got {:.3}",
+        policies[0].score
+    );
+
+    // Non-vision model does not get the prefer bonus
+    let mut no_vision = create_test_model("no-vis", "test", 3.0, 200_000);
+    no_vision.capabilities.vision = false;
+    let policies = matcher.evaluate(&no_vision, &context);
+    assert_eq!(policies.len(), 1);
+    let expected_no_bonus = 1.5;
+    assert!(
+        (policies[0].score - expected_no_bonus).abs() < 0.001,
+        "non-vision prefer score should be ~{expected_no_bonus:.3}, got {:.3}",
+        policies[0].score
+    );
+}
+
+// ========================================
+// Weight Factor Edge Cases
+// ========================================
+
+#[test]
+fn test_matcher_weight_factor_with_zero_priority_policies() {
+    let mut registry = PolicyRegistry::new();
+    registry.add(
+        RoutingPolicy::new("zero", "Zero Priority")
+            .with_priority(0)
+            .with_action("prefer"),
+    );
+
+    let matcher = PolicyMatcher::new(registry);
+    let model = create_test_model("test", "test", 3.0, 200_000);
+    let context = PolicyContext::default();
+
+    let factor = matcher.calculate_weight_factor(&model, &context);
+    // Should not panic or return NaN, should be in [0.1, 10.0]
+    assert!(
+        factor.is_finite(),
+        "weight factor should be finite, got {factor}"
+    );
+    assert!(
+        (0.1..=10.0).contains(&factor),
+        "weight factor should be in [0.1, 10.0], got {factor}"
+    );
+}
+
+// ========================================
+// Is Blocked Edge Cases
+// ========================================
+
+#[test]
+fn test_matcher_is_blocked_disabled_block_policy_does_not_block() {
+    let mut registry = PolicyRegistry::new();
+    let mut block = RoutingPolicy::new("disabled_block", "Disabled Block")
+        .with_priority(100)
+        .with_action("block");
+    block.enabled = false;
+    registry.add(block);
+
+    let matcher = PolicyMatcher::new(registry);
+    let model = create_test_model("test", "test", 3.0, 200_000);
+    let context = PolicyContext::default();
+
+    assert!(
+        !matcher.is_blocked(&model, &context),
+        "disabled block policy should not block"
+    );
+}
+
+#[test]
+fn test_matcher_is_blocked_non_block_action_does_not_block() {
+    let mut registry = PolicyRegistry::new();
+    registry.add(
+        RoutingPolicy::new("prefer_pol", "Prefer")
+            .with_priority(100)
+            .with_action("prefer"),
+    );
+
+    let matcher = PolicyMatcher::new(registry);
+    let model = create_test_model("test", "test", 3.0, 200_000);
+    let context = PolicyContext::default();
+
+    assert!(
+        !matcher.is_blocked(&model, &context),
+        "prefer policy should not block"
+    );
+}
+
+// ========================================
+// PolicyMatcher Clone and Accessors
+// ========================================
+
+#[test]
+fn test_matcher_clone_preserves_policies() {
+    let mut registry = PolicyRegistry::new();
+    registry.add(RoutingPolicy::new("p1", "Policy 1").with_priority(10));
+
+    let matcher = PolicyMatcher::new(registry);
+
+    // Verify original has the policy
+    assert_eq!(
+        matcher.registry().all().len(),
+        1,
+        "original matcher should have the policy"
+    );
+
+    // Clone and verify the clone also has the policy
+    let cloned = matcher.clone();
+
+    assert_eq!(
+        cloned.registry().all().len(),
+        1,
+        "cloned matcher should have same policies"
+    );
+    assert_eq!(
+        cloned.registry().all()[0].id,
+        "p1",
+        "cloned matcher should preserve policy data"
+    );
+
+    // Verify both matchers produce the same results
+    let model = create_test_model("test", "test", 3.0, 200_000);
+    let context = PolicyContext::default();
+    let original_matches = matcher.evaluate(&model, &context);
+    let cloned_matches = cloned.evaluate(&model, &context);
+    assert_eq!(
+        original_matches.len(),
+        cloned_matches.len(),
+        "original and cloned matcher should produce identical results"
+    );
+}
+
+#[test]
+fn test_matcher_empty_factory() {
+    let matcher = PolicyMatcher::empty();
+    assert_eq!(
+        matcher.registry().all().len(),
+        0,
+        "empty matcher should have no policies"
+    );
+}
+
+#[test]
+fn test_matcher_registry_mut_allows_adding_policies() {
+    let mut matcher = PolicyMatcher::empty();
+    matcher
+        .registry_mut()
+        .add(RoutingPolicy::new("dynamic", "Dynamic").with_priority(10));
+
+    assert_eq!(
+        matcher.registry().all().len(),
+        1,
+        "registry_mut should allow adding policies"
+    );
+    assert_eq!(
+        matcher.registry().all()[0].id,
+        "dynamic",
+        "added policy should be accessible"
     );
 }

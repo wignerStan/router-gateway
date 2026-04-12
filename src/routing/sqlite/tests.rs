@@ -374,7 +374,7 @@ mod sqlite_tests {
                     } else {
                         HealthStatus::Healthy
                     },
-                    consecutive_successes: i as i32,
+                    consecutive_successes: i,
                     consecutive_failures: 0,
                     last_status_change: Utc::now(),
                     last_check_time: Utc::now(),
@@ -446,7 +446,7 @@ mod sqlite_tests {
                 .await
                 .unwrap();
 
-            let (count, min_ts) = store.get_history_stats().await.unwrap();
+            let (count, _min_ts) = store.get_history_stats().await.unwrap();
             assert_eq!(count, 2);
             // min_ts may be None if the database stores timestamps in a format
             // that doesn't parse as RFC3339 — just verify the count is correct.

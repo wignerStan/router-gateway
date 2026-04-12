@@ -1,3 +1,4 @@
+#![allow(clippy::semicolon_if_nothing_returned, missing_docs)]
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use gateway::utils::ssrf::validate_url_not_private;
 

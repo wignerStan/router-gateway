@@ -7,8 +7,8 @@
 //!
 //! - [`config`] — Gateway configuration loading and validation
 //! - [`routes`] — HTTP route handlers and middleware
-//! - [`state`] — Application state types (AppState, RateLimiter)
-//! - [`providers`] — Provider adapters (OpenAI, Google, Anthropic)
+//! - [`state`] — Application state types ([`AppState`], [`RateLimiter`])
+//! - [`providers`] — Provider adapters ([`OpenAI`], [`Google`], [`Anthropic`])
 //! - [`utils`] — Security utilities (timing-safe auth, SSRF protection)
 //! - [`tracing`] — LLM request tracing and metrics
 //! - [`registry`] — Model registry with multi-dimensional classification
