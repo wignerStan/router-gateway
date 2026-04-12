@@ -132,6 +132,13 @@ impl RouteAttempt {
         let started_at = decision_context.timestamp;
         let completed_at = outcome.timestamp;
 
+        // Ensure started_at <= completed_at
+        let (started_at, completed_at) = if started_at <= completed_at {
+            (started_at, completed_at)
+        } else {
+            (completed_at, started_at)
+        };
+
         let attempt_id = format!(
             "{}-{}",
             started_at.timestamp(),
@@ -201,6 +208,10 @@ impl AttemptHistory {
 
     /// Record a route attempt
     pub fn record(&mut self, attempt: RouteAttempt) {
+        if self.max_attempts == 0 {
+            return;
+        }
+
         self.attempts.push(attempt);
 
         if self.attempts.len() > self.max_attempts {

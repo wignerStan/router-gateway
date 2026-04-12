@@ -138,10 +138,10 @@ fn test_registry_register_duplicate_id() {
     registry.add(RoutingPolicy::new("dup", "First").with_priority(5));
     registry.add(RoutingPolicy::new("dup", "Second").with_priority(10));
 
-    // Both are stored (no deduplication in add)
-    assert_eq!(registry.all().len(), 2);
+    // Duplicate ID replaces the existing entry
+    assert_eq!(registry.all().len(), 1);
 
-    // get returns the first match (higher priority, so "Second")
+    // get returns the replacement (higher priority, "Second")
     let found = registry.get("dup").expect("should find policy");
     assert_eq!(found.name, "Second");
 }

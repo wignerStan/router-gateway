@@ -243,7 +243,7 @@ impl SQLiteSelector {
         // Calculate total weight
         let total_weight: f64 = available.iter().map(|a| a.weight).sum();
 
-        if total_weight <= 0.0 {
+        if total_weight <= 0.0 || !total_weight.is_finite() {
             // All weights are zero, select randomly
             let idx = rand::thread_rng().gen_range(0..available.len());
             return available

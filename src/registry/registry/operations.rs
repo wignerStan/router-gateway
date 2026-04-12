@@ -258,7 +258,8 @@ impl Registry {
     #[must_use]
     pub async fn cached_count(&self) -> usize {
         let cache = self.cache.read().await;
-        cache.len()
+        let now = chrono::Utc::now();
+        cache.values().filter(|c| c.expires_at > now).count()
     }
 
     /// Returns all model IDs currently in the cache (may include expired entries).
@@ -422,7 +423,7 @@ impl Registry {
 
         let handle = tokio::spawn(async move {
             let mut interval_timer = tokio::time::interval(tokio::time::Duration::from_millis(
-                (interval.num_milliseconds()) as u64,
+                interval.num_milliseconds().max(0) as u64,
             ));
 
             loop {

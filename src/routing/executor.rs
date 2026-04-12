@@ -208,7 +208,9 @@ impl RouteExecutor {
             // Build RoutePlanItem from FallbackRoute
             let route_item = RoutePlanItem {
                 credential_id: fallback.auth_id.clone(),
-                model_id: String::new(), // Will be determined by the actual execution
+                model_id: primary
+                    .as_ref()
+                    .map_or_else(String::new, |p| p.model_id.clone()),
                 provider: fallback.provider.clone().unwrap_or_default(),
                 utility: fallback.weight,
                 weight: fallback.weight,
@@ -289,7 +291,11 @@ impl RouteExecutor {
             attempts,
             total_latency_ms: total_latency,
             status_code: None,
-            error: Some("Retry budget exhausted".to_string()),
+            error: Some(if primary.is_none() && fallbacks.is_empty() {
+                "No routes available".to_string()
+            } else {
+                "Retry budget exhausted".to_string()
+            }),
             prompt_tokens: None,
             completion_tokens: None,
         }
@@ -313,6 +319,12 @@ impl RouteExecutor {
                         status_code,
                         latency,
                     }
+                } else if (300..400).contains(&status_code) {
+                    AttemptResult::RetryableError {
+                        status_code,
+                        latency,
+                        error: format!("Unexpected redirect HTTP {status_code}"),
+                    }
                 } else {
                     AttemptResult::RetryableError {
                         status_code,
@@ -324,7 +336,7 @@ impl RouteExecutor {
             Err(error) => AttemptResult::RetryableError {
                 status_code: 0,
                 latency: 0.0,
-                error,
+                error: format!("Network error: {error}"),
             },
         }
     }

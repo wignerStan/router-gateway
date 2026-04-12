@@ -141,7 +141,13 @@ impl SmartRoutingConfig {
             + self.weight.load_weight
             + self.weight.priority_weight;
 
-        if total_weight > 0.0 && (total_weight - 1.0).abs() > f64::EPSILON {
+        if total_weight == 0.0 {
+            // All weights zero — use defaults
+            self.weight = WeightConfig::default();
+            return;
+        }
+
+        if (total_weight - 1.0).abs() > f64::EPSILON {
             self.weight.success_rate_weight /= total_weight;
             self.weight.latency_weight /= total_weight;
             self.weight.health_weight /= total_weight;

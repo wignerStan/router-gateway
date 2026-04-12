@@ -32,6 +32,10 @@ impl PolicyRegistry {
     /// assert!(registry.get("pol-1").is_some());
     /// ```
     pub fn add(&mut self, policy: RoutingPolicy) {
+        if self.policies.iter().any(|p| p.id == policy.id) {
+            tracing::warn!("Replacing existing policy with duplicate ID: {}", policy.id);
+            self.policies.retain(|p| p.id != policy.id);
+        }
         self.policies.push(policy);
         self.sort_by_priority();
     }

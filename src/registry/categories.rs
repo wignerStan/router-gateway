@@ -382,7 +382,9 @@ impl ModelCategorization for ModelInfo {
             "gemini-1.5-flash-exp",
         ]);
 
-        if fast_models.contains(self.id.as_str()) || self.input_price_per_million <= 1.0 {
+        if fast_models.contains(self.id.as_str())
+            || (self.input_price_per_million > 0.0 && self.input_price_per_million <= 1.0)
+        {
             return TierCategory::Fast;
         }
 

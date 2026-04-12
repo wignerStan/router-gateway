@@ -7,7 +7,7 @@
 use crate::registry::{PolicyContext, PolicyMatcher};
 use crate::routing::candidate::{RouteCandidate, TokenFitStatus, check_capability_support};
 use crate::routing::classification::ClassifiedRequest;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 /// Filter result with reason for rejection
@@ -43,7 +43,7 @@ impl FilterResult {
 #[derive(Clone)]
 pub struct ConstraintFilter {
     /// Disabled providers (empty = no restrictions)
-    disabled_providers: Vec<String>,
+    disabled_providers: HashSet<String>,
     /// Policy matcher for policy-aware filtering
     policy_matcher: Option<PolicyMatcher>,
     /// Tenant ID for policy context
@@ -53,9 +53,9 @@ pub struct ConstraintFilter {
 impl ConstraintFilter {
     /// Create a new constraint filter
     #[must_use]
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
-            disabled_providers: Vec::new(),
+            disabled_providers: HashSet::new(),
             policy_matcher: None,
             tenant_id: None,
         }
@@ -63,7 +63,7 @@ impl ConstraintFilter {
 
     /// Add a disabled provider
     pub fn add_disabled_provider(&mut self, provider: String) -> &mut Self {
-        self.disabled_providers.push(provider);
+        self.disabled_providers.insert(provider);
         self
     }
 

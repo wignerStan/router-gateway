@@ -58,8 +58,11 @@ impl FallbackPlanner {
     }
 
     /// Create a new fallback planner with custom config.
+    ///
+    /// Clamps `min_fallbacks` so it never exceeds `max_fallbacks`.
     #[must_use]
-    pub const fn with_config(config: FallbackConfig) -> Self {
+    pub fn with_config(mut config: FallbackConfig) -> Self {
+        config.min_fallbacks = config.min_fallbacks.min(config.max_fallbacks);
         Self { config }
     }
 

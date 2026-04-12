@@ -162,7 +162,7 @@ impl SmartSelector {
 
         let total_weight: f64 = available.iter().map(|a| a.weight).sum();
 
-        if total_weight <= 0.0 {
+        if total_weight <= 0.0 || !total_weight.is_finite() {
             let idx = rand::thread_rng().gen_range(0..available.len());
             return available
                 .into_iter()

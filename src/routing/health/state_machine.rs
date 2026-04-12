@@ -108,15 +108,16 @@ impl HealthManager {
 
             // Record error type
             if status_code > 0 {
-                *entry.error_counts.entry(status_code).or_insert(0) += 1;
+                let count = entry.error_counts.entry(status_code).or_insert(0);
+                *count = count.saturating_add(1);
             }
 
             // Update consecutive success/failure counts
             if success {
-                entry.consecutive_successes += 1;
+                entry.consecutive_successes = entry.consecutive_successes.saturating_add(1);
                 entry.consecutive_failures = 0;
             } else {
-                entry.consecutive_failures += 1;
+                entry.consecutive_failures = entry.consecutive_failures.saturating_add(1);
                 entry.consecutive_successes = 0;
             }
 
@@ -133,7 +134,12 @@ impl HealthManager {
             if entry.status == HealthStatus::Unhealthy
                 && entry.consecutive_failures >= self.config.unhealthy_threshold
             {
-                let cooldown = Duration::seconds(self.config.cooldown_period_seconds);
+                const MAX_COOLDOWN_SECONDS: i64 = 3600; // 1 hour max cooldown
+                let cooldown_seconds = self
+                    .config
+                    .cooldown_period_seconds
+                    .clamp(0, MAX_COOLDOWN_SECONDS);
+                let cooldown = Duration::seconds(cooldown_seconds);
                 entry.unavailable_until = Some(now + cooldown);
             }
 
@@ -255,10 +261,10 @@ impl HealthManager {
 
     /// Get count of healthy auths
     pub async fn get_healthy_count(&self, auth_ids: &[String]) -> i32 {
-        let mut count = 0;
+        let mut count: i32 = 0;
         for id in auth_ids {
             if self.is_healthy(id).await {
-                count += 1;
+                count = count.saturating_add(1);
             }
         }
         count
@@ -266,10 +272,10 @@ impl HealthManager {
 
     /// Get count of available auths
     pub async fn get_available_count(&self, auth_ids: &[String]) -> i32 {
-        let mut count = 0;
+        let mut count: i32 = 0;
         for id in auth_ids {
             if self.is_available(id).await {
-                count += 1;
+                count = count.saturating_add(1);
             }
         }
         count
@@ -287,8 +293,8 @@ impl HealthManager {
             .map(|(id, h)| (id.clone(), h.last_check_time))
             .collect();
 
-        // Sort by last check time (oldest first)
-        entries.sort_by(|a, b| a.1.cmp(&b.1));
+        // Sort by last check time (oldest first), then by auth ID for determinism
+        entries.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
 
         // Remove oldest entries if over limit
         let remove_count = entries.len().saturating_sub(self.max_entries);

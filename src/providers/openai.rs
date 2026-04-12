@@ -57,16 +57,28 @@ impl ProviderAdapter for OpenAIAdapter {
                             if p.part_type == "text" {
                                 json!({
                                     "type": "text",
-                                    "text": p.text
+                                    "text": p.text.as_ref().unwrap_or(&String::new())
                                 })
                             } else if p.part_type == "image_url" {
-                                json!({
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": p.image_url.as_ref().map_or(&String::new(), |u| &u.url),
-                                        "detail": p.image_url.as_ref().and_then(|u| u.detail.as_deref())
-                                    }
-                                })
+                                // Clippy suggests map_or_else but the branching logic is clearer as if-let
+                                #[allow(clippy::option_if_let_else)]
+                                if let Some(ref img_data) = p.image_data {
+                                    json!({
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": format!("data:{};base64,{}", img_data.mime_type, img_data.data),
+                                            "detail": p.image_url.as_ref().and_then(|u| u.detail.as_deref())
+                                        }
+                                    })
+                                } else {
+                                    json!({
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": p.image_url.as_ref().map_or(&String::new(), |u| &u.url),
+                                            "detail": p.image_url.as_ref().and_then(|u| u.detail.as_deref())
+                                        }
+                                    })
+                                }
                             } else {
                                 json!({ "type": &p.part_type })
                             }
@@ -87,6 +99,19 @@ impl ProviderAdapter for OpenAIAdapter {
             "model": request.model,
             "messages": messages,
         });
+
+        // Add system prompt if provided via the system field
+        if let Some(system) = &request.system {
+            if let Some(msgs) = openai_request["messages"].as_array_mut() {
+                msgs.insert(
+                    0,
+                    json!({
+                        "role": "system",
+                        "content": system
+                    }),
+                );
+            }
+        }
 
         // Add optional parameters
         if let Some(max_tokens) = request.max_tokens {
@@ -167,9 +192,18 @@ impl ProviderAdapter for OpenAIAdapter {
         // Extract token usage
         let usage = &response["usage"];
         let token_usage = TokenUsage {
-            prompt_tokens: usage["prompt_tokens"].as_u64().unwrap_or(0) as u32,
-            completion_tokens: usage["completion_tokens"].as_u64().unwrap_or(0) as u32,
-            total_tokens: usage["total_tokens"].as_u64().unwrap_or(0) as u32,
+            prompt_tokens: usage["prompt_tokens"]
+                .as_u64()
+                .unwrap_or(0)
+                .min(u64::from(u32::MAX)) as u32,
+            completion_tokens: usage["completion_tokens"]
+                .as_u64()
+                .unwrap_or(0)
+                .min(u64::from(u32::MAX)) as u32,
+            total_tokens: usage["total_tokens"]
+                .as_u64()
+                .unwrap_or(0)
+                .min(u64::from(u32::MAX)) as u32,
         };
 
         // Extract tool calls if present

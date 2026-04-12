@@ -163,13 +163,16 @@ impl PolicyMatcher {
             }
         }
 
-        // Check avoid list
-        if policy
+        // Filter empty strings from avoid list before matching
+        let avoid: Vec<&String> = policy
             .action
             .avoid
             .iter()
-            .any(|avoid_id| model.id.contains(avoid_id) || model.provider.contains(avoid_id))
-        {
+            .filter(|s| !s.is_empty())
+            .collect();
+        if avoid.iter().any(|avoid_id| {
+            model.id.contains(avoid_id.as_str()) || model.provider.contains(avoid_id.as_str())
+        }) {
             return false;
         }
 
@@ -206,12 +209,16 @@ impl PolicyMatcher {
             score *= 1.2;
         }
 
-        // Bonus for preferred models
-        if policy
+        // Filter empty strings from preferred models list before matching
+        let preferred_models: Vec<&String> = policy
             .action
             .preferred_models
             .iter()
-            .any(|m| model.id.contains(m))
+            .filter(|s| !s.is_empty())
+            .collect();
+        if preferred_models
+            .iter()
+            .any(|m| model.id.contains(m.as_str()))
         {
             score *= 1.3;
         }

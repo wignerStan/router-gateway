@@ -255,12 +255,22 @@ impl SQLiteStore {
                                 Box::new(e),
                             )
                         })?,
-                    last_success_time: last_success_time_str
-                        .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
-                        .map(|dt| dt.with_timezone(&Utc)),
-                    last_failure_time: last_failure_time_str
-                        .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
-                        .map(|dt| dt.with_timezone(&Utc)),
+                    last_success_time: last_success_time_str.and_then(|s| {
+                        DateTime::parse_from_rfc3339(&s)
+                            .map(|dt| dt.with_timezone(&Utc))
+                            .inspect_err(|e| {
+                                tracing::warn!("Failed to parse last_success_time '{}': {}", s, e);
+                            })
+                            .ok()
+                    }),
+                    last_failure_time: last_failure_time_str.and_then(|s| {
+                        DateTime::parse_from_rfc3339(&s)
+                            .map(|dt| dt.with_timezone(&Utc))
+                            .inspect_err(|e| {
+                                tracing::warn!("Failed to parse last_failure_time '{}': {}", s, e);
+                            })
+                            .ok()
+                    }),
                 })
             })
         };
@@ -342,7 +352,10 @@ impl SQLiteStore {
                 };
 
                 let error_counts: std::collections::HashMap<i32, i32> =
-                    serde_json::from_str(&error_counts_str).unwrap_or_default();
+                    serde_json::from_str(&error_counts_str).unwrap_or_else(|e| {
+                        tracing::warn!("Failed to parse error_counts JSON: {}", e);
+                        std::collections::HashMap::default()
+                    });
 
                 Ok(AuthHealth {
                     status,
@@ -366,9 +379,14 @@ impl SQLiteStore {
                                 Box::new(e),
                             )
                         })?,
-                    unavailable_until: unavailable_until_str
-                        .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
-                        .map(|dt| dt.with_timezone(&Utc)),
+                    unavailable_until: unavailable_until_str.and_then(|s| {
+                        DateTime::parse_from_rfc3339(&s)
+                            .map(|dt| dt.with_timezone(&Utc))
+                            .inspect_err(|e| {
+                                tracing::warn!("Failed to parse unavailable_until '{}': {}", s, e);
+                            })
+                            .ok()
+                    }),
                     error_counts,
                 })
             })
@@ -441,13 +459,41 @@ impl SQLiteStore {
                         consecutive_successes: row.get(9)?,
                         consecutive_failures: row.get(10)?,
                         last_request_time: DateTime::parse_from_rfc3339(&last_request_time_str)
-                            .map_or_else(|_| Utc::now(), |dt| dt.with_timezone(&Utc)),
-                        last_success_time: last_success_time_str
-                            .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
-                            .map(|dt| dt.with_timezone(&Utc)),
-                        last_failure_time: last_failure_time_str
-                            .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
-                            .map(|dt| dt.with_timezone(&Utc)),
+                            .map_or_else(
+                                |e| {
+                                    tracing::warn!(
+                                        "Failed to parse last_request_time '{}': {}",
+                                        last_request_time_str,
+                                        e
+                                    );
+                                    Utc::now()
+                                },
+                                |dt| dt.with_timezone(&Utc),
+                            ),
+                        last_success_time: last_success_time_str.and_then(|s| {
+                            DateTime::parse_from_rfc3339(&s)
+                                .map(|dt| dt.with_timezone(&Utc))
+                                .inspect_err(|e| {
+                                    tracing::warn!(
+                                        "Failed to parse last_success_time '{}': {}",
+                                        s,
+                                        e
+                                    );
+                                })
+                                .ok()
+                        }),
+                        last_failure_time: last_failure_time_str.and_then(|s| {
+                            DateTime::parse_from_rfc3339(&s)
+                                .map(|dt| dt.with_timezone(&Utc))
+                                .inspect_err(|e| {
+                                    tracing::warn!(
+                                        "Failed to parse last_failure_time '{}': {}",
+                                        s,
+                                        e
+                                    );
+                                })
+                                .ok()
+                        }),
                     },
                 ))
             })
@@ -492,7 +538,10 @@ impl SQLiteStore {
                 };
 
                 let error_counts: std::collections::HashMap<i32, i32> =
-                    serde_json::from_str(&error_counts_str).unwrap_or_default();
+                    serde_json::from_str(&error_counts_str).unwrap_or_else(|e| {
+                        tracing::warn!("Failed to parse error_counts JSON: {}", e);
+                        std::collections::HashMap::default()
+                    });
 
                 Ok((
                     auth_id,
@@ -501,12 +550,41 @@ impl SQLiteStore {
                         consecutive_successes: row.get(2)?,
                         consecutive_failures: row.get(3)?,
                         last_status_change: DateTime::parse_from_rfc3339(&last_status_change_str)
-                            .map_or_else(|_| Utc::now(), |dt| dt.with_timezone(&Utc)),
+                            .map_or_else(
+                                |e| {
+                                    tracing::warn!(
+                                        "Failed to parse last_status_change '{}': {}",
+                                        last_status_change_str,
+                                        e
+                                    );
+                                    Utc::now()
+                                },
+                                |dt| dt.with_timezone(&Utc),
+                            ),
                         last_check_time: DateTime::parse_from_rfc3339(&last_check_time_str)
-                            .map_or_else(|_| Utc::now(), |dt| dt.with_timezone(&Utc)),
-                        unavailable_until: unavailable_until_str
-                            .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
-                            .map(|dt| dt.with_timezone(&Utc)),
+                            .map_or_else(
+                                |e| {
+                                    tracing::warn!(
+                                        "Failed to parse last_check_time '{}': {}",
+                                        last_check_time_str,
+                                        e
+                                    );
+                                    Utc::now()
+                                },
+                                |dt| dt.with_timezone(&Utc),
+                            ),
+                        unavailable_until: unavailable_until_str.and_then(|s| {
+                            DateTime::parse_from_rfc3339(&s)
+                                .map(|dt| dt.with_timezone(&Utc))
+                                .inspect_err(|e| {
+                                    tracing::warn!(
+                                        "Failed to parse unavailable_until '{}': {}",
+                                        s,
+                                        e
+                                    );
+                                })
+                                .ok()
+                        }),
                         error_counts,
                     },
                 ))
@@ -526,6 +604,7 @@ impl SQLiteStore {
     ///
     /// Returns an error if the delete query fails.
     pub async fn cleanup_old_history(&self, max_age_seconds: i64) -> Result<i64> {
+        let max_age_seconds = max_age_seconds.max(0);
         let cutoff = Utc::now() - chrono::Duration::seconds(max_age_seconds);
         let cutoff_str = cutoff.to_rfc3339();
 
@@ -558,9 +637,14 @@ impl SQLiteStore {
             let count: i64 = row.get(0)?;
             let min_timestamp_str: Option<String> = row.get(1)?;
 
-            let min_timestamp = min_timestamp_str
-                .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
-                .map(|dt| dt.with_timezone(&Utc));
+            let min_timestamp = min_timestamp_str.and_then(|s| {
+                DateTime::parse_from_rfc3339(&s)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .inspect_err(|e| {
+                        tracing::warn!("Failed to parse min_timestamp '{}': {}", s, e);
+                    })
+                    .ok()
+            });
 
             Ok((count, min_timestamp))
         })

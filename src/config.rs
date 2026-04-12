@@ -260,6 +260,14 @@ impl GatewayConfig {
             if cred.provider.is_empty() {
                 anyhow::bail!("Credential {} has empty provider", cred.id);
             }
+
+            if cred.daily_quota == Some(0) {
+                anyhow::bail!("Credential {} has zero daily_quota", cred.id);
+            }
+
+            if cred.rate_limit == Some(0) {
+                anyhow::bail!("Credential {} has zero rate_limit", cred.id);
+            }
         }
 
         // Validate provider base URLs (SSRF protection)

@@ -72,6 +72,9 @@ impl TraceMetrics {
     /// alpha = 2.0 / (N + 1) where N is the period
     /// For N=20 (commonly used), alpha ≈ 0.095
     fn calculate_ewma(prev_ewma: f64, new_value: f64, alpha: f64) -> f64 {
+        if !new_value.is_finite() {
+            return prev_ewma;
+        }
         if prev_ewma == 0.0 {
             new_value
         } else {
@@ -79,20 +82,25 @@ impl TraceMetrics {
         }
     }
 
+    /// Maximum number of distinct providers tracked before stopping new entries.
+    const MAX_PROVIDERS: usize = 50;
+    /// Maximum number of distinct models tracked before stopping new entries.
+    const MAX_MODELS: usize = 200;
+
     /// Update metrics with a new trace
     pub fn update(&mut self, trace: &TraceSpan) {
-        self.total_requests += 1;
+        self.total_requests = self.total_requests.saturating_add(1);
 
         let is_success = trace.is_success();
         if is_success {
-            self.successful_requests += 1;
+            self.successful_requests = self.successful_requests.saturating_add(1);
         } else {
-            self.failed_requests += 1;
+            self.failed_requests = self.failed_requests.saturating_add(1);
         }
 
         // Update latency metrics
         if let Some(latency) = trace.latency_ms {
-            self.latency_count += 1;
+            self.latency_count = self.latency_count.saturating_add(1);
             let latency_f64 = latency as f64;
 
             // Simple average
@@ -108,17 +116,25 @@ impl TraceMetrics {
         // Update success rate
         self.success_rate = self.successful_requests as f64 / self.total_requests as f64;
 
-        // Update per-provider metrics
-        self.provider_metrics
-            .entry(trace.provider.clone())
-            .or_default()
-            .update(trace);
+        // Update per-provider metrics (bounded to prevent unbounded growth)
+        if let Some(pm) = self.provider_metrics.get_mut(&trace.provider) {
+            pm.update(trace);
+        } else if self.provider_metrics.len() < Self::MAX_PROVIDERS {
+            self.provider_metrics
+                .entry(trace.provider.clone())
+                .or_default()
+                .update(trace);
+        }
 
-        // Update per-model metrics
-        self.model_metrics
-            .entry(trace.model.clone())
-            .or_default()
-            .update(trace);
+        // Update per-model metrics (bounded to prevent unbounded growth)
+        if let Some(mm) = self.model_metrics.get_mut(&trace.model) {
+            mm.update(trace);
+        } else if self.model_metrics.len() < Self::MAX_MODELS {
+            self.model_metrics
+                .entry(trace.model.clone())
+                .or_default()
+                .update(trace);
+        }
     }
 
     /// Aggregate metrics from a collection of traces.
@@ -144,13 +160,13 @@ impl TraceMetrics {
 
 impl ProviderMetrics {
     fn update(&mut self, trace: &TraceSpan) {
-        self.total_requests += 1;
+        self.total_requests = self.total_requests.saturating_add(1);
         if trace.is_success() {
-            self.successful_requests += 1;
+            self.successful_requests = self.successful_requests.saturating_add(1);
         }
 
         if let Some(latency) = trace.latency_ms {
-            self.latency_count += 1;
+            self.latency_count = self.latency_count.saturating_add(1);
             let latency_f64 = latency as f64;
             self.avg_latency_ms = self
                 .avg_latency_ms
@@ -174,13 +190,13 @@ impl ProviderMetrics {
 
 impl ModelMetrics {
     fn update(&mut self, trace: &TraceSpan) {
-        self.total_requests += 1;
+        self.total_requests = self.total_requests.saturating_add(1);
         if trace.is_success() {
-            self.successful_requests += 1;
+            self.successful_requests = self.successful_requests.saturating_add(1);
         }
 
         if let Some(latency) = trace.latency_ms {
-            self.latency_count += 1;
+            self.latency_count = self.latency_count.saturating_add(1);
             let latency_f64 = latency as f64;
             self.avg_latency_ms = self
                 .avg_latency_ms
@@ -189,11 +205,11 @@ impl ModelMetrics {
         }
 
         if let Some(tokens) = trace.input_tokens {
-            self.total_input_tokens += u64::from(tokens);
+            self.total_input_tokens = self.total_input_tokens.saturating_add(u64::from(tokens));
         }
 
         if let Some(tokens) = trace.output_tokens {
-            self.total_output_tokens += u64::from(tokens);
+            self.total_output_tokens = self.total_output_tokens.saturating_add(u64::from(tokens));
         }
     }
 

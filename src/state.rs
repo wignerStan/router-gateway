@@ -146,6 +146,10 @@ impl RateLimiter {
     #[must_use]
     #[allow(clippy::significant_drop_tightening)]
     pub fn check(&self, ip: &str) -> bool {
+        if ip.is_empty() {
+            return true;
+        }
+
         let now = Instant::now();
         let mut buckets = self
             .buckets
@@ -163,7 +167,7 @@ impl RateLimiter {
         if *count >= self.max_requests {
             false
         } else {
-            *count += 1;
+            *count = count.saturating_add(1);
             true
         }
     }

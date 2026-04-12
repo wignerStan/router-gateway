@@ -74,7 +74,7 @@ impl FallbackPlanner {
             .await;
 
         // Filter to only available (positive weight) auths
-        weighted_auths.retain(|w| w.weight > 0.0);
+        weighted_auths.retain(|w| w.weight > 0.0 && w.weight.is_finite());
 
         if weighted_auths.is_empty() {
             return Vec::new();

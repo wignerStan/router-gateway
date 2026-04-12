@@ -58,9 +58,11 @@ impl Router {
 
     /// Add a credential with its associated models
     pub fn add_credential(&mut self, credential_id: String, model_ids: Vec<String>) -> &mut Self {
-        let _ = self
-            .candidate_builder
-            .add_credential(credential_id, model_ids);
+        if !credential_id.is_empty() {
+            let _ = self
+                .candidate_builder
+                .add_credential(credential_id, model_ids);
+        }
         self
     }
 
@@ -252,7 +254,8 @@ impl Router {
             }
         }
 
-        None
+        // If bandit selected an ID not in candidates, fall back to weighted selection
+        self.select_weighted(candidates, auths).await
     }
 
     /// Select using weighted selection

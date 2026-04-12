@@ -104,7 +104,7 @@ impl TokenEstimator {
             .or_else(|| request.get("max_completion_tokens"))
             .and_then(serde_json::Value::as_u64)
         {
-            return max_tokens as u32;
+            return max_tokens.min(u64::from(u32::MAX)) as u32;
         }
 
         // Use default

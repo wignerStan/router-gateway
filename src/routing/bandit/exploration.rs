@@ -48,7 +48,7 @@ impl BanditPolicy {
             .iter()
             .map(|id| {
                 let thompson_sample = self.thompson_sample(id);
-                let utility = utilities.get(id).copied().unwrap_or(0.5);
+                let utility = utilities.get(id).copied().unwrap_or(0.5).clamp(0.0, 1.0);
 
                 // Weight Thompson sample by utility
                 if self.config.use_utility_weighting {
@@ -95,6 +95,8 @@ impl BanditPolicy {
     #[allow(clippy::many_single_char_names)]
     #[must_use]
     pub(crate) fn sample_beta(alpha: f64, beta: f64) -> f64 {
+        let alpha = alpha.max(f64::MIN_POSITIVE);
+        let beta = beta.max(f64::MIN_POSITIVE);
         let mut rng = rand::thread_rng();
 
         // Beta(alpha, beta) = Gamma(alpha, 1) / (Gamma(alpha, 1) + Gamma(beta, 1))
@@ -104,6 +106,9 @@ impl BanditPolicy {
             // Normal approximation for large parameters
             let mean = alpha / (alpha + beta);
             let variance = (alpha * beta) / ((alpha + beta).powi(2) * (alpha + beta + 1.0));
+            if !variance.is_finite() {
+                return 0.5;
+            }
             let std_dev = variance.sqrt();
 
             // Box-Muller transform for normal distribution
@@ -118,7 +123,11 @@ impl BanditPolicy {
             let gamma_beta = Self::sample_gamma(beta);
             let sum = gamma_alpha + gamma_beta;
 
-            if sum > 0.0 { gamma_alpha / sum } else { 0.5 }
+            if sum > 0.0 && sum.is_finite() {
+                gamma_alpha / sum
+            } else {
+                0.5
+            }
         }
     }
 
@@ -126,6 +135,9 @@ impl BanditPolicy {
     #[allow(clippy::many_single_char_names)]
     #[must_use]
     pub(crate) fn sample_gamma(shape: f64) -> f64 {
+        if shape <= 0.0 {
+            return 0.0;
+        }
         let mut rng = rand::thread_rng();
 
         if shape < 1.0 {

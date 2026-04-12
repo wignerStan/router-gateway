@@ -29,6 +29,8 @@ impl TracingMiddleware {
             .get("x-request-id")
             .or_else(|| headers.get("x-trace-id"))
             .and_then(|v| v.to_str().ok())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
             .map_or_else(
                 || {
                     // Generate UUID-based request ID
@@ -126,7 +128,7 @@ pub async fn tracing_middleware(
 
     // Update trace with response data
     span.status_code = Some(status.as_u16());
-    span.latency_ms = Some(latency.as_millis() as u64);
+    span.latency_ms = latency.as_millis().try_into().ok();
     span.end_time = Some(chrono::Utc::now());
 
     // Extract output tokens from response headers if available

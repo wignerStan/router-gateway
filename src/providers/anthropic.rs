@@ -77,23 +77,36 @@ impl ProviderAdapter for AnthropicAdapter {
                                     "text": p.text.as_ref().unwrap_or(&String::new())
                                 })
                             } else if p.part_type == "image_url" {
-                                p.image_url.as_ref().map_or_else(
-                                    || {
-                                        json!({
-                                            "type": "text",
-                                            "text": "[malformed image content]"
-                                        })
-                                    },
-                                    |image_url| {
-                                        json!({
-                                            "type": "image",
-                                            "source": {
-                                                "type": "url",
-                                                "url": &image_url.url
-                                            }
-                                        })
-                                    },
-                                )
+                                // Clippy suggests map_or_else but the branching logic is clearer as if-let
+                                #[allow(clippy::option_if_let_else)]
+                                if let Some(ref img_data) = p.image_data {
+                                    json!({
+                                        "type": "image",
+                                        "source": {
+                                            "type": "base64",
+                                            "media_type": img_data.mime_type,
+                                            "data": img_data.data
+                                        }
+                                    })
+                                } else {
+                                    p.image_url.as_ref().map_or_else(
+                                        || {
+                                            json!({
+                                                "type": "text",
+                                                "text": "[malformed image content]"
+                                            })
+                                        },
+                                        |image_url| {
+                                            json!({
+                                                "type": "image",
+                                                "source": {
+                                                    "type": "url",
+                                                    "url": &image_url.url
+                                                }
+                                            })
+                                        },
+                                    )
+                                }
                             } else {
                                 json!({ "type": &p.part_type })
                             }
@@ -153,7 +166,8 @@ impl ProviderAdapter for AnthropicAdapter {
             if let Some(choice) = &request.tool_choice {
                 let anthropic_choice = match choice {
                     ToolChoice::Auto => json!({"type": "auto"}),
-                    ToolChoice::None | ToolChoice::Required => json!({"type": "any"}),
+                    ToolChoice::None => json!({"type": "none"}),
+                    ToolChoice::Required => json!({"type": "any"}),
                     ToolChoice::Function { name } => json!({"type": "tool", "name": name}),
                 };
                 anthropic_request["tool_choice"] = anthropic_choice;
@@ -195,11 +209,12 @@ impl ProviderAdapter for AnthropicAdapter {
 
         // Extract token usage
         let usage = response["usage"].clone();
+        let prompt = usage["input_tokens"].as_u64().unwrap_or(0);
+        let completion = usage["output_tokens"].as_u64().unwrap_or(0);
         let token_usage = TokenUsage {
-            prompt_tokens: usage["input_tokens"].as_u64().unwrap_or(0) as u32,
-            completion_tokens: usage["output_tokens"].as_u64().unwrap_or(0) as u32,
-            total_tokens: (usage["input_tokens"].as_u64().unwrap_or(0)
-                + usage["output_tokens"].as_u64().unwrap_or(0)) as u32,
+            prompt_tokens: prompt.min(u64::from(u32::MAX)) as u32,
+            completion_tokens: completion.min(u64::from(u32::MAX)) as u32,
+            total_tokens: prompt.saturating_add(completion).min(u64::from(u32::MAX)) as u32,
         };
 
         // Extract tool calls if present

@@ -72,8 +72,8 @@ impl ProviderAdapter for GoogleAdapter {
             // Map roles to Gemini format
             let gemini_role = match msg.role.as_str() {
                 "assistant" => "model",
-                "user" => "user",
-                _ => msg.role.as_str(),
+                // system handled above; all other roles map to "user"
+                _ => "user",
             };
 
             let parts = match &msg.content {
@@ -85,15 +85,45 @@ impl ProviderAdapter for GoogleAdapter {
                         .iter()
                         .map(|p| {
                             if p.part_type == "text" {
-                                json!({"text": p.text})
+                                json!({"text": p.text.as_ref().unwrap_or(&String::new())})
                             } else if p.part_type == "image_url" {
-                                // Gemini expects inline_data or fileData
-                                json!({
-                                    "inlineData": {
-                                        "mimeType": "image/jpeg",
-                                        "data": p.image_url.as_ref().map_or(&String::new(), |u| &u.url)
+                                // Clippy suggests map_or_else but the branching logic is clearer as if-let
+                                #[allow(clippy::option_if_let_else)]
+                                if let Some(ref img_data) = p.image_data {
+                                    json!({
+                                        "inlineData": {
+                                            "mimeType": img_data.mime_type,
+                                            "data": img_data.data
+                                        }
+                                    })
+                                } else if let Some(ref img_url) = p.image_url {
+                                    if img_url.url.starts_with("data:") {
+                                        // Data URI: extract MIME and base64 data
+                                        let parts: Vec<&str> =
+                                            img_url.url["data:".len()..].splitn(2, ',').collect();
+                                        let (mime, data) = if parts.len() == 2 {
+                                            let mime = parts[0].trim_end_matches(";base64");
+                                            (mime, parts[1])
+                                        } else {
+                                            ("image/jpeg", img_url.url.as_str())
+                                        };
+                                        json!({
+                                            "inlineData": {
+                                                "mimeType": mime,
+                                                "data": data
+                                            }
+                                        })
+                                    } else {
+                                        // Regular URL: use fileData for Gemini
+                                        json!({
+                                            "fileData": {
+                                                "fileUri": &img_url.url
+                                            }
+                                        })
                                     }
-                                })
+                                } else {
+                                    json!({})
+                                }
                             } else {
                                 json!({})
                             }
@@ -156,6 +186,35 @@ impl ProviderAdapter for GoogleAdapter {
             gemini_request["tools"] = json!([{
                 "functionDeclarations": declarations
             }]);
+
+            // Transform tool_choice to Gemini tool_config
+            if let Some(choice) = &request.tool_choice {
+                match choice {
+                    super::types::ToolChoice::Auto => {
+                        gemini_request["tool_config"] = json!({
+                            "function_calling_config": {"mode": "AUTO"}
+                        });
+                    },
+                    super::types::ToolChoice::None => {
+                        gemini_request["tool_config"] = json!({
+                            "function_calling_config": {"mode": "NONE"}
+                        });
+                    },
+                    super::types::ToolChoice::Required => {
+                        gemini_request["tool_config"] = json!({
+                            "function_calling_config": {"mode": "ANY"}
+                        });
+                    },
+                    super::types::ToolChoice::Function { name } => {
+                        gemini_request["tool_config"] = json!({
+                            "function_calling_config": {
+                                "mode": "ANY",
+                                "allowed_function_names": [name]
+                            }
+                        });
+                    },
+                }
+            }
         }
 
         gemini_request
@@ -194,9 +253,18 @@ impl ProviderAdapter for GoogleAdapter {
         // Extract usage
         let usage = &response["usageMetadata"];
         let token_usage = TokenUsage {
-            prompt_tokens: usage["promptTokenCount"].as_u64().unwrap_or(0) as u32,
-            completion_tokens: usage["candidatesTokenCount"].as_u64().unwrap_or(0) as u32,
-            total_tokens: usage["totalTokenCount"].as_u64().unwrap_or(0) as u32,
+            prompt_tokens: usage["promptTokenCount"]
+                .as_u64()
+                .unwrap_or(0)
+                .min(u64::from(u32::MAX)) as u32,
+            completion_tokens: usage["candidatesTokenCount"]
+                .as_u64()
+                .unwrap_or(0)
+                .min(u64::from(u32::MAX)) as u32,
+            total_tokens: usage["totalTokenCount"]
+                .as_u64()
+                .unwrap_or(0)
+                .min(u64::from(u32::MAX)) as u32,
         };
 
         // Extract tool calls if present

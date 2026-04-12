@@ -68,6 +68,12 @@ fn is_private_ip(ip: &IpAddr) -> bool {
                 || (octets[0] == 203 && octets[1] == 0 && octets[2] == 113)
                 // Reserved for Future Use (includes broadcast): 255.0.0.0/8
                 || octets[0] == 255
+                // Multicast: 224.0.0.0/4 (224..=239)
+                || (224..=239).contains(&octets[0])
+                // CGNAT shared address: 100.64.0.0/10 (RFC 6598)
+                || (octets[0] == 100 && (64..=127).contains(&octets[1]))
+                // Class E reserved: 240.0.0.0/4 (240..=254)
+                || (240..=254).contains(&octets[0])
         },
         IpAddr::V6(v6) => {
             // IPv4-mapped IPv6 (::ffff:x.x.x.x) — e.g. ::ffff:127.0.0.1 bypasses
@@ -93,6 +99,8 @@ fn is_private_ip(ip: &IpAddr) -> bool {
                 || v6.is_unspecified()
                 // Multicast: ff00::/8
                 || segments[0] >= 0xff00
+                // Deprecated site-local: fec0::/10
+                || (0xfec0..=0xfeff).contains(&segments[0])
         },
     }
 }
@@ -281,6 +289,78 @@ mod tests {
     }
 
     #[test]
+    fn reject_ipv4_multicast() {
+        let result = validate_url_not_private("http://224.0.0.1/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn reject_ipv4_multicast_upper() {
+        let result = validate_url_not_private("http://239.255.255.255/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn reject_ipv4_cgnat() {
+        let result = validate_url_not_private("http://100.64.0.1/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn reject_ipv4_cgnat_upper() {
+        let result = validate_url_not_private("http://100.127.255.255/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn allow_ipv4_100_below_cgnat() {
+        // 100.63.x.x is NOT in CGNAT range
+        let result = validate_url_not_private("http://100.63.255.255/api");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn allow_ipv4_100_above_cgnat() {
+        // 100.128.x.x is NOT in CGNAT range
+        let result = validate_url_not_private("http://100.128.0.1/api");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn reject_ipv4_class_e() {
+        let result = validate_url_not_private("http://240.0.0.1/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn reject_ipv4_class_e_upper() {
+        let result = validate_url_not_private("http://254.255.255.255/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn reject_ipv6_deprecated_site_local() {
+        let result = validate_url_not_private("http://[fec0::1]/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn reject_ipv6_deprecated_site_local_upper() {
+        let result =
+            validate_url_not_private("http://[feff:ffff:ffff:ffff:ffff:ffff:ffff:ffff]/api");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn allow_ipv6_just_above_site_local() {
+        // ff00:: is multicast which is blocked, but fe00:: is not in site-local range
+        // Actually fe00:: through febf:: falls in fe80..=febf check, so test ff00 separately
+        // Let's verify a legitimate non-blocked IPv6
+        let result = validate_url_not_private("http://[2001:db8::1]/api");
+        assert!(result.is_ok());
+    }
+
+    #[test]
     fn allow_public_ipv4_literal() {
         let result = validate_url_not_private("https://8.8.8.8/api");
         assert!(result.is_ok());
@@ -359,6 +439,44 @@ mod tests {
                 let url = format!("https://{word}.{tld}/v1/chat/completions");
                 let result = validate_url_not_private(&url);
                 prop_assert!(result.is_ok(), "Domain {word}.{tld} should be allowed");
+            }
+
+            /// All IPv4 multicast addresses (224-239.x.x.x) are rejected.
+            #[test]
+            fn all_multicast_rejected(
+                a in 224u8..=239u8,
+                b in 0u8..=255u8,
+                c in 0u8..=255u8,
+                d in 1u8..=255u8,
+            ) {
+                let url = format!("http://{a}.{b}.{c}.{d}/api");
+                let result = validate_url_not_private(&url);
+                prop_assert!(result.is_err(), "Multicast {a}.{b}.{c}.{d} should be rejected");
+            }
+
+            /// All CGNAT addresses (100.64-127.x.x) are rejected.
+            #[test]
+            fn all_cgnat_rejected(
+                b in 64u8..=127u8,
+                c in 0u8..=255u8,
+                d in 1u8..=255u8,
+            ) {
+                let url = format!("http://100.{b}.{c}.{d}/api");
+                let result = validate_url_not_private(&url);
+                prop_assert!(result.is_err(), "CGNAT 100.{b}.{c}.{d} should be rejected");
+            }
+
+            /// All Class E addresses (240-254.x.x.x) are rejected.
+            #[test]
+            fn all_class_e_rejected(
+                a in 240u8..=254u8,
+                b in 0u8..=255u8,
+                c in 0u8..=255u8,
+                d in 1u8..=255u8,
+            ) {
+                let url = format!("http://{a}.{b}.{c}.{d}/api");
+                let result = validate_url_not_private(&url);
+                prop_assert!(result.is_err(), "Class E {a}.{b}.{c}.{d} should be rejected");
             }
         }
     }

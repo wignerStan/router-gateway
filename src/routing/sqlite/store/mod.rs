@@ -74,8 +74,13 @@ impl SQLiteStore {
 
         // Build DSN with WAL mode if enabled
         let dsn = if cfg.enable_wal && cfg.database_path != ":memory:" {
+            let separator = if cfg.database_path.contains('?') {
+                '&'
+            } else {
+                '?'
+            };
             format!(
-                "{}?mode=rwc&_journal=WAL&_busy_timeout={}",
+                "{}{separator}mode=rwc&_journal=WAL&_busy_timeout={}",
                 cfg.database_path, cfg.busy_timeout_ms
             )
         } else {
@@ -107,7 +112,10 @@ impl SQLiteStore {
 
             // Configure cache size (negative value means KB)
             db.execute(
-                &format!("PRAGMA cache_size = -{}", config.cache_size_mb * 1024),
+                &format!(
+                    "PRAGMA cache_size = -{}",
+                    config.cache_size_mb.max(1) * 1024
+                ),
                 [],
             )
             .map_err(|e| SqliteError::query("set_cache_size", e))?;

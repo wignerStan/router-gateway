@@ -311,7 +311,13 @@ impl RoutingPolicy {
                 // Parse value as "key:value" format
                 let parts: Vec<&str> = condition.value.splitn(2, ':').collect();
                 if parts.len() == 2 {
-                    context.metadata.get(parts[0]).cloned()
+                    let key = parts[0];
+                    let value = parts[1];
+                    if key.is_empty() || value.is_empty() {
+                        None
+                    } else {
+                        context.metadata.get(key).cloned()
+                    }
                 } else {
                     None
                 }
@@ -322,8 +328,20 @@ impl RoutingPolicy {
             if condition.condition_type == PolicyConditionType::TokenCount {
                 // Numeric comparison to avoid lexicographic issues
                 // e.g., "999" > "1000" lexicographically which is wrong for numbers
-                let actual_num = actual.parse::<i64>().unwrap_or(0);
-                let condition_num = condition.value.parse::<i64>().unwrap_or(0);
+                let actual_num = actual.parse::<i64>().unwrap_or_else(|_| {
+                    tracing::warn!(
+                        "Non-numeric TokenCount actual value '{}' in condition, defaulting to 0",
+                        actual
+                    );
+                    0
+                });
+                let condition_num = condition.value.parse::<i64>().unwrap_or_else(|_| {
+                    tracing::warn!(
+                        "Non-numeric TokenCount value '{}' in condition, defaulting to 0",
+                        condition.value
+                    );
+                    0
+                });
                 match condition.operator.as_str() {
                     "eq" | "==" => actual_num == condition_num,
                     "ne" | "!=" => actual_num != condition_num,
@@ -342,7 +360,9 @@ impl RoutingPolicy {
                     "lt" | "<" => actual < condition.value,
                     "lte" | "<=" => actual <= condition.value,
                     "contains" => actual.contains(&condition.value),
-                    "in" => condition.value.split(',').any(|v| v.trim() == actual),
+                    "in" if !condition.value.is_empty() => {
+                        condition.value.split(',').any(|v| v.trim() == actual)
+                    },
                     _ => false,
                 }
             }

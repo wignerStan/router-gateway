@@ -95,7 +95,7 @@ impl ExecutionOutcome {
             latency_ms,
             prompt_tokens,
             completion_tokens,
-            total_tokens: prompt_tokens + completion_tokens,
+            total_tokens: prompt_tokens.saturating_add(completion_tokens),
             error_class: None,
             status_code: Some(status_code),
             timestamp: Utc::now(),

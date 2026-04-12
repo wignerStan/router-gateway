@@ -145,6 +145,7 @@ async fn main() -> Result<()> {
 
     match args.command {
         Commands::Health { url } => {
+            let url = url.trim_end_matches('/');
             let health_url = format!("{url}/health");
             let start = std::time::Instant::now();
 
@@ -227,6 +228,7 @@ async fn main() -> Result<()> {
         },
 
         Commands::Models { url } => {
+            let url = url.trim_end_matches('/');
             let models_url = format!("{url}/api/models");
 
             let response = reqwest::get(&models_url)
@@ -410,6 +412,14 @@ fn validate_config_content(
     let config_value: GatewayConfigYaml = serde_yaml_ng::from_str(content)?;
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
+
+    // Check for duplicate credential IDs
+    let mut seen_ids = std::collections::HashSet::new();
+    for cred in &config_value.credentials {
+        if !seen_ids.insert(&cred.id) {
+            errors.push(format!("Duplicate credential ID: {}", cred.id));
+        }
+    }
 
     // Validate credentials
     for (i, cred) in config_value.credentials.iter().enumerate() {

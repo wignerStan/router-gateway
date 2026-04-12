@@ -88,13 +88,19 @@ impl DefaultWeightCalculator {
 
     /// Calculate success rate score
     fn calculate_success_rate_score(metrics: Option<&AuthMetrics>) -> f64 {
-        metrics.map_or(0.5, |m| m.success_rate)
+        metrics.map_or(0.5, |m| {
+            if m.success_rate.is_finite() {
+                m.success_rate
+            } else {
+                0.5
+            }
+        })
     }
 
     /// Calculate latency score (inverse function)
     fn calculate_latency_score(metrics: Option<&AuthMetrics>) -> f64 {
         match metrics {
-            Some(m) if m.avg_latency_ms > 0.0 => {
+            Some(m) if m.avg_latency_ms > 0.0 && m.avg_latency_ms.is_finite() => {
                 let score = 1.0 / (1.0 + m.avg_latency_ms / 1000.0);
                 score.clamp(0.0, 1.0)
             },

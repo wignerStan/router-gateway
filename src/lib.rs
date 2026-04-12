@@ -88,12 +88,20 @@ pub async fn run() -> anyhow::Result<()> {
     ::tracing::info!("Gateway listening on {}", addr);
 
     // Periodically prune expired rate-limit buckets to bound memory growth.
+    // Supervise the task — if it panics, log the error but do not crash the
+    // server. The gateway continues serving requests without pruning.
     let prune_limiter = std::sync::Arc::clone(&state.rate_limiter);
-    tokio::spawn(async move {
+    let prune_handle = tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(120));
         loop {
             interval.tick().await;
             prune_limiter.prune();
+        }
+    });
+    tokio::spawn(async move {
+        match prune_handle.await {
+            Ok(_) => {},
+            Err(e) => ::tracing::error!("Prune task failed: {}", e),
         }
     });
 

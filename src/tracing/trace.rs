@@ -69,6 +69,16 @@ impl TraceSpan {
         model: String,
         auth_id: Option<String>,
     ) -> Self {
+        let provider = if provider.is_empty() {
+            "unknown".to_string()
+        } else {
+            provider
+        };
+        let model = if model.is_empty() {
+            "unknown".to_string()
+        } else {
+            model
+        };
         Self {
             trace_id: Uuid::new_v4(),
             request_id,
@@ -89,6 +99,9 @@ impl TraceSpan {
 
     /// Mark the trace as completed
     pub fn complete(&mut self, status_code: u16) {
+        if self.end_time.is_some() {
+            return; // Already completed, ignore duplicate
+        }
         self.end_time = Some(Utc::now());
         self.status_code = Some(status_code);
         if let Some(end) = self.end_time {
@@ -99,8 +112,10 @@ impl TraceSpan {
     /// Set error information
     pub fn set_error(&mut self, error: String) {
         self.error_message = Some(error);
-        self.status_code = Some(500);
-        self.complete(500);
+        if self.status_code.is_none() {
+            self.status_code = Some(500);
+        }
+        self.complete(self.status_code.unwrap_or(500));
     }
 
     /// Check if the trace was successful (2xx status code).
@@ -211,9 +226,9 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
 
         span.complete(500);
-        // Should update status but end_time and latency should reflect second call
-        assert_eq!(span.status_code, Some(500));
-        assert!(span.latency_ms.unwrap() >= first_latency.unwrap());
+        // Second call is ignored (guard prevents double-complete)
+        assert_eq!(span.status_code, Some(200));
+        assert_eq!(span.latency_ms, first_latency);
     }
 
     #[test]

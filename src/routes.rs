@@ -161,13 +161,21 @@ pub async fn rate_limit_middleware(
             .and_then(|s| s.split(',').next())
             .map(str::trim)
             .filter(|s| !s.is_empty())
-            .or_else(|| req.headers().get("x-real-ip").and_then(|v| v.to_str().ok()))
-            .unwrap_or(&peer_ip)
+            .and_then(|s| s.parse::<std::net::IpAddr>().ok())
+            .map(|ip| ip.to_string())
+            .or_else(|| {
+                req.headers()
+                    .get("x-real-ip")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|s| s.parse::<std::net::IpAddr>().ok())
+                    .map(|ip| ip.to_string())
+            })
+            .unwrap_or(peer_ip)
     } else {
-        &peer_ip
+        peer_ip
     };
 
-    if !state.rate_limiter.check(client_ip) {
+    if !state.rate_limiter.check(&client_ip) {
         return Err((
             axum::http::StatusCode::TOO_MANY_REQUESTS,
             Json(json!({

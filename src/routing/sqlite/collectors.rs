@@ -78,6 +78,10 @@ impl SQLiteMetricsCollector {
             return;
         }
 
+        if !latency_ms.is_finite() || latency_ms < 0.0 {
+            return;
+        }
+
         {
             let mut cache = self.cache.write().await;
             let entry = cache
@@ -98,17 +102,17 @@ impl SQLiteMetricsCollector {
                     last_failure_time: None,
                 });
 
-            entry.total_requests += 1;
+            entry.total_requests = entry.total_requests.saturating_add(1);
             entry.last_request_time = chrono::Utc::now();
 
             if success {
-                entry.success_count += 1;
-                entry.consecutive_successes += 1;
+                entry.success_count = entry.success_count.saturating_add(1);
+                entry.consecutive_successes = entry.consecutive_successes.saturating_add(1);
                 entry.consecutive_failures = 0;
                 entry.last_success_time = Some(chrono::Utc::now());
             } else {
-                entry.failure_count += 1;
-                entry.consecutive_failures += 1;
+                entry.failure_count = entry.failure_count.saturating_add(1);
+                entry.consecutive_failures = entry.consecutive_failures.saturating_add(1);
                 entry.consecutive_successes = 0;
                 entry.last_failure_time = Some(chrono::Utc::now());
             }
@@ -134,10 +138,13 @@ impl SQLiteMetricsCollector {
             dirty.insert(auth_id.to_string(), true);
         }
 
-        let _ = self
+        if let Err(e) = self
             .store
             .write_status_history(auth_id, status_code, latency_ms, success)
-            .await;
+            .await
+        {
+            tracing::warn!("Failed to write status history for {auth_id}: {e}");
+        }
     }
 
     /// Get metrics for auth
@@ -271,7 +278,7 @@ impl SQLiteHealthManager {
                     error_counts: HashMap::new(),
                 });
 
-            entry.consecutive_successes += 1;
+            entry.consecutive_successes = entry.consecutive_successes.saturating_add(1);
             entry.consecutive_failures = 0;
             entry.last_check_time = chrono::Utc::now();
 
@@ -311,11 +318,12 @@ impl SQLiteHealthManager {
                     error_counts: HashMap::new(),
                 });
 
-            entry.consecutive_failures += 1;
+            entry.consecutive_failures = entry.consecutive_failures.saturating_add(1);
             entry.consecutive_successes = 0;
             entry.last_check_time = chrono::Utc::now();
 
-            *entry.error_counts.entry(status_code).or_insert(0) += 1;
+            let err_count = entry.error_counts.entry(status_code).or_insert(0);
+            *err_count = err_count.saturating_add(1);
 
             match status_code {
                 500..=599 | 401 | 403 => {
@@ -409,8 +417,10 @@ impl SQLiteHealthManager {
 
             entry.status = HealthStatus::Unhealthy;
             entry.last_status_change = chrono::Utc::now();
-            entry.unavailable_until =
-                Some(chrono::Utc::now() + chrono::Duration::seconds(duration.as_secs() as i64));
+            entry.unavailable_until = Some(
+                chrono::Utc::now()
+                    + chrono::Duration::seconds(duration.as_secs().min(86400) as i64),
+            );
         }
 
         {
