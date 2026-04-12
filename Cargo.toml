@@ -7,6 +7,10 @@ description = "Local LLM gateway for intelligent request routing"
 repository = "https://github.com/proxy/gateway"
 rust-version = "1.85"
 
+[features]
+default = []
+bdd = []
+
 [lib]
 path = "src/lib.rs"
 
@@ -82,6 +86,9 @@ insta = { version = "1.42", features = ["yaml", "json", "redactions"] }
 # Property-based testing
 proptest = "1.6"
 
+# BDD testing
+cucumber = { version = "0.21", features = ["libtest"] }
+
 # Benchmarking
 criterion = { version = "0.5", features = ["html_reports"] }
 
@@ -125,3 +132,9 @@ harness = false
 [[bench]]
 name = "ssrf_benchmark"
 harness = false
+
+# BDD test target (cucumber harness)
+[[test]]
+name = "cucumber_bdd"
+harness = false
+required-features = ["bdd"]

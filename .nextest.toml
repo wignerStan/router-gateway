@@ -10,6 +10,11 @@ status-level = "skip"
 success-output = "immediate"
 slow-timeout = { period = "60s", terminate-after = 3 }
 
+# Cucumber BDD tests have custom harness; nextest cannot list them.
+# Run with: cargo test --test cucumber_bdd
+[[profile.default.test-skip]]
+name = "cucumber_bdd"
+
 [profile.default.junit]
 path = "target/nextest/junit.xml"
 report-name = "gateway-tests"

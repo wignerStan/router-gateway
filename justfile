@@ -25,7 +25,7 @@ help:
     @echo "║ TEST:    test, test-package, test-coverage, test-snapshots  ║"
     @echo "║ BENCH:   bench, bench-target, bench-save                   ║"
     @echo "║ FUZZ:    fuzz-ssrf, fuzz-config, fuzz-token, fuzz-all      ║"
-    @echo "║ QUALITY: fmt, lint, check, qa, qa-lint, qa-full, qa-security ║"
+    @echo "║ QUALITY: fmt, lint, check, qa, qa-lint, qa-bdd, qa-full, qa-security ║"
     @echo "║ SECURITY: audit, security-scan                             ║"
     @echo "║ UTILITY: members, graph, outdated, env                     ║"
     @echo "║ JQ:      jq-members, jq-deps, jq-features, jq-manifest     ║"
@@ -42,6 +42,10 @@ qa: fmt-check check
 # Tier 2: Lint checks (<10s) - Use before push
 qa-lint: qa lint
     @echo "Tier 2 QA passed (lint checks)"
+
+# Tier 2.5: BDD + lint (<20s) - Pre-push quality gate
+qa-bdd: qa-lint bdd
+    @echo "Tier 2.5 QA passed (lint + BDD checks)"
 
 # Tier 3: Full verification (>30s) - Use for CI / release
 qa-full: qa-lint test test-coverage-check security-audit
@@ -191,6 +195,10 @@ test-snapshots-accept:
 # Run property-based tests
 test-property:
     cargo nextest run -E 'test(proptests)'
+
+# Run BDD scenarios (Gherkin feature files via cucumber)
+bdd:
+    cargo test --test cucumber_bdd --features bdd
 
 # ============================================
 # BENCHMARKS
@@ -367,8 +375,8 @@ lockfile:
 pre-commit: fmt-check check
     @echo "Pre-commit checks passed"
 
-# Pre-push: lint checks (matches lefthook)
-pre-push: qa-lint
+# Pre-push: lint + BDD checks (matches lefthook)
+pre-push: qa-bdd
     @echo "Pre-push checks passed"
 
 # ============================================
@@ -469,6 +477,7 @@ status: members env
 # Tiered Verification:
 #   Tier 1 (Quick <3s):  just qa           -> fmt-check, check
 #   Tier 2 (Lint <10s):  just qa-lint      -> qa, lint
+#   Tier 2.5 (BDD <20s): just qa-bdd      -> qa-lint, bdd
 #   Tier 3 (Full >30s):  just qa-full      -> qa-lint, test, test-coverage-check, security-audit
 #   Tier 4 (Security):   just qa-security  -> test, test-coverage-check, property tests, audit
 #

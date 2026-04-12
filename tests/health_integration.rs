@@ -1,14 +1,15 @@
 #![allow(clippy::unreadable_literal, missing_docs)]
-// BDD (Behavior-Driven Development) tests for health management
+// Integration tests for health management
 //
-// This module contains Cucumber-style tests that verify the behavior of
-// the health management system.
+// Unit-level integration tests covering health state transitions,
+// cooldown periods, and credential availability.
+// Behavioral BDD coverage lives in tests/bdd/health.rs (cucumber).
 
 #[cfg(test)]
-mod health_bdd {
+mod health {
 
     #[tokio::test]
-    async fn test_bdd_health_rate_limit_triggers_degraded() {
+    async fn test_rate_limit_triggers_degraded() {
         use gateway::routing::config::HealthConfig;
         use gateway::routing::health::{HealthManager, HealthStatus};
 
@@ -22,7 +23,6 @@ mod health_bdd {
         };
         let manager = HealthManager::new(config);
 
-        // Scenario: Rate limit triggers degraded state
         assert_eq!(manager.get_status("test-auth").await, HealthStatus::Healthy);
         manager.update_from_result("test-auth", false, 429).await;
         assert_eq!(
@@ -32,7 +32,7 @@ mod health_bdd {
     }
 
     #[tokio::test]
-    async fn test_bdd_health_consecutive_failures_trigger_unhealthy() {
+    async fn test_consecutive_failures_trigger_unhealthy() {
         use gateway::routing::config::HealthConfig;
         use gateway::routing::health::{HealthManager, HealthStatus};
 
@@ -42,7 +42,6 @@ mod health_bdd {
         };
         let manager = HealthManager::new(config);
 
-        // Scenario: Consecutive failures trigger unhealthy state
         assert_eq!(manager.get_status("test-auth").await, HealthStatus::Healthy);
         for _ in 0..5 {
             manager.update_from_result("test-auth", false, 500).await;
@@ -54,7 +53,7 @@ mod health_bdd {
     }
 
     #[tokio::test]
-    async fn test_bdd_health_success_streak_recovers_degraded() {
+    async fn test_success_streak_recovers_degraded() {
         use gateway::routing::config::HealthConfig;
         use gateway::routing::health::{HealthManager, HealthStatus};
 
@@ -69,7 +68,6 @@ mod health_bdd {
         };
         let manager = HealthManager::new(config);
 
-        // Scenario: Success streak recovers degraded credential
         manager.update_from_result("test-auth", false, 429).await;
         assert_eq!(
             manager.get_status("test-auth").await,
@@ -83,7 +81,7 @@ mod health_bdd {
     }
 
     #[tokio::test]
-    async fn test_bdd_health_unhealthy_blocked_from_selection() {
+    async fn test_unhealthy_blocked_from_selection() {
         use gateway::routing::config::HealthConfig;
         use gateway::routing::health::{HealthManager, HealthStatus};
 
@@ -94,7 +92,6 @@ mod health_bdd {
         };
         let manager = HealthManager::new(config);
 
-        // Scenario: Unhealthy credential blocked from selection
         for _ in 0..2 {
             manager.update_from_result("test-auth", false, 500).await;
         }
@@ -106,7 +103,7 @@ mod health_bdd {
     }
 
     #[tokio::test]
-    async fn test_bdd_health_cooldown_expiration_allows_recovery() {
+    async fn test_cooldown_expiration_allows_recovery() {
         use gateway::routing::config::HealthConfig;
         use gateway::routing::health::{HealthManager, HealthStatus};
 
@@ -117,7 +114,6 @@ mod health_bdd {
         };
         let manager = HealthManager::new(config);
 
-        // Scenario: Cooldown expiration allows recovery attempt
         for _ in 0..2 {
             manager.update_from_result("test-auth", false, 500).await;
         }
@@ -138,7 +134,7 @@ mod health_bdd {
     }
 
     #[tokio::test]
-    async fn test_bdd_all_health_state_transitions() {
+    async fn test_all_health_state_transitions() {
         use gateway::routing::config::HealthConfig;
         use gateway::routing::health::{HealthManager, HealthStatus};
 
@@ -155,7 +151,6 @@ mod health_bdd {
         };
         let manager = HealthManager::new(config);
 
-        // Test full state machine: Healthy -> Degraded -> Unhealthy -> Degraded -> Healthy
         let auth_id = "state-transition-test";
 
         // Start healthy
