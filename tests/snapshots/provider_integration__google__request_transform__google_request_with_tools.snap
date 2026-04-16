@@ -1,0 +1,52 @@
+---
+source: tests/provider_integration.rs
+expression: transformed
+---
+{
+  "contents": [
+    {
+      "parts": [
+        {
+          "text": "What is the weather?"
+        }
+      ],
+      "role": "user"
+    }
+  ],
+  "generationConfig": {
+    "maxOutputTokens": 2048
+  },
+  "tool_config": {
+    "function_calling_config": {
+      "mode": "AUTO"
+    }
+  },
+  "tools": [
+    {
+      "functionDeclarations": [
+        {
+          "description": "Get current weather",
+          "name": "get_weather",
+          "parameters": {
+            "properties": {
+              "location": {
+                "type": "string"
+              },
+              "unit": {
+                "enum": [
+                  "celsius",
+                  "fahrenheit"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "location"
+            ],
+            "type": "object"
+          }
+        }
+      ]
+    }
+  ]
+}

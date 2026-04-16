@@ -1,0 +1,25 @@
+---
+source: tests/provider_integration.rs
+expression: result
+---
+{
+  "id": "chatcmpl-9cD4W3mNxRqY6wOqN9sM",
+  "model": "gpt-4-0613",
+  "content": "",
+  "finish_reason": "tool_calls",
+  "usage": {
+    "prompt_tokens": 25,
+    "completion_tokens": 15,
+    "total_tokens": 40
+  },
+  "tool_calls": [
+    {
+      "id": "call_abc123def456",
+      "type": "function",
+      "function": {
+        "name": "get_weather",
+        "arguments": "{\"location\": \"San Francisco, CA\", \"unit\": \"celsius\"}"
+      }
+    }
+  ]
+}

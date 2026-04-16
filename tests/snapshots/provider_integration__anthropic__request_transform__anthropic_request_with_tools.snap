@@ -1,0 +1,44 @@
+---
+source: tests/provider_integration.rs
+expression: transformed
+---
+{
+  "max_tokens": 4096,
+  "messages": [
+    {
+      "content": [
+        {
+          "text": "Search for recent papers on LLM routing",
+          "type": "text"
+        }
+      ],
+      "role": "user"
+    }
+  ],
+  "model": "claude-3-sonnet-20240229",
+  "tool_choice": {
+    "type": "auto"
+  },
+  "tools": [
+    {
+      "description": "Search academic papers",
+      "input_schema": {
+        "properties": {
+          "query": {
+            "description": "Search query",
+            "type": "string"
+          },
+          "year": {
+            "description": "Publication year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "name": "search_papers"
+    }
+  ]
+}

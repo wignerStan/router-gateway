@@ -1,0 +1,24 @@
+---
+source: tests/provider_integration.rs
+expression: transformed
+---
+{
+  "contents": [
+    {
+      "parts": [
+        {
+          "text": "Explain Rust ownership."
+        }
+      ],
+      "role": "user"
+    }
+  ],
+  "generationConfig": {},
+  "systemInstruction": {
+    "parts": [
+      {
+        "text": "You are a helpful assistant."
+      }
+    ]
+  }
+}

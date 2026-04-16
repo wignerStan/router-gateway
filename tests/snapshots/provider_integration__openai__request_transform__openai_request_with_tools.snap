@@ -1,0 +1,43 @@
+---
+source: tests/provider_integration.rs
+expression: transformed
+---
+{
+  "max_tokens": 2048,
+  "messages": [
+    {
+      "content": "What is the weather in Tokyo?",
+      "role": "user"
+    }
+  ],
+  "model": "gpt-4",
+  "tool_choice": "auto",
+  "tools": [
+    {
+      "function": {
+        "description": "Get current weather for a location",
+        "name": "get_weather",
+        "parameters": {
+          "properties": {
+            "location": {
+              "description": "City name",
+              "type": "string"
+            },
+            "unit": {
+              "enum": [
+                "celsius",
+                "fahrenheit"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "location"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "function"
+    }
+  ]
+}

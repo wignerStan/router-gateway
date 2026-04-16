@@ -1,0 +1,16 @@
+---
+source: tests/provider_integration.rs
+expression: result
+---
+{
+  "id": "msg_01XFDUDYJgAACzvnptvVoYEL",
+  "model": "claude-3-opus-20240229",
+  "content": "Hello! I'm Claude, how can I assist you?",
+  "finish_reason": "end_turn",
+  "usage": {
+    "prompt_tokens": 10,
+    "completion_tokens": 12,
+    "total_tokens": 22
+  },
+  "tool_calls": []
+}

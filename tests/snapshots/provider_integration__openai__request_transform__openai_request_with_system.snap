@@ -1,0 +1,17 @@
+---
+source: tests/provider_integration.rs
+expression: transformed
+---
+{
+  "messages": [
+    {
+      "content": "You are a helpful assistant.",
+      "role": "system"
+    },
+    {
+      "content": "Hello",
+      "role": "user"
+    }
+  ],
+  "model": "gpt-4"
+}

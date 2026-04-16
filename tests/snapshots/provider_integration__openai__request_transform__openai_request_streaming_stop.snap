@@ -1,0 +1,21 @@
+---
+source: tests/provider_integration.rs
+expression: transformed
+---
+{
+  "max_tokens": 512,
+  "messages": [
+    {
+      "content": "Generate a list",
+      "role": "user"
+    }
+  ],
+  "model": "gpt-4",
+  "stop": [
+    "\n\n",
+    "END"
+  ],
+  "stream": true,
+  "temperature": 0.5,
+  "top_p": 0.8999999761581421
+}

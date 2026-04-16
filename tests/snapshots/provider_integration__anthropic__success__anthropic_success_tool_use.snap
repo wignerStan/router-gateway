@@ -1,0 +1,25 @@
+---
+source: tests/provider_integration.rs
+expression: result
+---
+{
+  "id": "msg_02HGtRCzFPvKq8xKn4CTbN9M",
+  "model": "claude-3-opus-20240229",
+  "content": "I'll check the weather for you.",
+  "finish_reason": "tool_use",
+  "usage": {
+    "prompt_tokens": 30,
+    "completion_tokens": 45,
+    "total_tokens": 75
+  },
+  "tool_calls": [
+    {
+      "id": "toolu_01A09q90qw90lq9179354",
+      "type": "function",
+      "function": {
+        "name": "get_weather",
+        "arguments": "{\"location\":\"San Francisco\",\"unit\":\"celsius\"}"
+      }
+    }
+  ]
+}

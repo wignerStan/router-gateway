@@ -1,0 +1,25 @@
+---
+source: tests/provider_integration.rs
+expression: result
+---
+{
+  "id": "[uuid-redacted]",
+  "model": "gemini",
+  "content": "Let me look that up.",
+  "finish_reason": "STOP",
+  "usage": {
+    "prompt_tokens": 25,
+    "completion_tokens": 18,
+    "total_tokens": 43
+  },
+  "tool_calls": [
+    {
+      "id": "[uuid-redacted]",
+      "type": "function",
+      "function": {
+        "name": "get_weather",
+        "arguments": "{\"location\":\"Tokyo\",\"unit\":\"celsius\"}"
+      }
+    }
+  ]
+}

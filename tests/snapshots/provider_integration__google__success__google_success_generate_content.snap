@@ -1,0 +1,16 @@
+---
+source: tests/provider_integration.rs
+expression: result
+---
+{
+  "id": "[uuid-redacted]",
+  "model": "gemini-1.5-pro-002",
+  "content": "Hello! I'm Gemini, how can I help?",
+  "finish_reason": "STOP",
+  "usage": {
+    "prompt_tokens": 10,
+    "completion_tokens": 8,
+    "total_tokens": 18
+  },
+  "tool_calls": []
+}
