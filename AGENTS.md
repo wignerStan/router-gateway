@@ -32,6 +32,12 @@ A **local LLM gateway** written in Rust for intelligent request routing. Routes 
 | Quick Checks      | `just qa`                                                      |
 | Full Checks       | `just qa-full`                                                 |
 | Security Deep     | `just qa-security`                                             |
+| Test (concurrency)  | `cargo test --test loom_rate_limiter && cargo test --test shuttle_concurrency` |
+| Test (error paths)  | `cargo test --test concurrency_error_paths` |
+| Miri (unsafe)       | `MIRIFLAGS="-Zmiri-disable-isolation" cargo +nightly miri test --lib` |
+| TSAN (races)        | `RUSTFLAGS="-Zsanitizer=thread" cargo +nightly test --lib --target x86_64-unknown-linux-gnu -- --test-threads=1` |
+| Mutation testing    | `cargo mutants --in-place` |
+| Console (debug)     | `cargo run --features console --bin gateway` |
 
 ### Source Layout
 
@@ -56,7 +62,7 @@ benches/              # Criterion benchmarks (routing, SSRF performance)
 fuzz/                 # cargo-fuzz targets (SSRF, config parsing, token matching)
 ```
 
-Integration tests in `tests/` are split by domain: `classification_integration.rs`, `health_integration.rs`, `config.rs`, `routes.rs`, `tracing_integration.rs`, `cli_integration.rs`.
+Integration tests in `tests/` are split by domain: `classification_integration.rs`, `health_integration.rs`, `config.rs`, `routes.rs`, `tracing_integration.rs`, `cli_integration.rs`, `loom_rate_limiter.rs`, `shuttle_concurrency.rs`, `concurrency_error_paths.rs`.
 
 ### Key Types
 
