@@ -360,9 +360,7 @@ impl RoutingPolicy {
                     "lt" | "<" => actual < condition.value,
                     "lte" | "<=" => actual <= condition.value,
                     "contains" => actual.contains(&condition.value),
-                    "in" if !condition.value.is_empty() => {
-                        condition.value.split(',').any(|v| v.trim() == actual)
-                    },
+                    "in" => condition.value.split(',').any(|v| v.trim() == actual),
                     _ => false,
                 }
             }
