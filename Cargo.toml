@@ -10,6 +10,7 @@ rust-version = "1.85"
 [features]
 default = []
 bdd = []
+console = ["console-subscriber", "tokio/tracing"]
 
 [lib]
 path = "src/lib.rs"
@@ -71,6 +72,9 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 # Validation
 jsonschema = "0.22"
 
+# Async task inspection (feature-gated, dev-time only)
+console-subscriber = { version = "0.4", optional = true }
+
 [dev-dependencies]
 assert_cmd = "2.0"
 predicates = "3.1"
@@ -91,6 +95,13 @@ cucumber = { version = "0.21", features = ["libtest"] }
 
 # Benchmarking
 criterion = { version = "0.5", features = ["html_reports"] }
+
+# Systematic concurrency testing (std::sync)
+loom = "0.7"
+
+# Randomized async concurrency testing (tokio::sync)
+shuttle = "0.7"
+
 
 [lints.rust]
 unsafe_code = "deny"
