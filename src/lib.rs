@@ -46,6 +46,20 @@ use routes::{
 };
 use state::{AppState, DEFAULT_RATE_LIMIT, DefaultRequestClassifier, RateLimiter};
 
+/// Initialize tokio-console subscriber for async task inspection.
+///
+/// Enabled via `--features console` at build time. When active, the gateway
+/// exposes an OTLP endpoint for `tokio-console` to connect.
+///
+/// ```sh
+/// cargo run --features console --bin gateway
+/// tokio-console  # in another terminal
+/// ```
+#[cfg(feature = "console")]
+fn init_console_subscriber() {
+    console_subscriber::init();
+}
+
 /// Build and run the gateway server.
 ///
 /// # Errors
@@ -53,6 +67,9 @@ use state::{AppState, DEFAULT_RATE_LIMIT, DefaultRequestClassifier, RateLimiter}
 /// Returns an error if configuration loading fails, the configured
 /// host/port is invalid, or the TCP listener cannot bind.
 pub async fn run() -> anyhow::Result<()> {
+    #[cfg(feature = "console")]
+    init_console_subscriber();
+
     // Initialize tracing
     tracing_subscriber::registry()
         .with(
