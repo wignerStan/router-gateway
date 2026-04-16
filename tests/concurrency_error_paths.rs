@@ -19,7 +19,7 @@ async fn rate_limiter_concurrent_exhaustion() {
 
     let mut handles = Vec::new();
     for _ in 0..10 {
-        let limiter = limiter.clone();
+        let limiter = Arc::clone(&limiter);
         handles.push(tokio::spawn(async move {
             let mut accepted = 0u64;
             let mut rejected = 0u64;
@@ -49,7 +49,7 @@ async fn rate_limiter_concurrent_exhaustion_multiple_ips() {
     let mut handles = Vec::new();
     // 4 IPs, each hitting the limit concurrently
     for ip_idx in 0..4u16 {
-        let limiter = limiter.clone();
+        let limiter = Arc::clone(&limiter);
         handles.push(tokio::spawn(async move {
             let ip = format!("10.0.0.{ip_idx}");
             let mut accepted = 0u64;
@@ -79,7 +79,7 @@ async fn rate_limiter_empty_ip_bypasses_limiting() {
     let mut handles = Vec::new();
 
     for _ in 0..100 {
-        let limiter = limiter.clone();
+        let limiter = Arc::clone(&limiter);
         handles.push(tokio::spawn(async move { limiter.check("") }));
     }
 
@@ -94,7 +94,7 @@ async fn rate_limiter_concurrent_different_ips_isolated() {
 
     let mut handles = Vec::new();
     for i in 0..50 {
-        let limiter = limiter.clone();
+        let limiter = Arc::clone(&limiter);
         handles.push(tokio::spawn(async move {
             let ip = format!("192.168.1.{i}");
             // Each IP should get exactly 2 accepts (the limit) then 8 rejects
@@ -129,7 +129,7 @@ async fn metrics_concurrent_failure_only_recording() {
 
     let mut handles = Vec::new();
     for _ in 0..10 {
-        let c = collector.clone();
+        let c = Arc::clone(&collector);
         handles.push(tokio::spawn(async move {
             for _ in 0..100 {
                 c.record_result("fail-auth", false, 200.0, 500).await;
@@ -155,7 +155,7 @@ async fn metrics_concurrent_reset_during_recording() {
     let mut handles = Vec::new();
 
     for _ in 0..5 {
-        let c = collector.clone();
+        let c = Arc::clone(&collector);
         handles.push(tokio::spawn(async move {
             for j in 0..200 {
                 c.record_result("reset-auth", j % 2 == 0, 100.0, 200).await;
@@ -164,7 +164,7 @@ async fn metrics_concurrent_reset_during_recording() {
     }
 
     for _ in 0..5 {
-        let c = collector.clone();
+        let c = Arc::clone(&collector);
         handles.push(tokio::spawn(async move {
             for _ in 0..50 {
                 c.reset("reset-auth").await;
@@ -196,7 +196,7 @@ async fn metrics_concurrent_cleanup_triggers_no_panic() {
 
     let mut handles = Vec::new();
     for i in 0..20 {
-        let c = collector.clone();
+        let c = Arc::clone(&collector);
         handles.push(tokio::spawn(async move {
             for _ in 0..50 {
                 c.record_result(&format!("auth-{i}"), true, 100.0, 200)
@@ -254,7 +254,7 @@ async fn metrics_concurrent_reset_all_during_recording() {
 
     // Recorders
     for i in 0..4 {
-        let c = collector.clone();
+        let c = Arc::clone(&collector);
         handles.push(tokio::spawn(async move {
             for _ in 0..100 {
                 c.record_result(&format!("auth-{i}"), true, 50.0, 200).await;
@@ -264,7 +264,7 @@ async fn metrics_concurrent_reset_all_during_recording() {
 
     // Reset-all callers
     for _ in 0..4 {
-        let c = collector.clone();
+        let c = Arc::clone(&collector);
         handles.push(tokio::spawn(async move {
             for _ in 0..20 {
                 c.reset_all().await;
@@ -303,7 +303,7 @@ async fn health_concurrent_failure_burst_then_recovery() {
     // Phase 1: concurrent failures
     let mut handles = Vec::new();
     for _ in 0..10 {
-        let m = manager.clone();
+        let m = Arc::clone(&manager);
         handles.push(tokio::spawn(async move {
             for _ in 0..5 {
                 m.update_from_result("burst-auth", false, 500).await;
@@ -322,7 +322,7 @@ async fn health_concurrent_failure_burst_then_recovery() {
     // Phase 2: concurrent recovery
     let mut handles = Vec::new();
     for _ in 0..10 {
-        let m = manager.clone();
+        let m = Arc::clone(&manager);
         handles.push(tokio::spawn(async move {
             for _ in 0..5 {
                 m.update_from_result("burst-auth", true, 200).await;
@@ -342,10 +342,14 @@ async fn health_concurrent_failure_burst_then_recovery() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn health_clone_concurrent_write_visibility() {
     let manager = HealthManager::new(HealthConfig::default());
+    // ALLOW: HealthManager::clone shares the same Arc<RwLock> — this is the
+    // documented pattern for shared health state (see HealthManager docs).
+    #[allow(clippy::clone_on_ref_ptr)]
     let clone = manager.clone();
 
     let mut handles = Vec::new();
 
+    #[allow(clippy::clone_on_ref_ptr)]
     let manager_clone = manager.clone();
     handles.push(tokio::spawn(async move {
         for i in 0..50 {
@@ -383,7 +387,7 @@ async fn health_concurrent_reset_during_updates() {
 
     // Updaters
     for _ in 0..5 {
-        let m = manager.clone();
+        let m = Arc::clone(&manager);
         handles.push(tokio::spawn(async move {
             for i in 0..100 {
                 m.update_from_result(
@@ -398,7 +402,7 @@ async fn health_concurrent_reset_during_updates() {
 
     // Resetters
     for _ in 0..5 {
-        let m = manager.clone();
+        let m = Arc::clone(&manager);
         handles.push(tokio::spawn(async move {
             for _ in 0..20 {
                 m.reset("reset-health-auth").await;
@@ -438,8 +442,8 @@ async fn metrics_and_health_concurrent_updates() {
 
     let mut handles = Vec::new();
     for _ in 0..8 {
-        let c = collector.clone();
-        let m = manager.clone();
+        let c = Arc::clone(&collector);
+        let m = Arc::clone(&manager);
         handles.push(tokio::spawn(async move {
             for j in 0..50 {
                 let success = j % 3 != 0;
@@ -485,9 +489,9 @@ async fn metrics_health_ratelimiter_stress() {
 
     let mut handles = Vec::new();
     for worker in 0..8 {
-        let c = collector.clone();
-        let m = manager.clone();
-        let l = limiter.clone();
+        let c = Arc::clone(&collector);
+        let m = Arc::clone(&manager);
+        let l = Arc::clone(&limiter);
         handles.push(tokio::spawn(async move {
             let ip = format!("10.0.{worker}.1");
             for j in 0..100 {
