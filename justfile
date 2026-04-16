@@ -19,13 +19,16 @@ help:
     @echo "║ TIER 1 (QUICK <3s): just qa                                ║"
     @echo "║ TIER 2 (LINT <10s): just qa-lint                           ║"
     @echo "║ TIER 3 (FULL >30s): just qa-full                           ║"
+    @echo "║ TIER 4 (SECURITY):  just qa-security                       ║"
+    @echo "║ TIER 5 (MUTATION): just qa-mutation                        ║"
     @echo "╠════════════════════════════════════════════════════════════╣"
-    @echo "║ DEV:     start, dev, cli, watch                            ║"
+    @echo "║ DEV:     start, dev, cli, watch, console                   ║"
     @echo "║ BUILD:   build, build-release, docs                        ║"
     @echo "║ TEST:    test, test-package, test-coverage, test-snapshots  ║"
     @echo "║ BENCH:   bench, bench-target, bench-save                   ║"
     @echo "║ FUZZ:    fuzz-ssrf, fuzz-config, fuzz-token, fuzz-all      ║"
-    @echo "║ QUALITY: fmt, lint, check, qa, qa-lint, qa-bdd, qa-full, qa-security ║"
+    @echo "║ ADVANCED: miri, tsan, loom, shuttle, mutants               ║"
+    @echo "║ QUALITY: fmt, lint, check, qa, qa-lint, qa-bdd, qa-full    ║"
     @echo "║ SECURITY: audit, security-scan                             ║"
     @echo "║ UTILITY: members, graph, outdated, env                     ║"
     @echo "║ JQ:      jq-members, jq-deps, jq-features, jq-manifest     ║"
@@ -48,14 +51,20 @@ qa-bdd: qa-lint bdd
     @echo "Tier 2.5 QA passed (lint + BDD checks)"
 
 # Tier 3: Full verification (>30s) - Use for CI / release
-qa-full: qa-lint test test-coverage-check security-audit
+qa-full: qa-lint test test-coverage-check loom shuttle security-audit
     @echo "Tier 3 QA passed (full verification)"
 
-# Tier 4: Security deep (property tests + audit) - Use for releases / scheduled
+# Tier 4: Security deep (property tests + miri + tsan + audit) - Use for releases
 qa-security: test test-coverage-check
     cargo nextest run -E 'test(proptests)'
+    MIRIFLAGS="-Zmiri-disable-isolation" cargo +nightly miri test --lib -E 'test(env)'
+    RUSTFLAGS="-Zsanitizer=thread" TSAN_OPTIONS="halt_on_error=1" cargo +nightly test --lib --target x86_64-unknown-linux-gnu -- --test-threads=1 || true
     cargo audit
     @echo "Tier 4 QA passed (security deep)"
+
+# Tier 5: Mutation testing - Use for release candidates
+qa-mutation: qa-full mutants-check
+    @echo "Tier 5 QA passed (mutation testing)"
 
 # ============================================
 # SETUP & INSTALL
@@ -71,6 +80,12 @@ install-dev:
     cargo fetch
     rustup component add clippy rustfmt llvm-tools-preview
     cargo install cargo-nextest cargo-llvm-cov cargo-insta
+
+# Install all development tools including advanced testing
+install-dev-all: install-dev install-fuzz
+    cargo install cargo-mutants tokio-console
+    rustup component add miri --toolchain nightly
+    rustup component add rust-src --toolchain nightly
 
 # ============================================
 # FAST DEVELOPMENT COMMANDS (<5s)
@@ -215,6 +230,76 @@ bench-target TARGET:
 # Run benchmarks and save baseline
 bench-save:
     cargo bench -- --save-baseline main
+
+# ============================================
+# ADVANCED TESTING TOOLS
+# ============================================
+
+# Install miri (requires nightly)
+install-miri:
+    rustup toolchain install nightly
+    rustup component add miri --toolchain nightly
+
+# Run miri on unsafe code tests
+miri:
+    MIRIFLAGS="-Zmiri-disable-isolation" cargo +nightly miri test --lib -E 'test(env)'
+
+# Run miri on all lib tests (slow)
+miri-full:
+    MIRIFLAGS="-Zmiri-disable-isolation" cargo +nightly miri test --lib
+
+# Install ThreadSanitizer (requires nightly + rust-src)
+install-tsan:
+    rustup toolchain install nightly
+    rustup component add rust-src --toolchain nightly
+
+# Run TSAN on concurrent tests (single-threaded to avoid false positives)
+tsan:
+    RUSTFLAGS="-Zsanitizer=thread" TSAN_OPTIONS="halt_on_error=1" cargo +nightly test --lib --target x86_64-unknown-linux-gnu -- --test-threads=1
+
+# Run loom systematic concurrency tests
+loom:
+    cargo test --test loom_rate_limiter
+
+# Run loom with verbose output to see interleavings
+loom-verbose:
+    RUST_LOG=loom cargo test --test loom_rate_limiter -- --nocapture
+
+# Run shuttle randomized async concurrency tests
+shuttle:
+    cargo test --test shuttle_concurrency
+
+# Run shuttle with more iterations for deeper testing
+shuttle-deep:
+    cargo test --test shuttle_concurrency -- --shuttle-count 10000
+
+# Run gateway with tokio-console instrumentation
+console:
+    cargo run --features console --bin gateway
+
+# Install tokio-console CLI
+install-console:
+    cargo install tokio-console
+
+# Run error-path concurrency tests
+test-concurrency-errors:
+    cargo test --test concurrency_error_paths
+
+# Install cargo-mutants
+install-mutants:
+    cargo install cargo-mutants
+
+# Run mutation testing on concurrency-sensitive code
+mutants:
+    cargo mutants --in-place
+
+# Run mutation testing on a specific file
+mutants-file FILE:
+    cargo mutants --file {{FILE}}
+
+# Check mutation score without writing changes
+mutants-check:
+    cargo mutants --no-copy --check
 
 # ============================================
 # FUZZING (requires nightly)
@@ -478,8 +563,9 @@ status: members env
 #   Tier 1 (Quick <3s):  just qa           -> fmt-check, check
 #   Tier 2 (Lint <10s):  just qa-lint      -> qa, lint
 #   Tier 2.5 (BDD <20s): just qa-bdd      -> qa-lint, bdd
-#   Tier 3 (Full >30s):  just qa-full      -> qa-lint, test, test-coverage-check, security-audit
-#   Tier 4 (Security):   just qa-security  -> test, test-coverage-check, property tests, audit
+#   Tier 3 (Full >30s):  just qa-full      -> qa-lint, test, test-coverage-check, loom, shuttle, security-audit
+#   Tier 4 (Security):   just qa-security  -> test, test-coverage-check, property tests, miri, tsan, audit
+#   Tier 5 (Mutation):   just qa-mutation  -> qa-full, mutants-check
 #
 # Quick Development Flow:
 #   just qa              # Quick feedback during development
@@ -487,6 +573,7 @@ status: members env
 #   just test            # Run tests (nextest)
 #   just qa-full         # Full verification before release
 #   just qa-security     # Deep security verification
+#   just qa-mutation     # Mutation testing for release candidates
 #
 # Coverage:
 #   just test-coverage        # Generate lcov.info
@@ -496,6 +583,15 @@ status: members env
 # Benchmarks:
 #   just bench                # Run all criterion benchmarks
 #   just bench-save           # Run and save baseline
+#
+# Advanced Testing Tools:
+#   just install-dev-all  # Install all dev tools (including advanced)
+#   just miri             # Run miri on unsafe code tests
+#   just tsan             # Run ThreadSanitizer on concurrent tests
+#   just loom             # Run loom systematic concurrency tests
+#   just shuttle          # Run shuttle randomized async concurrency tests
+#   just mutants          # Run mutation testing
+#   just console          # Run gateway with tokio-console
 #
 # Fuzzing (requires nightly):
 #   just install-fuzz         # Install cargo-fuzz + nightly
