@@ -10,6 +10,8 @@ pub mod selector;
 pub mod store;
 
 #[cfg(test)]
+mod test_helpers;
+#[cfg(test)]
 mod tests;
 
 pub use collectors::SQLiteHealthManager;

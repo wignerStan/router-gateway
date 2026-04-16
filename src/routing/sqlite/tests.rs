@@ -1309,4 +1309,147 @@ mod sqlite_tests {
             );
         }
     }
+
+    mod sqlx_fixtures {
+        use super::*;
+        use crate::routing::sqlite::test_helpers::*;
+
+        #[sqlx::test(migrations = "./migrations")]
+        async fn test_sqlx_fixture_store_write_load_metrics(pool: sqlx::SqlitePool) {
+            let store = store_from_pool(pool);
+
+            let metrics = sample_metrics(100, 95, 5, 150.0, 0.95);
+            store
+                .write_metrics("fixture-auth", &metrics)
+                .await
+                .expect("write should succeed");
+
+            let loaded = store
+                .load_metrics("fixture-auth")
+                .await
+                .expect("load should succeed")
+                .expect("should find metrics");
+
+            assert_eq!(loaded.total_requests, 100);
+            assert_eq!(loaded.success_count, 95);
+            assert!((loaded.avg_latency_ms - 150.0).abs() < 0.01);
+        }
+
+        #[sqlx::test(migrations = "./migrations")]
+        async fn test_sqlx_fixture_store_write_load_health(pool: sqlx::SqlitePool) {
+            let store = store_from_pool(pool);
+
+            let health = sample_health(HealthStatus::Healthy, 10, 0);
+            store
+                .write_health("fixture-auth", &health)
+                .await
+                .expect("write should succeed");
+
+            let loaded = store
+                .load_health("fixture-auth")
+                .await
+                .expect("load should succeed")
+                .expect("should find health");
+
+            assert_eq!(loaded.status, HealthStatus::Healthy);
+            assert_eq!(loaded.consecutive_successes, 10);
+        }
+
+        #[sqlx::test(migrations = "./migrations")]
+        async fn test_sqlx_fixture_upsert_semantics(pool: sqlx::SqlitePool) {
+            let store = store_from_pool(pool);
+
+            let v1 = sample_metrics(10, 9, 1, 100.0, 0.9);
+            store.write_metrics("upsert-auth", &v1).await.unwrap();
+
+            let v2 = sample_metrics(50, 45, 5, 80.0, 0.9);
+            store.write_metrics("upsert-auth", &v2).await.unwrap();
+
+            let loaded = store.load_metrics("upsert-auth").await.unwrap().unwrap();
+            assert_eq!(loaded.total_requests, 50);
+            assert_eq!(loaded.success_count, 45);
+            assert!((loaded.avg_latency_ms - 80.0).abs() < 0.01);
+        }
+
+        #[sqlx::test(migrations = "./migrations")]
+        async fn test_sqlx_fixture_error_counts_round_trip(pool: sqlx::SqlitePool) {
+            let store = store_from_pool(pool);
+
+            let mut errors = std::collections::HashMap::new();
+            errors.insert(500, 3);
+            errors.insert(429, 1);
+            let health = degraded_health_with_errors(errors);
+
+            store
+                .write_health("errors-auth", &health)
+                .await
+                .expect("write should succeed");
+
+            let loaded = store.load_health("errors-auth").await.unwrap().unwrap();
+
+            assert_eq!(loaded.status, HealthStatus::Degraded);
+            assert_eq!(loaded.error_counts.get(&500), Some(&3));
+            assert_eq!(loaded.error_counts.get(&429), Some(&1));
+        }
+
+        #[sqlx::test(migrations = "./migrations")]
+        async fn test_sqlx_fixture_status_history(pool: sqlx::SqlitePool) {
+            let store = store_from_pool(pool);
+
+            store
+                .write_status_history("hist-auth", 200, 50.0, true)
+                .await
+                .unwrap();
+            store
+                .write_status_history("hist-auth", 500, 200.0, false)
+                .await
+                .unwrap();
+
+            let (count, _min_ts) = store.get_history_stats().await.unwrap();
+            assert_eq!(count, 2);
+        }
+
+        #[sqlx::test(migrations = "./migrations")]
+        async fn test_sqlx_fixture_load_all(pool: sqlx::SqlitePool) {
+            let store = store_from_pool(pool);
+
+            for i in 1..=3i64 {
+                let metrics = sample_metrics(i * 10, i * 9, i, 100.0 + i as f64, 0.9);
+                store
+                    .write_metrics(&format!("auth-{i}"), &metrics)
+                    .await
+                    .unwrap();
+            }
+
+            let all = store.load_all_metrics().await.unwrap();
+            assert_eq!(all.len(), 3);
+            assert_eq!(all.get("auth-2").unwrap().total_requests, 20);
+        }
+
+        #[sqlx::test(migrations = "./migrations")]
+        async fn test_sqlx_fixture_cleanup(pool: sqlx::SqlitePool) {
+            let store = store_from_pool(pool);
+
+            for i in 0..5 {
+                store
+                    .write_status_history(&format!("auth-{i}"), 200, 100.0, true)
+                    .await
+                    .unwrap();
+            }
+
+            let (count, _) = store.get_history_stats().await.unwrap();
+            assert_eq!(count, 5);
+
+            let deleted = store.cleanup_old_history(0).await.unwrap();
+            assert!(deleted >= 0);
+        }
+
+        #[sqlx::test(migrations = "./migrations")]
+        async fn test_sqlx_fixture_missing_returns_none(pool: sqlx::SqlitePool) {
+            let store = store_from_pool(pool);
+
+            assert!(store.load_metrics("nonexistent").await.unwrap().is_none());
+            assert!(store.load_health("nonexistent").await.unwrap().is_none());
+        }
+    }
 }
