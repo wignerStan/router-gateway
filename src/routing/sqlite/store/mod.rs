@@ -76,7 +76,6 @@ impl SQLiteStore {
 
         let options = if cfg.database_path == ":memory:" {
             SqliteConnectOptions::from_str("sqlite::memory:")?
-                .journal_mode(SqliteJournalMode::Wal)
                 .busy_timeout(Duration::from_millis(cfg.busy_timeout_ms as u64))
                 .foreign_keys(true)
                 .synchronous(SqliteSynchronous::Normal)
@@ -93,10 +92,14 @@ impl SQLiteStore {
                 .synchronous(SqliteSynchronous::Normal)
         };
 
-        let pool = SqlitePoolOptions::new()
-            .max_connections(4)
-            .connect_with(options)
-            .await?;
+        let pool_options =
+            SqlitePoolOptions::new().max_connections(if cfg.database_path == ":memory:" {
+                1
+            } else {
+                4
+            });
+
+        let pool = pool_options.connect_with(options).await?;
 
         // Run migrations
         sqlx::migrate!("./migrations").run(&pool).await?;
@@ -115,11 +118,11 @@ impl SQLiteStore {
     ///
     /// Assumes migrations have already been applied to the pool.
     #[must_use]
-    pub fn from_pool(pool: SqlitePool) -> Self {
+    pub fn from_pool(pool: SqlitePool, enable_cache: bool) -> Self {
         Self {
             pool,
             db_path: ":memory:".to_string(),
-            cache_enabled: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            cache_enabled: Arc::new(std::sync::atomic::AtomicBool::new(enable_cache)),
             cache: Arc::new(RwLock::new(std::collections::HashMap::new())),
         }
     }
