@@ -11,7 +11,109 @@ use super::{CacheEntry, SQLiteStore};
 use crate::routing::health::{AuthHealth, HealthStatus};
 use crate::routing::metrics::AuthMetrics;
 use chrono::{DateTime, Utc};
+use sqlx::FromRow;
 use std::collections::HashMap;
+
+/// Row type for reading `auth_metrics` columns.
+#[derive(Debug, FromRow)]
+struct MetricsRow {
+    total_requests: i64,
+    success_count: i64,
+    failure_count: i64,
+    avg_latency_ms: f64,
+    min_latency_ms: f64,
+    max_latency_ms: f64,
+    success_rate: f64,
+    error_rate: f64,
+    consecutive_successes: i32,
+    consecutive_failures: i32,
+    last_request_time: String,
+    last_success_time: Option<String>,
+    last_failure_time: Option<String>,
+}
+
+/// Row type for reading `auth_metrics` with `auth_id` (`load_all`).
+#[derive(Debug, FromRow)]
+struct MetricsWithIdRow {
+    auth_id: String,
+    total_requests: i64,
+    success_count: i64,
+    failure_count: i64,
+    avg_latency_ms: f64,
+    min_latency_ms: f64,
+    max_latency_ms: f64,
+    success_rate: f64,
+    error_rate: f64,
+    consecutive_successes: i32,
+    consecutive_failures: i32,
+    last_request_time: String,
+    last_success_time: Option<String>,
+    last_failure_time: Option<String>,
+}
+
+/// Row type for reading `auth_health` columns.
+#[derive(Debug, FromRow)]
+struct HealthRow {
+    status: String,
+    consecutive_successes: i32,
+    consecutive_failures: i32,
+    last_status_change: String,
+    last_check_time: String,
+    unavailable_until: Option<String>,
+    error_counts: String,
+}
+
+/// Row type for reading `auth_health` with `auth_id` (`load_all`).
+#[derive(Debug, FromRow)]
+struct HealthWithIdRow {
+    auth_id: String,
+    status: String,
+    consecutive_successes: i32,
+    consecutive_failures: i32,
+    last_status_change: String,
+    last_check_time: String,
+    unavailable_until: Option<String>,
+    error_counts: String,
+}
+
+/// Parse RFC3339 datetime string, returning `Utc::now()` on failure.
+fn parse_datetime(s: &str) -> DateTime<Utc> {
+    DateTime::parse_from_rfc3339(s)
+        .map(|dt| dt.with_timezone(&Utc))
+        .inspect_err(|e| {
+            tracing::warn!("Failed to parse datetime '{s}': {e}");
+        })
+        .unwrap_or_else(|_| Utc::now())
+}
+
+/// Parse optional RFC3339 datetime string.
+fn parse_datetime_opt(s: Option<&str>) -> Option<DateTime<Utc>> {
+    s.and_then(|v| {
+        DateTime::parse_from_rfc3339(v)
+            .map(|dt| dt.with_timezone(&Utc))
+            .inspect_err(|e| {
+                tracing::warn!("Failed to parse datetime '{v}': {e}");
+            })
+            .ok()
+    })
+}
+
+/// Parse health status string.
+fn parse_health_status(s: &str) -> HealthStatus {
+    match s {
+        "Degraded" => HealthStatus::Degraded,
+        "Unhealthy" => HealthStatus::Unhealthy,
+        _ => HealthStatus::Healthy,
+    }
+}
+
+/// Parse `error_counts` JSON string.
+fn parse_error_counts(s: &str) -> HashMap<i32, i32> {
+    serde_json::from_str(s).unwrap_or_else(|e| {
+        tracing::warn!("Failed to parse error_counts JSON: {e}");
+        HashMap::default()
+    })
+}
 
 impl SQLiteStore {
     /// Write metrics to the database.
@@ -24,60 +126,53 @@ impl SQLiteStore {
     ///
     /// Panics if the cache write lock is poisoned (indicates data corruption from a prior panic).
     pub async fn write_metrics(&self, auth_id: &str, metrics: &AuthMetrics) -> Result<()> {
-        {
-            let db = self.db.lock().await;
+        let last_request_time = metrics.last_request_time.to_rfc3339();
+        let last_success_time = metrics.last_success_time.map(|t| t.to_rfc3339());
+        let last_failure_time = metrics.last_failure_time.map(|t| t.to_rfc3339());
 
-            let last_request_time = metrics.last_request_time.to_rfc3339();
-            let last_success_time = metrics.last_success_time.map(|t| t.to_rfc3339());
-            let last_failure_time = metrics.last_failure_time.map(|t| t.to_rfc3339());
+        sqlx::query(
+            "INSERT INTO auth_metrics (
+                auth_id, total_requests, success_count, failure_count,
+                avg_latency_ms, min_latency_ms, max_latency_ms,
+                success_rate, error_rate,
+                consecutive_successes, consecutive_failures,
+                last_request_time, last_success_time, last_failure_time,
+                updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, datetime('now'))
+            ON CONFLICT(auth_id) DO UPDATE SET
+                total_requests = excluded.total_requests,
+                success_count = excluded.success_count,
+                failure_count = excluded.failure_count,
+                avg_latency_ms = excluded.avg_latency_ms,
+                min_latency_ms = excluded.min_latency_ms,
+                max_latency_ms = excluded.max_latency_ms,
+                success_rate = excluded.success_rate,
+                error_rate = excluded.error_rate,
+                consecutive_successes = excluded.consecutive_successes,
+                consecutive_failures = excluded.consecutive_failures,
+                last_request_time = excluded.last_request_time,
+                last_success_time = excluded.last_success_time,
+                last_failure_time = excluded.last_failure_time,
+                updated_at = datetime('now')",
+        )
+        .bind(auth_id)
+        .bind(metrics.total_requests)
+        .bind(metrics.success_count)
+        .bind(metrics.failure_count)
+        .bind(metrics.avg_latency_ms)
+        .bind(metrics.min_latency_ms)
+        .bind(metrics.max_latency_ms)
+        .bind(metrics.success_rate)
+        .bind(metrics.error_rate)
+        .bind(metrics.consecutive_successes)
+        .bind(metrics.consecutive_failures)
+        .bind(&last_request_time)
+        .bind(&last_success_time)
+        .bind(&last_failure_time)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| SqliteError::query("write_metrics", e))?;
 
-            db.execute(
-                "INSERT INTO auth_metrics (
-                    auth_id, total_requests, success_count, failure_count,
-                    avg_latency_ms, min_latency_ms, max_latency_ms,
-                    success_rate, error_rate,
-                    consecutive_successes, consecutive_failures,
-                    last_request_time, last_success_time, last_failure_time,
-                    updated_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, datetime('now'))
-                ON CONFLICT(auth_id) DO UPDATE SET
-                    total_requests = excluded.total_requests,
-                    success_count = excluded.success_count,
-                    failure_count = excluded.failure_count,
-                    avg_latency_ms = excluded.avg_latency_ms,
-                    min_latency_ms = excluded.min_latency_ms,
-                    max_latency_ms = excluded.max_latency_ms,
-                    success_rate = excluded.success_rate,
-                    error_rate = excluded.error_rate,
-                    consecutive_successes = excluded.consecutive_successes,
-                    consecutive_failures = excluded.consecutive_failures,
-                    last_request_time = excluded.last_request_time,
-                    last_success_time = excluded.last_success_time,
-                    last_failure_time = excluded.last_failure_time,
-                    updated_at = datetime('now')",
-                rusqlite::params![
-                    auth_id,
-                    metrics.total_requests,
-                    metrics.success_count,
-                    metrics.failure_count,
-                    metrics.avg_latency_ms,
-                    metrics.min_latency_ms,
-                    metrics.max_latency_ms,
-                    metrics.success_rate,
-                    metrics.error_rate,
-                    metrics.consecutive_successes,
-                    metrics.consecutive_failures,
-                    last_request_time,
-                    last_success_time,
-                    last_failure_time,
-                ],
-            )
-            .map_err(|e| SqliteError::query("write_metrics", e))?;
-        }
-
-        // Relaxed ordering is safe: this flag is set once at construction and never
-        // modified. The RwLock guarding the actual cache data provides the necessary
-        // Acquire/Release synchronization.
         if self
             .cache_enabled
             .load(std::sync::atomic::Ordering::Relaxed)
@@ -110,44 +205,40 @@ impl SQLiteStore {
     ///
     /// Panics if the cache write lock is poisoned (indicates data corruption from a prior panic).
     pub async fn write_health(&self, auth_id: &str, health: &AuthHealth) -> Result<()> {
-        {
-            let db = self.db.lock().await;
+        let status = format!("{:?}", health.status);
+        let last_status_change = health.last_status_change.to_rfc3339();
+        let last_check_time = health.last_check_time.to_rfc3339();
+        let unavailable_until = health.unavailable_until.map(|t| t.to_rfc3339());
+        let error_counts =
+            serde_json::to_string(&health.error_counts).unwrap_or_else(|_| "{}".to_string());
 
-            let status = format!("{:?}", health.status);
-            let last_status_change = health.last_status_change.to_rfc3339();
-            let last_check_time = health.last_check_time.to_rfc3339();
-            let unavailable_until = health.unavailable_until.map(|t| t.to_rfc3339());
-            let error_counts =
-                serde_json::to_string(&health.error_counts).unwrap_or_else(|_| "{}".to_string());
-
-            db.execute(
-                "INSERT INTO auth_health (
-                    auth_id, status, consecutive_successes, consecutive_failures,
-                    last_status_change, last_check_time, unavailable_until,
-                    error_counts, updated_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'))
-                ON CONFLICT(auth_id) DO UPDATE SET
-                    status = excluded.status,
-                    consecutive_successes = excluded.consecutive_successes,
-                    consecutive_failures = excluded.consecutive_failures,
-                    last_status_change = excluded.last_status_change,
-                    last_check_time = excluded.last_check_time,
-                    unavailable_until = excluded.unavailable_until,
-                    error_counts = excluded.error_counts,
-                    updated_at = datetime('now')",
-                rusqlite::params![
-                    auth_id,
-                    status,
-                    health.consecutive_successes,
-                    health.consecutive_failures,
-                    last_status_change,
-                    last_check_time,
-                    unavailable_until,
-                    error_counts,
-                ],
-            )
-            .map_err(|e| SqliteError::query("write_health", e))?;
-        }
+        sqlx::query(
+            "INSERT INTO auth_health (
+                auth_id, status, consecutive_successes, consecutive_failures,
+                last_status_change, last_check_time, unavailable_until,
+                error_counts, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, datetime('now'))
+            ON CONFLICT(auth_id) DO UPDATE SET
+                status = excluded.status,
+                consecutive_successes = excluded.consecutive_successes,
+                consecutive_failures = excluded.consecutive_failures,
+                last_status_change = excluded.last_status_change,
+                last_check_time = excluded.last_check_time,
+                unavailable_until = excluded.unavailable_until,
+                error_counts = excluded.error_counts,
+                updated_at = datetime('now')",
+        )
+        .bind(auth_id)
+        .bind(&status)
+        .bind(health.consecutive_successes)
+        .bind(health.consecutive_failures)
+        .bind(&last_status_change)
+        .bind(&last_check_time)
+        .bind(&unavailable_until)
+        .bind(&error_counts)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| SqliteError::query("write_health", e))?;
 
         if self
             .cache_enabled
@@ -183,13 +274,16 @@ impl SQLiteStore {
         latency_ms: f64,
         success: bool,
     ) -> Result<()> {
-        let db = self.db.lock().await;
-
-        db.execute(
+        sqlx::query(
             "INSERT INTO status_code_history (auth_id, status_code, latency_ms, success, timestamp)
-            VALUES (?1, ?2, ?3, ?4, datetime('now'))",
-            rusqlite::params![auth_id, status_code, latency_ms, i32::from(success),],
+            VALUES ($1, $2, $3, $4, datetime('now'))",
         )
+        .bind(auth_id)
+        .bind(status_code)
+        .bind(latency_ms)
+        .bind(i32::from(success))
+        .execute(&self.pool)
+        .await
         .map_err(|e| SqliteError::query("write_status_history", e))?;
 
         Ok(())
@@ -220,90 +314,57 @@ impl SQLiteStore {
             }
         }
 
-        let result = {
-            let db = self.db.lock().await;
+        let row: Option<MetricsRow> = sqlx::query_as::<_, MetricsRow>(
+            "SELECT total_requests, success_count, failure_count,
+            avg_latency_ms, min_latency_ms, max_latency_ms,
+            success_rate, error_rate,
+            consecutive_successes, consecutive_failures,
+            last_request_time, last_success_time, last_failure_time
+            FROM auth_metrics WHERE auth_id = $1",
+        )
+        .bind(auth_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| SqliteError::query("load_metrics", e))?;
 
-            let mut stmt = db
-                .prepare(
-                    "SELECT total_requests, success_count, failure_count,
-                    avg_latency_ms, min_latency_ms, max_latency_ms,
-                    success_rate, error_rate,
-                    consecutive_successes, consecutive_failures,
-                    last_request_time, last_success_time, last_failure_time
-                    FROM auth_metrics WHERE auth_id = ?1",
-                )
-                .map_err(|e| SqliteError::query("prepare_metrics_query", e))?;
+        let Some(row) = row else { return Ok(None) };
 
-            stmt.query_row([auth_id], |row| {
-                let last_request_time_str: String = row.get(10)?;
-                let last_success_time_str: Option<String> = row.get(11)?;
-                let last_failure_time_str: Option<String> = row.get(12)?;
-
-                Ok(AuthMetrics {
-                    total_requests: row.get(0)?,
-                    success_count: row.get(1)?,
-                    failure_count: row.get(2)?,
-                    avg_latency_ms: row.get(3)?,
-                    min_latency_ms: row.get(4)?,
-                    max_latency_ms: row.get(5)?,
-                    success_rate: row.get(6)?,
-                    error_rate: row.get(7)?,
-                    consecutive_successes: row.get(8)?,
-                    consecutive_failures: row.get(9)?,
-                    last_request_time: DateTime::parse_from_rfc3339(&last_request_time_str)
-                        .map(|dt| dt.with_timezone(&Utc))
-                        .map_err(|e| {
-                            rusqlite::Error::FromSqlConversionFailure(
-                                10,
-                                rusqlite::types::Type::Text,
-                                Box::new(e),
-                            )
-                        })?,
-                    last_success_time: last_success_time_str.and_then(|s| {
-                        DateTime::parse_from_rfc3339(&s)
-                            .map(|dt| dt.with_timezone(&Utc))
-                            .inspect_err(|e| {
-                                tracing::warn!("Failed to parse last_success_time '{}': {}", s, e);
-                            })
-                            .ok()
-                    }),
-                    last_failure_time: last_failure_time_str.and_then(|s| {
-                        DateTime::parse_from_rfc3339(&s)
-                            .map(|dt| dt.with_timezone(&Utc))
-                            .inspect_err(|e| {
-                                tracing::warn!("Failed to parse last_failure_time '{}': {}", s, e);
-                            })
-                            .ok()
-                    }),
-                })
-            })
+        let metrics = AuthMetrics {
+            total_requests: row.total_requests,
+            success_count: row.success_count,
+            failure_count: row.failure_count,
+            avg_latency_ms: row.avg_latency_ms,
+            min_latency_ms: row.min_latency_ms,
+            max_latency_ms: row.max_latency_ms,
+            success_rate: row.success_rate,
+            error_rate: row.error_rate,
+            consecutive_successes: row.consecutive_successes,
+            consecutive_failures: row.consecutive_failures,
+            last_request_time: parse_datetime(&row.last_request_time),
+            last_success_time: parse_datetime_opt(row.last_success_time.as_deref()),
+            last_failure_time: parse_datetime_opt(row.last_failure_time.as_deref()),
         };
 
-        match result {
-            Ok(metrics) => {
-                if self
-                    .cache_enabled
-                    .load(std::sync::atomic::Ordering::Relaxed)
-                {
-                    let mut cache = self
-                        .cache
-                        .write()
-                        .expect("cache write lock poisoned: metrics write after load");
-                    let entry = cache
-                        .entry(auth_id.to_string())
-                        .or_insert_with(|| CacheEntry {
-                            metrics: None,
-                            health: None,
-                            timestamp: Utc::now(),
-                        });
-                    entry.metrics = Some(metrics.clone());
-                    entry.timestamp = Utc::now();
-                }
-                Ok(Some(metrics))
-            },
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(SqliteError::query("load_metrics", e)),
+        if self
+            .cache_enabled
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            let mut cache = self
+                .cache
+                .write()
+                .expect("cache write lock poisoned: metrics write after load");
+            let entry = cache
+                .entry(auth_id.to_string())
+                .or_insert_with(|| CacheEntry {
+                    metrics: None,
+                    health: None,
+                    timestamp: Utc::now(),
+                });
+            entry.metrics = Some(metrics.clone());
+            entry.timestamp = Utc::now();
         }
+
+        Ok(Some(metrics))
     }
 
     /// Load health from the database.
@@ -331,96 +392,48 @@ impl SQLiteStore {
             }
         }
 
-        let result = {
-            let db = self.db.lock().await;
+        let row: Option<HealthRow> = sqlx::query_as::<_, HealthRow>(
+            "SELECT status, consecutive_successes, consecutive_failures,
+            last_status_change, last_check_time, unavailable_until, error_counts
+            FROM auth_health WHERE auth_id = $1",
+        )
+        .bind(auth_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| SqliteError::query("load_health", e))?;
 
-            let mut stmt = db
-                .prepare(
-                    "SELECT status, consecutive_successes, consecutive_failures,
-                    last_status_change, last_check_time, unavailable_until, error_counts
-                    FROM auth_health WHERE auth_id = ?1",
-                )
-                .map_err(|e| SqliteError::query("prepare_health_query", e))?;
+        let Some(row) = row else { return Ok(None) };
 
-            stmt.query_row([auth_id], |row| {
-                let status_str: String = row.get(0)?;
-                let last_status_change_str: String = row.get(3)?;
-                let last_check_time_str: String = row.get(4)?;
-                let unavailable_until_str: Option<String> = row.get(5)?;
-                let error_counts_str: String = row.get(6)?;
-
-                let status = match status_str.as_str() {
-                    "Degraded" => HealthStatus::Degraded,
-                    "Unhealthy" => HealthStatus::Unhealthy,
-                    _ => HealthStatus::Healthy,
-                };
-
-                let error_counts: HashMap<i32, i32> = serde_json::from_str(&error_counts_str)
-                    .unwrap_or_else(|e| {
-                        tracing::warn!("Failed to parse error_counts JSON: {}", e);
-                        HashMap::default()
-                    });
-
-                Ok(AuthHealth {
-                    status,
-                    consecutive_successes: row.get(1)?,
-                    consecutive_failures: row.get(2)?,
-                    last_status_change: DateTime::parse_from_rfc3339(&last_status_change_str)
-                        .map(|dt| dt.with_timezone(&Utc))
-                        .map_err(|e| {
-                            rusqlite::Error::FromSqlConversionFailure(
-                                3,
-                                rusqlite::types::Type::Text,
-                                Box::new(e),
-                            )
-                        })?,
-                    last_check_time: DateTime::parse_from_rfc3339(&last_check_time_str)
-                        .map(|dt| dt.with_timezone(&Utc))
-                        .map_err(|e| {
-                            rusqlite::Error::FromSqlConversionFailure(
-                                4,
-                                rusqlite::types::Type::Text,
-                                Box::new(e),
-                            )
-                        })?,
-                    unavailable_until: unavailable_until_str.and_then(|s| {
-                        DateTime::parse_from_rfc3339(&s)
-                            .map(|dt| dt.with_timezone(&Utc))
-                            .inspect_err(|e| {
-                                tracing::warn!("Failed to parse unavailable_until '{}': {}", s, e);
-                            })
-                            .ok()
-                    }),
-                    error_counts,
-                })
-            })
+        let health = AuthHealth {
+            status: parse_health_status(&row.status),
+            consecutive_successes: row.consecutive_successes,
+            consecutive_failures: row.consecutive_failures,
+            last_status_change: parse_datetime(&row.last_status_change),
+            last_check_time: parse_datetime(&row.last_check_time),
+            unavailable_until: parse_datetime_opt(row.unavailable_until.as_deref()),
+            error_counts: parse_error_counts(&row.error_counts),
         };
 
-        match result {
-            Ok(health) => {
-                if self
-                    .cache_enabled
-                    .load(std::sync::atomic::Ordering::Relaxed)
-                {
-                    let mut cache = self
-                        .cache
-                        .write()
-                        .expect("cache write lock poisoned: health write after load");
-                    let entry = cache
-                        .entry(auth_id.to_string())
-                        .or_insert_with(|| CacheEntry {
-                            metrics: None,
-                            health: None,
-                            timestamp: Utc::now(),
-                        });
-                    entry.health = Some(health.clone());
-                    entry.timestamp = Utc::now();
-                }
-                Ok(Some(health))
-            },
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(SqliteError::query("load_health", e)),
+        if self
+            .cache_enabled
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            let mut cache = self
+                .cache
+                .write()
+                .expect("cache write lock poisoned: health write after load");
+            let entry = cache
+                .entry(auth_id.to_string())
+                .or_insert_with(|| CacheEntry {
+                    metrics: None,
+                    health: None,
+                    timestamp: Utc::now(),
+                });
+            entry.health = Some(health.clone());
+            entry.timestamp = Utc::now();
         }
+
+        Ok(Some(health))
     }
 
     /// Load all metrics from the database.
@@ -429,85 +442,42 @@ impl SQLiteStore {
     ///
     /// Returns an error if the SQL query or row mapping fails.
     pub async fn load_all_metrics(&self) -> Result<HashMap<String, AuthMetrics>> {
-        let db = self.db.lock().await;
+        let rows: Vec<MetricsWithIdRow> = sqlx::query_as::<_, MetricsWithIdRow>(
+            "SELECT auth_id, total_requests, success_count, failure_count,
+            avg_latency_ms, min_latency_ms, max_latency_ms,
+            success_rate, error_rate,
+            consecutive_successes, consecutive_failures,
+            last_request_time, last_success_time, last_failure_time
+            FROM auth_metrics",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| SqliteError::query("load_all_metrics", e))?;
 
-        let mut stmt = db
-            .prepare(
-                "SELECT auth_id, total_requests, success_count, failure_count,
-                avg_latency_ms, min_latency_ms, max_latency_ms,
-                success_rate, error_rate,
-                consecutive_successes, consecutive_failures,
-                last_request_time, last_success_time, last_failure_time
-                FROM auth_metrics",
-            )
-            .map_err(|e| SqliteError::query("prepare_all_metrics_query", e))?;
-
-        let rows = stmt
-            .query_map([], |row| {
-                let auth_id: String = row.get(0)?;
-                let last_request_time_str: String = row.get(11)?;
-                let last_success_time_str: Option<String> = row.get(12)?;
-                let last_failure_time_str: Option<String> = row.get(13)?;
-
-                Ok((
-                    auth_id,
-                    AuthMetrics {
-                        total_requests: row.get(1)?,
-                        success_count: row.get(2)?,
-                        failure_count: row.get(3)?,
-                        avg_latency_ms: row.get(4)?,
-                        min_latency_ms: row.get(5)?,
-                        max_latency_ms: row.get(6)?,
-                        success_rate: row.get(7)?,
-                        error_rate: row.get(8)?,
-                        consecutive_successes: row.get(9)?,
-                        consecutive_failures: row.get(10)?,
-                        last_request_time: DateTime::parse_from_rfc3339(&last_request_time_str)
-                            .map_or_else(
-                                |e| {
-                                    tracing::warn!(
-                                        "Failed to parse last_request_time '{}': {}",
-                                        last_request_time_str,
-                                        e
-                                    );
-                                    Utc::now()
-                                },
-                                |dt| dt.with_timezone(&Utc),
-                            ),
-                        last_success_time: last_success_time_str.and_then(|s| {
-                            DateTime::parse_from_rfc3339(&s)
-                                .map(|dt| dt.with_timezone(&Utc))
-                                .inspect_err(|e| {
-                                    tracing::warn!(
-                                        "Failed to parse last_success_time '{}': {}",
-                                        s,
-                                        e
-                                    );
-                                })
-                                .ok()
-                        }),
-                        last_failure_time: last_failure_time_str.and_then(|s| {
-                            DateTime::parse_from_rfc3339(&s)
-                                .map(|dt| dt.with_timezone(&Utc))
-                                .inspect_err(|e| {
-                                    tracing::warn!(
-                                        "Failed to parse last_failure_time '{}': {}",
-                                        s,
-                                        e
-                                    );
-                                })
-                                .ok()
-                        }),
-                    },
-                ))
+        let metrics_map: HashMap<String, AuthMetrics> = rows
+            .into_iter()
+            .map(|row| {
+                let auth_id = row.auth_id.clone();
+                let metrics = AuthMetrics {
+                    total_requests: row.total_requests,
+                    success_count: row.success_count,
+                    failure_count: row.failure_count,
+                    avg_latency_ms: row.avg_latency_ms,
+                    min_latency_ms: row.min_latency_ms,
+                    max_latency_ms: row.max_latency_ms,
+                    success_rate: row.success_rate,
+                    error_rate: row.error_rate,
+                    consecutive_successes: row.consecutive_successes,
+                    consecutive_failures: row.consecutive_failures,
+                    last_request_time: parse_datetime(&row.last_request_time),
+                    last_success_time: parse_datetime_opt(row.last_success_time.as_deref()),
+                    last_failure_time: parse_datetime_opt(row.last_failure_time.as_deref()),
+                };
+                (auth_id, metrics)
             })
-            .map_err(|e| SqliteError::query("start_all_metrics_query", e))?;
+            .collect();
 
-        let metrics_map = rows
-            .collect::<std::result::Result<Vec<_>, rusqlite::Error>>()
-            .map_err(|e| SqliteError::query("map_row_to_metric", e))?;
-
-        Ok(metrics_map.into_iter().collect())
+        Ok(metrics_map)
     }
 
     /// Load all health from the database.
@@ -516,90 +486,33 @@ impl SQLiteStore {
     ///
     /// Returns an error if the SQL query or row mapping fails.
     pub async fn load_all_health(&self) -> Result<HashMap<String, AuthHealth>> {
-        let db = self.db.lock().await;
+        let rows: Vec<HealthWithIdRow> = sqlx::query_as::<_, HealthWithIdRow>(
+            "SELECT auth_id, status, consecutive_successes, consecutive_failures,
+            last_status_change, last_check_time, unavailable_until, error_counts
+            FROM auth_health",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| SqliteError::query("load_all_health", e))?;
 
-        let mut stmt = db
-            .prepare(
-                "SELECT auth_id, status, consecutive_successes, consecutive_failures,
-                last_status_change, last_check_time, unavailable_until, error_counts
-                FROM auth_health",
-            )
-            .map_err(|e| SqliteError::query("prepare_all_health_query", e))?;
-
-        let rows = stmt
-            .query_map([], |row| {
-                let auth_id: String = row.get(0)?;
-                let status_str: String = row.get(1)?;
-                let last_status_change_str: String = row.get(4)?;
-                let last_check_time_str: String = row.get(5)?;
-                let unavailable_until_str: Option<String> = row.get(6)?;
-                let error_counts_str: String = row.get(7)?;
-
-                let status = match status_str.as_str() {
-                    "Degraded" => HealthStatus::Degraded,
-                    "Unhealthy" => HealthStatus::Unhealthy,
-                    _ => HealthStatus::Healthy,
+        let health_map: HashMap<String, AuthHealth> = rows
+            .into_iter()
+            .map(|row| {
+                let auth_id = row.auth_id.clone();
+                let health = AuthHealth {
+                    status: parse_health_status(&row.status),
+                    consecutive_successes: row.consecutive_successes,
+                    consecutive_failures: row.consecutive_failures,
+                    last_status_change: parse_datetime(&row.last_status_change),
+                    last_check_time: parse_datetime(&row.last_check_time),
+                    unavailable_until: parse_datetime_opt(row.unavailable_until.as_deref()),
+                    error_counts: parse_error_counts(&row.error_counts),
                 };
-
-                let error_counts: HashMap<i32, i32> = serde_json::from_str(&error_counts_str)
-                    .unwrap_or_else(|e| {
-                        tracing::warn!("Failed to parse error_counts JSON: {}", e);
-                        HashMap::default()
-                    });
-
-                Ok((
-                    auth_id,
-                    AuthHealth {
-                        status,
-                        consecutive_successes: row.get(2)?,
-                        consecutive_failures: row.get(3)?,
-                        last_status_change: DateTime::parse_from_rfc3339(&last_status_change_str)
-                            .map_or_else(
-                                |e| {
-                                    tracing::warn!(
-                                        "Failed to parse last_status_change '{}': {}",
-                                        last_status_change_str,
-                                        e
-                                    );
-                                    Utc::now()
-                                },
-                                |dt| dt.with_timezone(&Utc),
-                            ),
-                        last_check_time: DateTime::parse_from_rfc3339(&last_check_time_str)
-                            .map_or_else(
-                                |e| {
-                                    tracing::warn!(
-                                        "Failed to parse last_check_time '{}': {}",
-                                        last_check_time_str,
-                                        e
-                                    );
-                                    Utc::now()
-                                },
-                                |dt| dt.with_timezone(&Utc),
-                            ),
-                        unavailable_until: unavailable_until_str.and_then(|s| {
-                            DateTime::parse_from_rfc3339(&s)
-                                .map(|dt| dt.with_timezone(&Utc))
-                                .inspect_err(|e| {
-                                    tracing::warn!(
-                                        "Failed to parse unavailable_until '{}': {}",
-                                        s,
-                                        e
-                                    );
-                                })
-                                .ok()
-                        }),
-                        error_counts,
-                    },
-                ))
+                (auth_id, health)
             })
-            .map_err(|e| SqliteError::query("start_all_health_query", e))?;
+            .collect();
 
-        let health_map = rows
-            .collect::<std::result::Result<Vec<_>, rusqlite::Error>>()
-            .map_err(|e| SqliteError::query("map_row_to_health", e))?;
-
-        Ok(health_map.into_iter().collect())
+        Ok(health_map)
     }
 
     /// Cleanup old history records.
@@ -612,17 +525,13 @@ impl SQLiteStore {
         let cutoff = Utc::now() - chrono::Duration::seconds(max_age_seconds);
         let cutoff_str = cutoff.to_rfc3339();
 
-        let result = {
-            let db = self.db.lock().await;
+        let result = sqlx::query("DELETE FROM status_code_history WHERE timestamp < $1")
+            .bind(&cutoff_str)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| SqliteError::query("cleanup_old_history", e))?;
 
-            db.execute(
-                "DELETE FROM status_code_history WHERE timestamp < ?1",
-                [&cutoff_str],
-            )
-            .map_err(|e| SqliteError::query("cleanup_old_history", e))?
-        };
-
-        Ok(result as i64)
+        Ok(result.rows_affected() as i64)
     }
 
     /// Get history statistics.
@@ -631,27 +540,14 @@ impl SQLiteStore {
     ///
     /// Returns an error if the query or row mapping fails.
     pub async fn get_history_stats(&self) -> Result<(i64, Option<DateTime<Utc>>)> {
-        let db = self.db.lock().await;
+        let row: (i64, Option<String>) =
+            sqlx::query_as("SELECT COUNT(*), MIN(timestamp) FROM status_code_history")
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|e| SqliteError::query("get_history_stats", e))?;
 
-        let mut stmt = db
-            .prepare("SELECT COUNT(*), MIN(timestamp) FROM status_code_history")
-            .map_err(|e| SqliteError::query("prepare_history_stats_query", e))?;
+        let min_timestamp = parse_datetime_opt(row.1.as_deref());
 
-        stmt.query_row([], |row| {
-            let count: i64 = row.get(0)?;
-            let min_timestamp_str: Option<String> = row.get(1)?;
-
-            let min_timestamp = min_timestamp_str.and_then(|s| {
-                DateTime::parse_from_rfc3339(&s)
-                    .map(|dt| dt.with_timezone(&Utc))
-                    .inspect_err(|e| {
-                        tracing::warn!("Failed to parse min_timestamp '{}': {}", s, e);
-                    })
-                    .ok()
-            });
-
-            Ok((count, min_timestamp))
-        })
-        .map_err(|e| SqliteError::query("get_history_stats", e))
+        Ok((row.0, min_timestamp))
     }
 }

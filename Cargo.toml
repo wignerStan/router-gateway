@@ -67,7 +67,8 @@ url = "2.5"
 rand = "0.9"
 
 # Database
-rusqlite = { version = "0.31", features = ["bundled"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "migrate"] }
+libsqlite3-sys = { version = "0.30", features = ["bundled"] }
 
 # Validation
 jsonschema = "0.22"

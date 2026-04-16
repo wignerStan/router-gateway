@@ -5,21 +5,18 @@ use thiserror::Error;
 pub enum SqliteError {
     /// Database open or connection failure.
     #[error("cannot open database: {0}")]
-    Connection(#[from] rusqlite::Error),
+    Connection(#[from] sqlx::Error),
     /// Prepared statement execution, row read, or generic query failure.
     #[error("cannot execute {operation}: {source}")]
     Query {
         /// Name of the operation that failed
         operation: &'static str,
-        /// Underlying rusqlite error
-        source: rusqlite::Error,
+        /// Underlying sqlx error
+        source: sqlx::Error,
     },
-    /// Schema migration: CREATE TABLE, CREATE INDEX, PRAGMA.
-    #[error("cannot apply schema migration: {source}")]
-    Schema {
-        /// Underlying rusqlite error
-        source: rusqlite::Error,
-    },
+    /// Schema migration failure.
+    #[error("cannot apply schema migration: {0}")]
+    Schema(#[from] sqlx::migrate::MigrateError),
     /// Serde serialization/deserialization failure.
     #[error("cannot serialize data: {0}")]
     Serialization(String),
@@ -28,7 +25,7 @@ pub enum SqliteError {
 impl SqliteError {
     /// Convenience constructor for query errors.
     #[must_use]
-    pub const fn query(operation: &'static str, source: rusqlite::Error) -> Self {
+    pub const fn query(operation: &'static str, source: sqlx::Error) -> Self {
         Self::Query { operation, source }
     }
 }
