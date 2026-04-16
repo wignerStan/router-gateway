@@ -33,7 +33,6 @@ use gateway::{build_app_router, build_app_state};
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Instant;
-use tower::ServiceExt;
 
 fn create_test_state() -> AppState {
     AppState {
@@ -148,18 +147,12 @@ async fn test_models_endpoint_with_credentials() {
         .route("/api/models", get(list_models))
         .with_state(state);
 
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/models")
-                .body(Body::empty())
-                .expect("time went backwards"),
-        )
-        .await
-        .expect("time went backwards");
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let list: serde_json::Value = common::read_json(response).await;
+    let list: serde_json::Value = common::send_json(
+        &app,
+        common::RequestBuilder::get("/api/models").build(),
+        StatusCode::OK,
+    )
+    .await;
     assert_eq!(list["count"], 1);
     assert_eq!(list["models"][0]["id"], "gpt-4");
 }
@@ -171,19 +164,12 @@ async fn test_health_endpoint_returns_status() {
         .route("/health", get(health_check))
         .with_state(state);
 
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/health")
-                .body(Body::empty())
-                .expect("time went backwards"),
-        )
-        .await
-        .expect("time went backwards");
-
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let health: HealthStatus = common::read_json(response).await;
+    let health: HealthStatus = common::send_json(
+        &app,
+        common::RequestBuilder::get("/health").build(),
+        StatusCode::OK,
+    )
+    .await;
 
     assert_eq!(health.status, "healthy");
 }
@@ -192,16 +178,7 @@ async fn test_health_endpoint_returns_status() {
 async fn test_root_endpoint() {
     let app = Router::new().route("/", get(root));
 
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/")
-                .body(Body::empty())
-                .expect("time went backwards"),
-        )
-        .await
-        .expect("time went backwards");
-
+    let response = common::send(&app, common::RequestBuilder::get("/").build()).await;
     assert_eq!(response.status(), StatusCode::OK);
 }
 
@@ -212,16 +189,7 @@ async fn test_models_endpoint() {
         .route("/api/models", get(list_models))
         .with_state(state);
 
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/models")
-                .body(Body::empty())
-                .expect("time went backwards"),
-        )
-        .await
-        .expect("time went backwards");
-
+    let response = common::send(&app, common::RequestBuilder::get("/api/models").build()).await;
     assert_eq!(response.status(), StatusCode::OK);
 }
 
@@ -268,16 +236,7 @@ async fn test_route_endpoint() {
         .route("/api/route", get(route_request))
         .with_state(state);
 
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/api/route")
-                .body(Body::empty())
-                .expect("time went backwards"),
-        )
-        .await
-        .expect("time went backwards");
-
+    let response = common::send(&app, common::RequestBuilder::get("/api/route").build()).await;
     assert_eq!(response.status(), StatusCode::OK);
 }
 
@@ -304,20 +263,15 @@ mod public_endpoints {
     async fn test_root_response_structure() {
         let state = create_test_state_overrides(TestOverrides::default());
         let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-        let mut request = Request::builder()
-            .uri("/")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-
-        let response = app.oneshot(request).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let value = common::read_json::<serde_json::Value>(response).await;
+        let value = common::send_json::<serde_json::Value>(
+            &app,
+            common::RequestBuilder::get("/")
+                .with_connect_info(common::test_addr())
+                .build(),
+            StatusCode::OK,
+        )
+        .await;
         assert_eq!(value["name"], "Gateway API");
         assert_eq!(value["version"], "0.1.0");
         assert!(value["features"].is_array());
@@ -331,20 +285,15 @@ mod public_endpoints {
     async fn test_health_response_structure() {
         let state = create_test_state_overrides(TestOverrides::default());
         let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-        let mut request = Request::builder()
-            .uri("/health")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-
-        let response = app.oneshot(request).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let health: HealthStatus = common::read_json(response).await;
+        let health: HealthStatus = common::send_json(
+            &app,
+            common::RequestBuilder::get("/health")
+                .with_connect_info(common::test_addr())
+                .build(),
+            StatusCode::OK,
+        )
+        .await;
 
         assert_eq!(health.status, "healthy");
         assert_eq!(health.credential_count, 0);
@@ -373,18 +322,15 @@ mod public_endpoints {
             ..Default::default()
         });
         let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-        let mut request = Request::builder()
-            .uri("/health")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-
-        let response = app.oneshot(request).await.expect("time went backwards");
-        let health: HealthStatus = common::read_json(response).await;
+        let health: HealthStatus = common::send_json(
+            &app,
+            common::RequestBuilder::get("/health")
+                .with_connect_info(common::test_addr())
+                .build(),
+            StatusCode::OK,
+        )
+        .await;
 
         assert_eq!(health.credential_count, 2);
         assert_eq!(health.healthy_count, 2);
@@ -416,18 +362,15 @@ mod public_endpoints {
             ..Default::default()
         });
         let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-        let mut request = Request::builder()
-            .uri("/health")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-
-        let response = app.oneshot(request).await.expect("time went backwards");
-        let health: HealthStatus = common::read_json(response).await;
+        let health: HealthStatus = common::send_json(
+            &app,
+            common::RequestBuilder::get("/health")
+                .with_connect_info(common::test_addr())
+                .build(),
+            StatusCode::OK,
+        )
+        .await;
 
         assert_eq!(health.credential_count, 3);
         assert_eq!(health.healthy_count, 3);
@@ -439,30 +382,23 @@ mod public_endpoints {
     async fn test_public_endpoints_no_auth() {
         let state = create_test_state_overrides(TestOverrides::default());
         let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-        let mut request = Request::builder()
-            .uri("/")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-        let response = app
-            .clone()
-            .oneshot(request)
-            .await
-            .expect("time went backwards");
+        let response = common::send(
+            &app,
+            common::RequestBuilder::get("/")
+                .with_connect_info(common::test_addr())
+                .build(),
+        )
+        .await;
         assert_eq!(response.status(), StatusCode::OK);
 
-        let mut request = Request::builder()
-            .uri("/health")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-        let response = app.oneshot(request).await.expect("time went backwards");
+        let response = common::send(
+            &app,
+            common::RequestBuilder::get("/health")
+                .with_connect_info(common::test_addr())
+                .build(),
+        )
+        .await;
         assert_eq!(response.status(), StatusCode::OK);
     }
 }
@@ -478,17 +414,14 @@ mod protected_endpoints {
     async fn test_models_requires_auth() {
         let state = create_test_state_overrides(TestOverrides::default());
         let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-        let mut request = Request::builder()
-            .uri("/api/models")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-
-        let response = app.oneshot(request).await.expect("time went backwards");
+        let response = common::send(
+            &app,
+            common::RequestBuilder::get("/api/models")
+                .with_connect_info(common::test_addr())
+                .build(),
+        )
+        .await;
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
@@ -496,17 +429,14 @@ mod protected_endpoints {
     async fn test_route_requires_auth() {
         let state = create_test_state_overrides(TestOverrides::default());
         let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-        let mut request = Request::builder()
-            .uri("/api/route")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-
-        let response = app.oneshot(request).await.expect("time went backwards");
+        let response = common::send(
+            &app,
+            common::RequestBuilder::get("/api/route")
+                .with_connect_info(common::test_addr())
+                .build(),
+        )
+        .await;
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
@@ -514,26 +444,20 @@ mod protected_endpoints {
     async fn test_chat_completions_requires_auth() {
         let state = create_test_state_overrides(TestOverrides::default());
         let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-        let body = Body::from(
-            serde_json::to_string(&json!({
-                "model": "gpt-4",
-                "messages": [{"role": "user", "content": "hello"}]
-            }))
-            .expect("time went backwards"),
-        );
-        let mut request = Request::builder()
-            .method("POST")
-            .uri("/v1/chat/completions")
-            .header("content-type", "application/json")
-            .body(body)
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-
-        let response = app.oneshot(request).await.expect("time went backwards");
+        let response = common::send(
+            &app,
+            common::RequestBuilder::post_json(
+                "/v1/chat/completions",
+                &json!({
+                    "model": "gpt-4",
+                    "messages": [{"role": "user", "content": "hello"}]
+                }),
+            )
+            .with_connect_info(common::test_addr())
+            .build(),
+        )
+        .await;
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
@@ -549,21 +473,16 @@ mod protected_endpoints {
             ..Default::default()
         });
         let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-        let mut request = Request::builder()
-            .uri("/api/models")
-            .header("authorization", "Bearer test-token")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-
-        let response = app.oneshot(request).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let value = common::read_json::<serde_json::Value>(response).await;
+        let value = common::send_json::<serde_json::Value>(
+            &app,
+            common::RequestBuilder::get("/api/models")
+                .with_auth("test-token")
+                .with_connect_info(common::test_addr())
+                .build(),
+            StatusCode::OK,
+        )
+        .await;
 
         assert!(value["models"].is_array());
         assert!(
@@ -583,28 +502,17 @@ mod protected_endpoints {
 mod chat_completions {
     use super::*;
 
-    fn chat_request_body() -> Body {
-        Body::from(
-            serde_json::to_string(&json!({
+    fn make_chat_request(addr: std::net::SocketAddr) -> Request<Body> {
+        common::RequestBuilder::post_json(
+            "/v1/chat/completions",
+            &json!({
                 "model": "gpt-4",
                 "messages": [{"role": "user", "content": "Hello"}]
-            }))
-            .expect("time went backwards"),
+            }),
         )
-    }
-
-    fn make_chat_request(addr: std::net::SocketAddr) -> Request<Body> {
-        let mut request = Request::builder()
-            .method("POST")
-            .uri("/v1/chat/completions")
-            .header("content-type", "application/json")
-            .header("authorization", "Bearer test-token")
-            .body(chat_request_body())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(addr));
-        request
+        .with_auth("test-token")
+        .with_connect_info(addr)
+        .build()
     }
 
     #[tokio::test]
@@ -620,15 +528,13 @@ mod chat_completions {
             ..Default::default()
         });
         let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-        let response = app
-            .oneshot(make_chat_request(test_addr))
-            .await
-            .expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
-
-        let value = common::read_json::<serde_json::Value>(response).await;
+        let value = common::send_json::<serde_json::Value>(
+            &app,
+            make_chat_request(common::test_addr()),
+            StatusCode::SERVICE_UNAVAILABLE,
+        )
+        .await;
         assert_eq!(value["error"]["type"], common::ERR_NO_ROUTE);
         assert!(
             value["error"]["message"]
@@ -645,15 +551,13 @@ mod chat_completions {
             ..Default::default()
         });
         let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-        let response = app
-            .oneshot(make_chat_request(test_addr))
-            .await
-            .expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
-
-        let value = common::read_json::<serde_json::Value>(response).await;
+        let value = common::send_json::<serde_json::Value>(
+            &app,
+            make_chat_request(common::test_addr()),
+            StatusCode::SERVICE_UNAVAILABLE,
+        )
+        .await;
 
         assert_eq!(value["error"]["type"], common::ERR_NO_ROUTE);
     }
@@ -672,15 +576,13 @@ mod chat_completions {
         });
         register_models_in_state_all(&mut state);
         let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-        let response = app
-            .oneshot(make_chat_request(test_addr))
-            .await
-            .expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let value = common::read_json::<serde_json::Value>(response).await;
+        let value = common::send_json::<serde_json::Value>(
+            &app,
+            make_chat_request(common::test_addr()),
+            StatusCode::OK,
+        )
+        .await;
 
         let gw = &value["_gateway"];
         assert!(gw.is_object(), "Expected _gateway object in response");
@@ -711,15 +613,13 @@ mod chat_completions {
         });
         register_models_in_state_all(&mut state);
         let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-        let response = app
-            .oneshot(make_chat_request(test_addr))
-            .await
-            .expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let value = common::read_json::<serde_json::Value>(response).await;
+        let value = common::send_json::<serde_json::Value>(
+            &app,
+            make_chat_request(common::test_addr()),
+            StatusCode::OK,
+        )
+        .await;
 
         let caps = &value["_gateway"]["classification"]["capabilities"];
         assert_eq!(caps["vision"], false);
@@ -764,31 +664,24 @@ mod middleware_composition {
     async fn test_security_headers_on_all_responses() {
         let state = create_test_state_overrides(TestOverrides::default());
         let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-        let mut request = Request::builder()
-            .uri("/health")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-        let response = app
-            .clone()
-            .oneshot(request)
-            .await
-            .expect("time went backwards");
+        let response = common::send(
+            &app,
+            common::RequestBuilder::get("/health")
+                .with_connect_info(common::test_addr())
+                .build(),
+        )
+        .await;
         check_security_headers(response.headers());
 
-        let mut request = Request::builder()
-            .uri("/api/models")
-            .header("authorization", "Bearer test-token")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-        let response = app.oneshot(request).await.expect("time went backwards");
+        let response = common::send(
+            &app,
+            common::RequestBuilder::get("/api/models")
+                .with_auth("test-token")
+                .with_connect_info(common::test_addr())
+                .build(),
+        )
+        .await;
         check_security_headers(response.headers());
     }
 
@@ -796,16 +689,14 @@ mod middleware_composition {
     async fn test_security_headers_on_error_responses() {
         let state = create_test_state_overrides(TestOverrides::default());
         let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-        let mut request = Request::builder()
-            .uri("/api/models")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-        let response = app.oneshot(request).await.expect("time went backwards");
+        let response = common::send(
+            &app,
+            common::RequestBuilder::get("/api/models")
+                .with_connect_info(common::test_addr())
+                .build(),
+        )
+        .await;
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         check_security_headers(response.headers());
     }
@@ -814,17 +705,15 @@ mod middleware_composition {
     async fn test_auth_before_handler() {
         let state = create_test_state_overrides(TestOverrides::default());
         let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-        let mut request = Request::builder()
-            .uri("/api/models")
-            .header("authorization", "Bearer invalid-token")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-        let response = app.oneshot(request).await.expect("time went backwards");
+        let response = common::send(
+            &app,
+            common::RequestBuilder::get("/api/models")
+                .with_auth("invalid-token")
+                .with_connect_info(common::test_addr())
+                .build(),
+        )
+        .await;
 
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         assert_ne!(response.status(), StatusCode::NOT_FOUND);
@@ -838,35 +727,26 @@ mod middleware_composition {
             ..Default::default()
         });
         let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
-        let mut request = Request::builder()
-            .uri("/health")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-        let response = app
-            .clone()
-            .oneshot(request)
-            .await
-            .expect("time went backwards");
+        let response = common::send(
+            &app,
+            common::RequestBuilder::get("/health")
+                .with_connect_info(common::test_addr())
+                .build(),
+        )
+        .await;
         assert_eq!(response.status(), StatusCode::OK);
 
-        // No auth header — if auth ran before rate-limit, this would
+        // No auth header -- if auth ran before rate-limit, this would
         // return 401 UNAUTHORIZED, not 429 TOO_MANY_REQUESTS.
-        let mut request = Request::builder()
-            .uri("/api/models")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-        let response = app.oneshot(request).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
-
-        let value = common::read_json::<serde_json::Value>(response).await;
+        let value = common::send_json::<serde_json::Value>(
+            &app,
+            common::RequestBuilder::get("/api/models")
+                .with_connect_info(common::test_addr())
+                .build(),
+            StatusCode::TOO_MANY_REQUESTS,
+        )
+        .await;
         assert_eq!(value["error"]["type"], common::ERR_RATE_LIMIT);
     }
 
@@ -877,46 +757,34 @@ mod middleware_composition {
             ..Default::default()
         });
         let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
 
         // Exhaust the rate limit on /health
-        let mut request = Request::builder()
-            .uri("/health")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-        let response = app
-            .clone()
-            .oneshot(request)
-            .await
-            .expect("time went backwards");
+        let response = common::send(
+            &app,
+            common::RequestBuilder::get("/health")
+                .with_connect_info(common::test_addr())
+                .build(),
+        )
+        .await;
         assert_eq!(response.status(), StatusCode::OK);
 
         // Both /health and / should now be rate-limited
-        let mut request = Request::builder()
-            .uri("/health")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-        let response = app
-            .clone()
-            .oneshot(request)
-            .await
-            .expect("time went backwards");
+        let response = common::send(
+            &app,
+            common::RequestBuilder::get("/health")
+                .with_connect_info(common::test_addr())
+                .build(),
+        )
+        .await;
         assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 
-        let mut request = Request::builder()
-            .uri("/")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-        let response = app.oneshot(request).await.expect("time went backwards");
+        let response = common::send(
+            &app,
+            common::RequestBuilder::get("/")
+                .with_connect_info(common::test_addr())
+                .build(),
+        )
+        .await;
         assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
     }
 }
@@ -941,19 +809,11 @@ mod provider_integration_tests {
         }
     }
 
-    fn make_chat_request(auth_token: &str, body: serde_json::Value) -> Request<Body> {
-        let body_bytes = serde_json::to_vec(&body).expect("time went backwards");
-        let mut req = Request::builder()
-            .method("POST")
-            .uri("/v1/chat/completions")
-            .header("Authorization", format!("Bearer {auth_token}"))
-            .header("Content-Type", "application/json")
-            .body(Body::from(body_bytes))
-            .expect("time went backwards");
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
-        req.extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-        req
+    fn make_chat_request(auth_token: &str, body: &serde_json::Value) -> Request<Body> {
+        common::RequestBuilder::post_json("/v1/chat/completions", body)
+            .with_auth(auth_token)
+            .with_connect_info(common::test_addr())
+            .build()
     }
 
     fn create_routing_state(creds: Vec<CredentialConfig>) -> AppState {
@@ -973,18 +833,18 @@ mod provider_integration_tests {
         let state = create_routing_state(creds);
         let app = build_full_app(state);
 
-        let req = make_chat_request(
-            "test-token",
-            json!({
-                "model": "gpt-4",
-                "messages": [{"role": "user", "content": "Hello"}]
-            }),
-        );
-
-        let response = app.oneshot(req).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let json_body = common::read_json::<serde_json::Value>(response).await;
+        let json_body = common::send_json::<serde_json::Value>(
+            &app,
+            make_chat_request(
+                "test-token",
+                &json!({
+                    "model": "gpt-4",
+                    "messages": [{"role": "user", "content": "Hello"}]
+                }),
+            ),
+            StatusCode::OK,
+        )
+        .await;
         assert_eq!(json_body["_gateway"]["route"]["provider"], "openai");
     }
 
@@ -994,18 +854,18 @@ mod provider_integration_tests {
         let state = create_routing_state(creds);
         let app = build_full_app(state);
 
-        let req = make_chat_request(
-            "test-token",
-            json!({
-                "model": "gemini-pro",
-                "messages": [{"role": "user", "content": "Hello"}]
-            }),
-        );
-
-        let response = app.oneshot(req).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let json_body = common::read_json::<serde_json::Value>(response).await;
+        let json_body = common::send_json::<serde_json::Value>(
+            &app,
+            make_chat_request(
+                "test-token",
+                &json!({
+                    "model": "gemini-pro",
+                    "messages": [{"role": "user", "content": "Hello"}]
+                }),
+            ),
+            StatusCode::OK,
+        )
+        .await;
         assert_eq!(json_body["_gateway"]["route"]["provider"], "google");
     }
 
@@ -1019,18 +879,18 @@ mod provider_integration_tests {
         let state = create_routing_state(creds);
         let app = build_full_app(state);
 
-        let req = make_chat_request(
-            "test-token",
-            json!({
-                "model": "deepseek-chat",
-                "messages": [{"role": "user", "content": "Hello"}]
-            }),
-        );
-
-        let response = app.oneshot(req).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let json_body = common::read_json::<serde_json::Value>(response).await;
+        let json_body = common::send_json::<serde_json::Value>(
+            &app,
+            make_chat_request(
+                "test-token",
+                &json!({
+                    "model": "deepseek-chat",
+                    "messages": [{"role": "user", "content": "Hello"}]
+                }),
+            ),
+            StatusCode::OK,
+        )
+        .await;
         assert_eq!(json_body["_gateway"]["route"]["provider"], "deepseek");
     }
 
@@ -1044,18 +904,18 @@ mod provider_integration_tests {
         let state = create_routing_state(creds);
         let app = build_full_app(state);
 
-        let req = make_chat_request(
-            "test-token",
-            json!({
-                "model": "some-model",
-                "messages": [{"role": "user", "content": "Hello"}]
-            }),
-        );
-
-        let response = app.oneshot(req).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let json_body = common::read_json::<serde_json::Value>(response).await;
+        let json_body = common::send_json::<serde_json::Value>(
+            &app,
+            make_chat_request(
+                "test-token",
+                &json!({
+                    "model": "some-model",
+                    "messages": [{"role": "user", "content": "Hello"}]
+                }),
+            ),
+            StatusCode::OK,
+        )
+        .await;
         assert_eq!(
             json_body["_gateway"]["route"]["provider"],
             "unknown-provider"
@@ -1070,18 +930,18 @@ mod provider_integration_tests {
         let state = create_routing_state(creds);
         let app = build_full_app(state);
 
-        let req = make_chat_request(
-            "test-token",
-            json!({
-                "model": "gpt-4",
-                "messages": [{"role": "user", "content": "Hello"}]
-            }),
-        );
-
-        let response = app.oneshot(req).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let json_body = common::read_json::<serde_json::Value>(response).await;
+        let json_body = common::send_json::<serde_json::Value>(
+            &app,
+            make_chat_request(
+                "test-token",
+                &json!({
+                    "model": "gpt-4",
+                    "messages": [{"role": "user", "content": "Hello"}]
+                }),
+            ),
+            StatusCode::OK,
+        )
+        .await;
         assert_eq!(json_body["model"], "gpt-4");
         assert_eq!(json_body["_gateway"]["route"]["credential_id"], "openai-1");
     }
@@ -1095,18 +955,18 @@ mod provider_integration_tests {
         let state = create_routing_state(creds);
         let app = build_full_app(state);
 
-        let req = make_chat_request(
-            "test-token",
-            json!({
-                "model": "gpt-4",
-                "messages": [{"role": "user", "content": "Hello"}]
-            }),
-        );
-
-        let response = app.oneshot(req).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let json_body = common::read_json::<serde_json::Value>(response).await;
+        let json_body = common::send_json::<serde_json::Value>(
+            &app,
+            make_chat_request(
+                "test-token",
+                &json!({
+                    "model": "gpt-4",
+                    "messages": [{"role": "user", "content": "Hello"}]
+                }),
+            ),
+            StatusCode::OK,
+        )
+        .await;
         assert_eq!(json_body["model"], "gpt-4");
         assert_eq!(
             json_body["_gateway"]["route"]["credential_id"],
@@ -1120,18 +980,18 @@ mod provider_integration_tests {
         let state = create_routing_state(creds);
         let app = build_full_app(state);
 
-        let req = make_chat_request(
-            "test-token",
-            json!({
-                "model": "gemini-1.5-pro",
-                "messages": [{"role": "user", "content": "Hello"}]
-            }),
-        );
-
-        let response = app.oneshot(req).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let json_body = common::read_json::<serde_json::Value>(response).await;
+        let json_body = common::send_json::<serde_json::Value>(
+            &app,
+            make_chat_request(
+                "test-token",
+                &json!({
+                    "model": "gemini-1.5-pro",
+                    "messages": [{"role": "user", "content": "Hello"}]
+                }),
+            ),
+            StatusCode::OK,
+        )
+        .await;
         assert_eq!(json_body["model"], "gemini-1.5-pro");
     }
 
@@ -1143,20 +1003,20 @@ mod provider_integration_tests {
         let state = create_routing_state(creds);
         let app = build_full_app(state);
 
-        let req = make_chat_request(
-            "test-token",
-            json!({
-                "model": "gpt-4",
-                "messages": [{"role": "user", "content": "Hello"}],
-                "temperature": 0.5,
-                "max_tokens": 100
-            }),
-        );
-
-        let response = app.oneshot(req).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let json_body = common::read_json::<serde_json::Value>(response).await;
+        let json_body = common::send_json::<serde_json::Value>(
+            &app,
+            make_chat_request(
+                "test-token",
+                &json!({
+                    "model": "gpt-4",
+                    "messages": [{"role": "user", "content": "Hello"}],
+                    "temperature": 0.5,
+                    "max_tokens": 100
+                }),
+            ),
+            StatusCode::OK,
+        )
+        .await;
 
         assert_eq!(json_body["object"], "chat.completion");
         assert_eq!(json_body["model"], "gpt-4");
@@ -1172,24 +1032,24 @@ mod provider_integration_tests {
         let state = create_routing_state(creds);
         let app = build_full_app(state);
 
-        let req = make_chat_request(
-            "test-token",
-            json!({
-                "model": "gpt-4-vision",
-                "messages": [{
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "What is in this image?"},
-                        {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc123"}}
-                    ]
-                }]
-            }),
-        );
-
-        let response = app.oneshot(req).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let json_body = common::read_json::<serde_json::Value>(response).await;
+        let json_body = common::send_json::<serde_json::Value>(
+            &app,
+            make_chat_request(
+                "test-token",
+                &json!({
+                    "model": "gpt-4-vision",
+                    "messages": [{
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "What is in this image?"},
+                            {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc123"}}
+                        ]
+                    }]
+                }),
+            ),
+            StatusCode::OK,
+        )
+        .await;
 
         assert_eq!(
             json_body["_gateway"]["classification"]["capabilities"]["vision"], true,

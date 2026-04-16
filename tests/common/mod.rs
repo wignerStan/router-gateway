@@ -8,7 +8,7 @@
 use axum::Router;
 use axum::body::Body;
 use axum::extract::ConnectInfo;
-use axum::http::{Request, StatusCode};
+use axum::http::{Extensions, Request, StatusCode};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::net::SocketAddr;
@@ -27,9 +27,11 @@ pub fn test_addr() -> SocketAddr {
 }
 
 /// Error type string for invalid or expired auth tokens.
+#[allow(dead_code)] // Public API for test consumers
 pub const ERR_INVALID_REQUEST: &str = "invalid_request_error";
 
 /// Error type string for configuration errors (e.g. no auth tokens).
+#[allow(dead_code)] // Public API for test consumers
 pub const ERR_CONFIG_ERROR: &str = "config_error";
 
 /// Error type string for rate-limit responses.
@@ -86,6 +88,7 @@ pub async fn assert_json<T: DeserializeOwned>(
 pub struct RequestBuilder {
     inner: axum::http::request::Builder,
     body: Body,
+    extensions: Extensions,
 }
 
 impl RequestBuilder {
@@ -94,6 +97,7 @@ impl RequestBuilder {
         Self {
             inner: Request::builder().uri(uri),
             body: Body::empty(),
+            extensions: Extensions::new(),
         }
     }
 
@@ -106,6 +110,7 @@ impl RequestBuilder {
                 .uri(uri)
                 .header("content-type", "application/json"),
             body: Body::from(bytes),
+            extensions: Extensions::new(),
         }
     }
 
@@ -116,33 +121,32 @@ impl RequestBuilder {
                 .inner
                 .header("authorization", format!("Bearer {token}")),
             body: self.body,
+            extensions: self.extensions,
         }
     }
 
     /// Insert a `ConnectInfo` extension (used by rate-limit and auth middleware).
-    pub fn with_connect_info(self, addr: SocketAddr) -> Self {
-        let (mut parts, body) = self.build().into_parts();
-        parts.extensions.insert(ConnectInfo(addr));
-        Self {
-            inner: Request::builder()
-                .method(parts.method)
-                .uri(parts.uri)
-                .version(parts.version),
-            body: Body::new(body),
-        }
+    pub fn with_connect_info(mut self, addr: SocketAddr) -> Self {
+        self.extensions.insert(ConnectInfo(addr));
+        self
     }
 
     /// Add an arbitrary header.
+    #[allow(dead_code)] // Public API for test consumers
     pub fn with_header(self, key: &str, value: &str) -> Self {
         Self {
             inner: self.inner.header(key, value),
             body: self.body,
+            extensions: self.extensions,
         }
     }
 
     /// Finalize the builder into a `Request<Body>`.
     pub fn build(self) -> Request<Body> {
-        self.inner.body(self.body).expect("request should build")
+        let mut request = self.inner.body(self.body).expect("request should build");
+        // Merge stored extensions into the request.
+        request.extensions_mut().extend(self.extensions);
+        request
     }
 }
 
