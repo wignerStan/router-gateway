@@ -5,11 +5,12 @@
     clippy::needless_pass_by_value,
     clippy::panic
 )]
+mod common;
+
 use axum::{
     Router,
     body::Body,
     http::{Request, StatusCode},
-    middleware,
     routing::get,
 };
 use gateway::config::{CredentialConfig, GatewayConfig};
@@ -17,10 +18,7 @@ use gateway::registry::{
     DataSource, ModelCapabilities, ModelInfo as RegistryModelInfo, RateLimits,
     Registry as ModelRegistry,
 };
-use gateway::routes::{
-    health_check, list_models, rate_limit_middleware, root, route_request,
-    security_headers_middleware,
-};
+use gateway::routes::{health_check, list_models, root, route_request};
 use gateway::routing::classification::RequestClassifier;
 use gateway::routing::{
     config::HealthConfig,
@@ -36,25 +34,6 @@ use serde_json::json;
 use std::sync::Arc;
 use std::time::Instant;
 use tower::ServiceExt;
-
-const MAX_RESPONSE_BYTES: usize = 4096;
-
-const ERR_INVALID_REQUEST: &str = "invalid_request_error";
-const ERR_CONFIG_ERROR: &str = "config_error";
-const ERR_RATE_LIMIT: &str = "rate_limit_error";
-const ERR_NO_ROUTE: &str = "no_route_available";
-
-async fn read_json_body<T: serde::de::DeserializeOwned>(response: axum::response::Response) -> T {
-    let body_bytes = axum::body::to_bytes(response.into_body(), MAX_RESPONSE_BYTES)
-        .await
-        .expect("response body should be readable");
-    serde_json::from_slice(&body_bytes).unwrap_or_else(|e| {
-        panic!(
-            "Failed to deserialize JSON: {e}. Body: {}",
-            String::from_utf8_lossy(&body_bytes)
-        )
-    })
-}
 
 fn create_test_state() -> AppState {
     AppState {
@@ -180,7 +159,7 @@ async fn test_models_endpoint_with_credentials() {
         .expect("time went backwards");
 
     assert_eq!(response.status(), StatusCode::OK);
-    let list: serde_json::Value = read_json_body(response).await;
+    let list: serde_json::Value = common::read_json(response).await;
     assert_eq!(list["count"], 1);
     assert_eq!(list["models"][0]["id"], "gpt-4");
 }
@@ -204,7 +183,7 @@ async fn test_health_endpoint_returns_status() {
 
     assert_eq!(response.status(), StatusCode::OK);
 
-    let health: HealthStatus = read_json_body(response).await;
+    let health: HealthStatus = common::read_json(response).await;
 
     assert_eq!(health.status, "healthy");
 }
@@ -302,90 +281,6 @@ async fn test_route_endpoint() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-#[tokio::test]
-async fn test_security_headers_present() {
-    let state = create_test_state();
-    let app = Router::new()
-        .route("/health", get(health_check))
-        .layer(middleware::from_fn(security_headers_middleware))
-        .with_state(state);
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .uri("/health")
-                .body(Body::empty())
-                .expect("time went backwards"),
-        )
-        .await
-        .expect("time went backwards");
-
-    let headers = response.headers();
-
-    assert_eq!(
-        headers
-            .get("X-Content-Type-Options")
-            .expect("time went backwards"),
-        "nosniff"
-    );
-    assert_eq!(
-        headers.get("X-Frame-Options").expect("time went backwards"),
-        "DENY"
-    );
-    assert_eq!(
-        headers.get("Referrer-Policy").expect("time went backwards"),
-        "strict-origin-when-cross-origin"
-    );
-    assert_eq!(
-        headers
-            .get("Content-Security-Policy")
-            .expect("time went backwards"),
-        "default-src 'none'; frame-ancestors 'none'"
-    );
-}
-
-#[tokio::test]
-async fn test_rate_limiter_rejects_excess_requests() {
-    let mut state = create_test_state();
-    state.rate_limiter = Arc::new(RateLimiter::new(3));
-    let app = Router::new()
-        .route("/health", get(health_check))
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            rate_limit_middleware,
-        ))
-        .with_state(state);
-
-    let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
-
-    for _ in 0..3 {
-        let mut request = Request::builder()
-            .uri("/health")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-        let response = app
-            .clone()
-            .oneshot(request)
-            .await
-            .expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::OK);
-    }
-
-    let mut request = Request::builder()
-        .uri("/health")
-        .body(Body::empty())
-        .expect("time went backwards");
-    request
-        .extensions_mut()
-        .insert(axum::extract::ConnectInfo(test_addr));
-    let response = app.oneshot(request).await.expect("time went backwards");
-
-    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
-}
-
 #[test]
 fn test_rate_limiter_unit() {
     let limiter = RateLimiter::new(2);
@@ -422,7 +317,7 @@ mod public_endpoints {
         let response = app.oneshot(request).await.expect("time went backwards");
         assert_eq!(response.status(), StatusCode::OK);
 
-        let value = read_json_body::<serde_json::Value>(response).await;
+        let value = common::read_json::<serde_json::Value>(response).await;
         assert_eq!(value["name"], "Gateway API");
         assert_eq!(value["version"], "0.1.0");
         assert!(value["features"].is_array());
@@ -449,7 +344,7 @@ mod public_endpoints {
         let response = app.oneshot(request).await.expect("time went backwards");
         assert_eq!(response.status(), StatusCode::OK);
 
-        let health: HealthStatus = read_json_body(response).await;
+        let health: HealthStatus = common::read_json(response).await;
 
         assert_eq!(health.status, "healthy");
         assert_eq!(health.credential_count, 0);
@@ -489,7 +384,7 @@ mod public_endpoints {
             .insert(axum::extract::ConnectInfo(test_addr));
 
         let response = app.oneshot(request).await.expect("time went backwards");
-        let health: HealthStatus = read_json_body(response).await;
+        let health: HealthStatus = common::read_json(response).await;
 
         assert_eq!(health.credential_count, 2);
         assert_eq!(health.healthy_count, 2);
@@ -532,7 +427,7 @@ mod public_endpoints {
             .insert(axum::extract::ConnectInfo(test_addr));
 
         let response = app.oneshot(request).await.expect("time went backwards");
-        let health: HealthStatus = read_json_body(response).await;
+        let health: HealthStatus = common::read_json(response).await;
 
         assert_eq!(health.credential_count, 3);
         assert_eq!(health.healthy_count, 3);
@@ -569,341 +464,6 @@ mod public_endpoints {
             .insert(axum::extract::ConnectInfo(test_addr));
         let response = app.oneshot(request).await.expect("time went backwards");
         assert_eq!(response.status(), StatusCode::OK);
-    }
-}
-
-// ===================================================================
-// Auth middleware
-// ===================================================================
-
-mod auth_middleware {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_valid_bearer_token() {
-        let state = create_test_state_overrides(TestOverrides::default());
-        let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
-
-        let mut request = Request::builder()
-            .uri("/api/models")
-            .header("authorization", "Bearer test-token")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-
-        let response = app.oneshot(request).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn test_invalid_token() {
-        let state = create_test_state_overrides(TestOverrides::default());
-        let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
-
-        let mut request = Request::builder()
-            .uri("/api/models")
-            .header("authorization", "Bearer wrong-token")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-
-        let response = app.oneshot(request).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-
-        let value = read_json_body::<serde_json::Value>(response).await;
-        assert_eq!(value["error"]["type"], ERR_INVALID_REQUEST);
-        assert!(
-            value["error"]["message"]
-                .as_str()
-                .expect("The 'message' field should be a string in the error response.")
-                .contains("Invalid or expired API token")
-        );
-    }
-
-    #[tokio::test]
-    async fn test_missing_auth_header() {
-        let state = create_test_state_overrides(TestOverrides::default());
-        let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
-
-        let mut request = Request::builder()
-            .uri("/api/models")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-
-        let response = app.oneshot(request).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-
-        let value = read_json_body::<serde_json::Value>(response).await;
-        assert!(
-            value["error"]["message"]
-                .as_str()
-                .expect("time went backwards")
-                .contains("Missing Authorization header")
-        );
-    }
-
-    #[tokio::test]
-    async fn test_wrong_auth_scheme() {
-        let state = create_test_state_overrides(TestOverrides::default());
-        let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
-
-        let mut request = Request::builder()
-            .uri("/api/models")
-            .header("authorization", "Basic dXNlcjpwYXNz")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-
-        let response = app.oneshot(request).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-
-        let value = read_json_body::<serde_json::Value>(response).await;
-        assert!(
-            value["error"]["message"]
-                .as_str()
-                .expect("time went backwards")
-                .contains("Invalid or expired API token")
-        );
-    }
-
-    #[tokio::test]
-    async fn test_no_auth_tokens_configured() {
-        let state = create_test_state_overrides(TestOverrides {
-            auth_tokens: vec![],
-            ..Default::default()
-        });
-        let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
-
-        let mut request = Request::builder()
-            .uri("/api/models")
-            .header("authorization", "Bearer any-token")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-
-        let response = app.oneshot(request).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::FORBIDDEN);
-
-        let value = read_json_body::<serde_json::Value>(response).await;
-        assert_eq!(value["error"]["type"], ERR_CONFIG_ERROR);
-    }
-
-    #[tokio::test]
-    async fn test_second_token_valid() {
-        let state = create_test_state_overrides(TestOverrides {
-            auth_tokens: vec!["first-token".to_string(), "second-token".to_string()],
-            ..Default::default()
-        });
-        let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
-
-        let mut request = Request::builder()
-            .uri("/api/models")
-            .header("authorization", "Bearer second-token")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-
-        let response = app.oneshot(request).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::OK);
-    }
-}
-
-// ===================================================================
-// Rate limiting
-// ===================================================================
-
-mod rate_limiting {
-    use super::*;
-
-    async fn exhaust_rate_limit(app: &Router, test_addr: std::net::SocketAddr, limit: usize) {
-        for _ in 0..limit {
-            let mut request = Request::builder()
-                .uri("/health")
-                .body(Body::empty())
-                .expect("time went backwards");
-            request
-                .extensions_mut()
-                .insert(axum::extract::ConnectInfo(test_addr));
-            let response = app
-                .clone()
-                .oneshot(request)
-                .await
-                .expect("time went backwards");
-            assert_eq!(response.status(), StatusCode::OK);
-        }
-    }
-
-    #[tokio::test]
-    async fn test_allows_requests_under_limit() {
-        let state = create_test_state_overrides(TestOverrides {
-            rate_limit: Some(5),
-            ..Default::default()
-        });
-        let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
-
-        exhaust_rate_limit(&app, test_addr, 5).await;
-    }
-
-    #[tokio::test]
-    async fn test_blocks_requests_over_limit() {
-        let state = create_test_state_overrides(TestOverrides {
-            rate_limit: Some(5),
-            ..Default::default()
-        });
-        let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
-
-        exhaust_rate_limit(&app, test_addr, 5).await;
-
-        let mut request = Request::builder()
-            .uri("/health")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-        let response = app.oneshot(request).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
-
-        let value = read_json_body::<serde_json::Value>(response).await;
-        assert_eq!(value["error"]["type"], ERR_RATE_LIMIT);
-    }
-
-    #[tokio::test]
-    async fn test_independent_ip_buckets() {
-        let state = create_test_state_overrides(TestOverrides {
-            rate_limit: Some(1),
-            ..Default::default()
-        });
-        let app = build_full_app(state);
-        let addr_a = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
-        let addr_b = std::net::SocketAddr::from(([127, 0, 0, 2], 12345));
-
-        let mut request = Request::builder()
-            .uri("/health")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(addr_a));
-        let response = app
-            .clone()
-            .oneshot(request)
-            .await
-            .expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let mut request = Request::builder()
-            .uri("/health")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(addr_a));
-        let response = app
-            .clone()
-            .oneshot(request)
-            .await
-            .expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
-
-        let mut request = Request::builder()
-            .uri("/health")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(addr_b));
-        let response = app.oneshot(request).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn test_rate_limit_response_body() {
-        let state = create_test_state_overrides(TestOverrides {
-            rate_limit: Some(1),
-            ..Default::default()
-        });
-        let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
-
-        exhaust_rate_limit(&app, test_addr, 1).await;
-
-        let mut request = Request::builder()
-            .uri("/health")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-        let response = app.oneshot(request).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
-
-        let value = read_json_body::<serde_json::Value>(response).await;
-
-        assert_eq!(value["error"]["type"], ERR_RATE_LIMIT);
-        assert!(
-            value["error"]["message"]
-                .as_str()
-                .expect("time went backwards")
-                .contains("Too many requests")
-        );
-    }
-
-    #[tokio::test]
-    async fn test_rate_limit_applies_to_public_endpoints() {
-        let state = create_test_state_overrides(TestOverrides {
-            rate_limit: Some(1),
-            ..Default::default()
-        });
-        let app = build_full_app(state);
-        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
-
-        exhaust_rate_limit(&app, test_addr, 1).await;
-
-        let mut request = Request::builder()
-            .uri("/health")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-        let response = app
-            .clone()
-            .oneshot(request)
-            .await
-            .expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
-
-        let mut request = Request::builder()
-            .uri("/")
-            .body(Body::empty())
-            .expect("time went backwards");
-        request
-            .extensions_mut()
-            .insert(axum::extract::ConnectInfo(test_addr));
-        let response = app.oneshot(request).await.expect("time went backwards");
-        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
     }
 }
 
@@ -1003,7 +563,7 @@ mod protected_endpoints {
         let response = app.oneshot(request).await.expect("time went backwards");
         assert_eq!(response.status(), StatusCode::OK);
 
-        let value = read_json_body::<serde_json::Value>(response).await;
+        let value = common::read_json::<serde_json::Value>(response).await;
 
         assert!(value["models"].is_array());
         assert!(
@@ -1068,8 +628,8 @@ mod chat_completions {
             .expect("time went backwards");
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
-        let value = read_json_body::<serde_json::Value>(response).await;
-        assert_eq!(value["error"]["type"], ERR_NO_ROUTE);
+        let value = common::read_json::<serde_json::Value>(response).await;
+        assert_eq!(value["error"]["type"], common::ERR_NO_ROUTE);
         assert!(
             value["error"]["message"]
                 .as_str()
@@ -1093,9 +653,9 @@ mod chat_completions {
             .expect("time went backwards");
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
-        let value = read_json_body::<serde_json::Value>(response).await;
+        let value = common::read_json::<serde_json::Value>(response).await;
 
-        assert_eq!(value["error"]["type"], ERR_NO_ROUTE);
+        assert_eq!(value["error"]["type"], common::ERR_NO_ROUTE);
     }
 
     #[tokio::test]
@@ -1120,7 +680,7 @@ mod chat_completions {
             .expect("time went backwards");
         assert_eq!(response.status(), StatusCode::OK);
 
-        let value = read_json_body::<serde_json::Value>(response).await;
+        let value = common::read_json::<serde_json::Value>(response).await;
 
         let gw = &value["_gateway"];
         assert!(gw.is_object(), "Expected _gateway object in response");
@@ -1159,7 +719,7 @@ mod chat_completions {
             .expect("time went backwards");
         assert_eq!(response.status(), StatusCode::OK);
 
-        let value = read_json_body::<serde_json::Value>(response).await;
+        let value = common::read_json::<serde_json::Value>(response).await;
 
         let caps = &value["_gateway"]["classification"]["capabilities"];
         assert_eq!(caps["vision"], false);
@@ -1306,8 +866,58 @@ mod middleware_composition {
         let response = app.oneshot(request).await.expect("time went backwards");
         assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 
-        let value = read_json_body::<serde_json::Value>(response).await;
-        assert_eq!(value["error"]["type"], ERR_RATE_LIMIT);
+        let value = common::read_json::<serde_json::Value>(response).await;
+        assert_eq!(value["error"]["type"], common::ERR_RATE_LIMIT);
+    }
+
+    #[tokio::test]
+    async fn test_rate_limit_applies_to_public_endpoints() {
+        let state = create_test_state_overrides(TestOverrides {
+            rate_limit: Some(1),
+            ..Default::default()
+        });
+        let app = build_full_app(state);
+        let test_addr = std::net::SocketAddr::from(([127, 0, 0, 1], 12345));
+
+        // Exhaust the rate limit on /health
+        let mut request = Request::builder()
+            .uri("/health")
+            .body(Body::empty())
+            .expect("time went backwards");
+        request
+            .extensions_mut()
+            .insert(axum::extract::ConnectInfo(test_addr));
+        let response = app
+            .clone()
+            .oneshot(request)
+            .await
+            .expect("time went backwards");
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Both /health and / should now be rate-limited
+        let mut request = Request::builder()
+            .uri("/health")
+            .body(Body::empty())
+            .expect("time went backwards");
+        request
+            .extensions_mut()
+            .insert(axum::extract::ConnectInfo(test_addr));
+        let response = app
+            .clone()
+            .oneshot(request)
+            .await
+            .expect("time went backwards");
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        let mut request = Request::builder()
+            .uri("/")
+            .body(Body::empty())
+            .expect("time went backwards");
+        request
+            .extensions_mut()
+            .insert(axum::extract::ConnectInfo(test_addr));
+        let response = app.oneshot(request).await.expect("time went backwards");
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
     }
 }
 
@@ -1374,7 +984,7 @@ mod provider_integration_tests {
         let response = app.oneshot(req).await.expect("time went backwards");
         assert_eq!(response.status(), StatusCode::OK);
 
-        let json_body = read_json_body::<serde_json::Value>(response).await;
+        let json_body = common::read_json::<serde_json::Value>(response).await;
         assert_eq!(json_body["_gateway"]["route"]["provider"], "openai");
     }
 
@@ -1395,7 +1005,7 @@ mod provider_integration_tests {
         let response = app.oneshot(req).await.expect("time went backwards");
         assert_eq!(response.status(), StatusCode::OK);
 
-        let json_body = read_json_body::<serde_json::Value>(response).await;
+        let json_body = common::read_json::<serde_json::Value>(response).await;
         assert_eq!(json_body["_gateway"]["route"]["provider"], "google");
     }
 
@@ -1420,7 +1030,7 @@ mod provider_integration_tests {
         let response = app.oneshot(req).await.expect("time went backwards");
         assert_eq!(response.status(), StatusCode::OK);
 
-        let json_body = read_json_body::<serde_json::Value>(response).await;
+        let json_body = common::read_json::<serde_json::Value>(response).await;
         assert_eq!(json_body["_gateway"]["route"]["provider"], "deepseek");
     }
 
@@ -1445,7 +1055,7 @@ mod provider_integration_tests {
         let response = app.oneshot(req).await.expect("time went backwards");
         assert_eq!(response.status(), StatusCode::OK);
 
-        let json_body = read_json_body::<serde_json::Value>(response).await;
+        let json_body = common::read_json::<serde_json::Value>(response).await;
         assert_eq!(
             json_body["_gateway"]["route"]["provider"],
             "unknown-provider"
@@ -1471,7 +1081,7 @@ mod provider_integration_tests {
         let response = app.oneshot(req).await.expect("time went backwards");
         assert_eq!(response.status(), StatusCode::OK);
 
-        let json_body = read_json_body::<serde_json::Value>(response).await;
+        let json_body = common::read_json::<serde_json::Value>(response).await;
         assert_eq!(json_body["model"], "gpt-4");
         assert_eq!(json_body["_gateway"]["route"]["credential_id"], "openai-1");
     }
@@ -1496,7 +1106,7 @@ mod provider_integration_tests {
         let response = app.oneshot(req).await.expect("time went backwards");
         assert_eq!(response.status(), StatusCode::OK);
 
-        let json_body = read_json_body::<serde_json::Value>(response).await;
+        let json_body = common::read_json::<serde_json::Value>(response).await;
         assert_eq!(json_body["model"], "gpt-4");
         assert_eq!(
             json_body["_gateway"]["route"]["credential_id"],
@@ -1521,7 +1131,7 @@ mod provider_integration_tests {
         let response = app.oneshot(req).await.expect("time went backwards");
         assert_eq!(response.status(), StatusCode::OK);
 
-        let json_body = read_json_body::<serde_json::Value>(response).await;
+        let json_body = common::read_json::<serde_json::Value>(response).await;
         assert_eq!(json_body["model"], "gemini-1.5-pro");
     }
 
@@ -1546,7 +1156,7 @@ mod provider_integration_tests {
         let response = app.oneshot(req).await.expect("time went backwards");
         assert_eq!(response.status(), StatusCode::OK);
 
-        let json_body = read_json_body::<serde_json::Value>(response).await;
+        let json_body = common::read_json::<serde_json::Value>(response).await;
 
         assert_eq!(json_body["object"], "chat.completion");
         assert_eq!(json_body["model"], "gpt-4");
@@ -1579,7 +1189,7 @@ mod provider_integration_tests {
         let response = app.oneshot(req).await.expect("time went backwards");
         assert_eq!(response.status(), StatusCode::OK);
 
-        let json_body = read_json_body::<serde_json::Value>(response).await;
+        let json_body = common::read_json::<serde_json::Value>(response).await;
 
         assert_eq!(
             json_body["_gateway"]["classification"]["capabilities"]["vision"], true,

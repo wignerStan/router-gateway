@@ -5,12 +5,12 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+use axum::Router;
 use axum::body::Body;
 use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
-use axum::Router;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::net::SocketAddr;
 use tower::ServiceExt;
 
@@ -122,9 +122,7 @@ impl RequestBuilder {
     /// Insert a `ConnectInfo` extension (used by rate-limit and auth middleware).
     pub fn with_connect_info(self, addr: SocketAddr) -> Self {
         let (mut parts, body) = self.build().into_parts();
-        parts
-            .extensions
-            .insert(ConnectInfo(addr));
+        parts.extensions.insert(ConnectInfo(addr));
         Self {
             inner: Request::builder()
                 .method(parts.method)
@@ -154,7 +152,10 @@ impl RequestBuilder {
 
 /// Clone the app, send a single request via oneshot, and unwrap the result.
 pub async fn send(app: &Router, req: Request<Body>) -> axum::response::Response {
-    app.clone().oneshot(req).await.expect("oneshot should succeed")
+    app.clone()
+        .oneshot(req)
+        .await
+        .expect("oneshot should succeed")
 }
 
 /// Send a request, assert the status, and deserialize the JSON body.
