@@ -37,9 +37,8 @@ mod metrics_model {
             }
         }
 
-        // ALLOW: Test-only — shuttle RwLock never poisons, guard scope
-        // mirrors production MetricsCollector pattern.
-        #[allow(clippy::unwrap_used, clippy::significant_drop_tightening)]
+        // Guard scope mirrors production MetricsCollector pattern.
+        #[allow(clippy::significant_drop_tightening)]
         pub fn record_result(&self, auth_id: &str, success: bool) {
             let mut metrics = self.metrics.write().unwrap();
             let entry = metrics.entry(auth_id.to_string()).or_insert(Metrics {
@@ -56,15 +55,11 @@ mod metrics_model {
         }
 
         pub fn get_metrics(&self, auth_id: &str) -> Option<Metrics> {
-            // ALLOW: Test-only — shuttle RwLock never poisons.
-            #[allow(clippy::unwrap_used)]
             let metrics = self.metrics.read().unwrap();
             metrics.get(auth_id).cloned()
         }
 
         pub fn get_all_count(&self) -> usize {
-            // ALLOW: Test-only — shuttle RwLock never poisons.
-            #[allow(clippy::unwrap_used)]
             let metrics = self.metrics.read().unwrap();
             metrics.len()
         }
@@ -100,9 +95,8 @@ mod health_model {
             }
         }
 
-        // ALLOW: Test-only — shuttle RwLock never poisons, guard scope
-        // mirrors production HealthManager pattern.
-        #[allow(clippy::unwrap_used, clippy::significant_drop_tightening)]
+        // Guard scope mirrors production HealthManager pattern.
+        #[allow(clippy::significant_drop_tightening)]
         pub fn update_from_result(&self, auth_id: &str, success: bool) {
             let mut health = self.health.write().unwrap();
             let entry = health.entry(auth_id.to_string()).or_insert(AuthHealth {
@@ -124,8 +118,6 @@ mod health_model {
         }
 
         pub fn get_status(&self, auth_id: &str) -> HealthStatus {
-            // ALLOW: Test-only — shuttle RwLock never poisons.
-            #[allow(clippy::unwrap_used)]
             let health = self.health.read().unwrap();
             health
                 .get(auth_id)
@@ -161,8 +153,6 @@ fn metrics_concurrent_record_no_loss() {
 
                 assert_eq!(collector.get_all_count(), 5);
                 for i in 0..5 {
-                    // ALLOW: Test-only unwrap — we just asserted count == 5.
-                    #[allow(clippy::unwrap_used)]
                     let m = collector.get_metrics(&format!("auth-{i}")).unwrap();
                     assert_eq!(m.total_requests, 10);
                     assert_eq!(m.success_count + m.failure_count, 10);
@@ -194,8 +184,6 @@ fn metrics_concurrent_same_auth_contention() {
                     let _ = task.await;
                 }
 
-                // ALLOW: Test-only unwrap — we just recorded 1000 entries.
-                #[allow(clippy::unwrap_used)]
                 let m = collector.get_metrics("shared-auth").unwrap();
                 assert_eq!(m.total_requests, 1000);
                 assert_eq!(m.success_count, 1000);
