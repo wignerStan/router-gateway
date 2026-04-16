@@ -1,4 +1,9 @@
-#![allow(clippy::unreadable_literal, missing_docs)]
+#![allow(
+    clippy::unreadable_literal,
+    missing_docs,
+    clippy::unwrap_used,
+    clippy::expect_used
+)]
 // Integration tests for health management
 //
 // Unit-level integration tests covering health state transitions,

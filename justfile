@@ -113,7 +113,7 @@ lint-fast:
 
 # Strict lint (treat warnings as errors, for pre-push)
 lint:
-    cargo clippy --all-targets -- -D warnings -A clippy::unwrap_used -A clippy::expect_used
+    cargo clippy --all-targets -- -D warnings
 
 # Run clippy with auto-fix
 lint-fix:
@@ -476,10 +476,9 @@ ci-full: ci-fmt ci-lint ci-test ci-build
 ci-fmt:
     cargo fmt --all -- --check
 
-# CI lint (strict — deny unwrap/expect in production code)
+# CI lint (strict)
 ci-lint:
-    cargo clippy --lib -- -D warnings -D clippy::unwrap_used -D clippy::expect_used
-    cargo clippy --all-targets -- -D warnings -A clippy::unwrap_used -A clippy::expect_used
+    cargo clippy --all-targets -- -D warnings
 
 # CI test (all features, nextest with CI profile)
 ci-test:

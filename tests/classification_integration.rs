@@ -1,4 +1,9 @@
-#![allow(clippy::unreadable_literal, missing_docs)]
+#![allow(
+    clippy::unreadable_literal,
+    missing_docs,
+    clippy::unwrap_used,
+    clippy::expect_used
+)]
 // Integration tests for request classification
 //
 // Unit-level integration tests covering vision detection, tool detection,

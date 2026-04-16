@@ -14,6 +14,8 @@
 //! - [`registry`] — Model registry with multi-dimensional classification
 //! - [`routing`] — Smart credential selection and routing
 
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
+
 pub mod config;
 pub mod providers;
 pub mod registry;

@@ -1,4 +1,4 @@
-#![allow(missing_docs, clippy::expect_used)]
+#![allow(missing_docs, clippy::unwrap_used, clippy::expect_used)]
 use gateway::config::GatewayConfig;
 use insta::assert_yaml_snapshot;
 use rstest::rstest;

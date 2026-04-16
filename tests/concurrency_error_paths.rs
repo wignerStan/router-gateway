@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 //! Error-path concurrency tests for the gateway.
 //!
 //! Exercises failure scenarios under concurrent access,

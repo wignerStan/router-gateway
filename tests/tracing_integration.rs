@@ -1,4 +1,9 @@
-#![allow(clippy::clone_on_ref_ptr, clippy::items_after_statements)]
+#![allow(
+    clippy::clone_on_ref_ptr,
+    clippy::items_after_statements,
+    clippy::unwrap_used,
+    clippy::expect_used
+)]
 //! Integration tests for the llm-tracing package
 //!
 //! These tests verify end-to-end functionality across multiple components.

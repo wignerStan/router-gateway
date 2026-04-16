@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 //! Loom-based systematic concurrency tests for `RateLimiter`.
 //!
 //! Tests ALL possible thread interleavings for the rate limiting logic.

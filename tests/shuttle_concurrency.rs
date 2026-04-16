@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 //! Shuttle-based randomized concurrency tests for async gateway patterns.
 //!
 //! Models `MetricsCollector` and `HealthManager` concurrent access patterns
