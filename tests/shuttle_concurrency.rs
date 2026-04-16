@@ -311,3 +311,192 @@ fn no_deadlock_under_read_write_contention() {
         1000,
     );
 }
+
+// ============================================================
+// Bandit Policy Tests
+// ============================================================
+
+/// Model of `BanditPolicy` using shuttle's `Mutex`.
+/// Simplified: tracks counts only, no Thompson sampling (RNG not shuttle-compatible).
+/// Mirrors the `Arc<tokio::sync::Mutex<BanditPolicy>>` pattern in `dispatch.rs`.
+mod bandit_model {
+    use super::*;
+    use shuttle::sync::Mutex;
+
+    #[derive(Clone, Debug)]
+    pub struct BanditStats {
+        pub successes: i64,
+        pub failures: i64,
+        pub pulls: i64,
+    }
+
+    pub struct ShuttleBanditPolicy {
+        stats: Arc<Mutex<HashMap<String, BanditStats>>>,
+    }
+
+    impl ShuttleBanditPolicy {
+        pub fn new() -> Self {
+            Self {
+                stats: Arc::new(Mutex::new(HashMap::new())),
+            }
+        }
+
+        // Guard scope mirrors production BanditPolicy pattern.
+        #[allow(clippy::significant_drop_tightening)]
+        pub fn record_result(&self, route_id: &str, success: bool) {
+            let mut stats = self.stats.lock().unwrap();
+            let entry = stats.entry(route_id.to_string()).or_insert(BanditStats {
+                successes: 0,
+                failures: 0,
+                pulls: 0,
+            });
+            entry.pulls += 1;
+            if success {
+                entry.successes += 1;
+            } else {
+                entry.failures += 1;
+            }
+        }
+
+        #[allow(clippy::significant_drop_tightening)]
+        pub fn select_route(&self, route_ids: &[&str]) -> Option<String> {
+            if route_ids.is_empty() {
+                return None;
+            }
+            let stats = self.stats.lock().unwrap();
+            let mut best_route: Option<&str> = None;
+            let mut best_rate = -1.0_f64;
+            for id in route_ids {
+                let rate = match stats.get(*id) {
+                    Some(s) if s.pulls > 0 => s.successes as f64 / s.pulls as f64,
+                    _ => 0.5,
+                };
+                if rate > best_rate {
+                    best_rate = rate;
+                    best_route = Some(id);
+                }
+            }
+            best_route.map(std::string::ToString::to_string)
+        }
+
+        pub fn get_stats(&self, route_id: &str) -> Option<BanditStats> {
+            let stats = self.stats.lock().unwrap();
+            stats.get(route_id).cloned()
+        }
+
+        pub fn reset_all(&self) {
+            let mut stats = self.stats.lock().unwrap();
+            stats.clear();
+        }
+    }
+}
+
+#[test]
+fn bandit_concurrent_record_no_corruption() {
+    shuttle::check_random(
+        || {
+            shuttle::future::block_on(async {
+                let policy = Arc::new(bandit_model::ShuttleBanditPolicy::new());
+
+                let mut tasks = Vec::new();
+                for i in 0..5 {
+                    let p = Arc::clone(&policy);
+                    tasks.push(shuttle::future::spawn(async move {
+                        for j in 0..20 {
+                            p.record_result(&format!("route-{i}"), j % 2 == 0);
+                        }
+                    }));
+                }
+
+                for task in tasks {
+                    let _ = task.await;
+                }
+
+                for i in 0..5 {
+                    let s = policy.get_stats(&format!("route-{i}")).unwrap();
+                    assert_eq!(s.pulls, 20);
+                    assert_eq!(s.successes + s.failures, 20);
+                }
+            });
+        },
+        1000,
+    );
+}
+
+#[test]
+fn bandit_select_under_contention() {
+    shuttle::check_random(
+        || {
+            shuttle::future::block_on(async {
+                let policy = Arc::new(bandit_model::ShuttleBanditPolicy::new());
+                let route_ids = vec!["route-a", "route-b", "route-c"];
+
+                let mut tasks = Vec::new();
+                for _ in 0..5 {
+                    let p = Arc::clone(&policy);
+                    let ids = route_ids.clone();
+                    tasks.push(shuttle::future::spawn(async move {
+                        for j in 0..20 {
+                            p.record_result("route-a", j % 3 != 0);
+                            p.record_result("route-b", j % 2 == 0);
+                            let selected = p.select_route(&ids);
+                            assert!(
+                                selected.is_some(),
+                                "select_route must return a route when given non-empty input"
+                            );
+                            let selected = selected.unwrap();
+                            assert!(
+                                ids.iter().any(|id| *id == selected),
+                                "selected route must be from the input list"
+                            );
+                        }
+                    }));
+                }
+
+                for task in tasks {
+                    let _ = task.await;
+                }
+            });
+        },
+        1000,
+    );
+}
+
+#[test]
+fn bandit_concurrent_reset_during_record() {
+    shuttle::check_random(
+        || {
+            shuttle::future::block_on(async {
+                let policy = Arc::new(bandit_model::ShuttleBanditPolicy::new());
+
+                let mut tasks = Vec::new();
+
+                // Writers
+                for _ in 0..4 {
+                    let p = Arc::clone(&policy);
+                    tasks.push(shuttle::future::spawn(async move {
+                        for _ in 0..50 {
+                            p.record_result("route-x", true);
+                        }
+                    }));
+                }
+
+                // Resetters — interleaves clear() with record_result()
+                for _ in 0..2 {
+                    let p = Arc::clone(&policy);
+                    tasks.push(shuttle::future::spawn(async move {
+                        for _ in 0..10 {
+                            p.reset_all();
+                        }
+                    }));
+                }
+
+                for task in tasks {
+                    let _ = task.await;
+                }
+                // No assertion on final state — this test checks for deadlocks/panics only.
+            });
+        },
+        1000,
+    );
+}

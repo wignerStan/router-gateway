@@ -97,7 +97,7 @@ impl BanditPolicy {
     pub(crate) fn sample_beta(alpha: f64, beta: f64) -> f64 {
         let alpha = alpha.max(f64::MIN_POSITIVE);
         let beta = beta.max(f64::MIN_POSITIVE);
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Beta(alpha, beta) = Gamma(alpha, 1) / (Gamma(alpha, 1) + Gamma(beta, 1))
         // Use approximation for speed: Beta ~ Normal for large parameters
@@ -112,8 +112,8 @@ impl BanditPolicy {
             let std_dev = variance.sqrt();
 
             // Box-Muller transform for normal distribution
-            let u1: f64 = rng.r#gen();
-            let u2: f64 = rng.r#gen();
+            let u1: f64 = rng.random();
+            let u2: f64 = rng.random();
             let z = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
 
             (mean + z * std_dev).clamp(0.0, 1.0)
@@ -138,11 +138,11 @@ impl BanditPolicy {
         if shape <= 0.0 {
             return 0.0;
         }
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         if shape < 1.0 {
             // Use transformation for shape < 1
-            let uniform: f64 = rng.r#gen();
+            let uniform: f64 = rng.random();
             return Self::sample_gamma(1.0 + shape) * uniform.powf(1.0 / shape);
         }
 
@@ -154,7 +154,7 @@ impl BanditPolicy {
             let mut v: f64;
 
             loop {
-                x = rng.r#gen();
+                x = rng.random();
                 x = 2.0f64.mul_add(x, -1.0);
                 v = 1.0 + c * x;
 
@@ -164,7 +164,7 @@ impl BanditPolicy {
             }
 
             v = v * v * v;
-            let u: f64 = rng.r#gen();
+            let u: f64 = rng.random();
 
             if u < 0.0331f64.mul_add(-(x * x).powi(2), 1.0) {
                 return delta * v;

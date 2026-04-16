@@ -1,8 +1,15 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 //! Error-path concurrency tests for the gateway.
 //!
-//! Exercises failure scenarios under concurrent access,
-//! complementing the existing happy-path concurrent tests.
+//! Stress tests using real OS threads (non-deterministic).
+//!
+//! These tests use `#[tokio::test(flavor = "multi_thread")]` which exercises
+//! actual concurrent scheduling. Thread interleavings depend on OS scheduler —
+//! passes here do NOT guarantee race-freedom. These complement deterministic
+//! loom/shuttle tests, not replace them.
+//!
+//! If these tests fail, it IS a real bug. If they pass, run loom/shuttle for
+//! exhaustive coverage.
 
 use gateway::routing::config::HealthConfig;
 use gateway::routing::health::{HealthManager, HealthStatus};

@@ -245,7 +245,7 @@ impl SQLiteSelector {
 
         if total_weight <= 0.0 || !total_weight.is_finite() {
             // All weights are zero, select randomly
-            let idx = rand::thread_rng().gen_range(0..available.len());
+            let idx = rand::rng().random_range(0..available.len());
             return available
                 .into_iter()
                 .nth(idx)
@@ -260,7 +260,7 @@ impl SQLiteSelector {
             .expect("unwrapping valid test data");
 
         // Weighted random selection
-        let r = rand::thread_rng().r#gen::<f64>() * total_weight;
+        let r = rand::rng().random::<f64>() * total_weight;
         let mut cumulative = 0.0;
 
         for auth in available {

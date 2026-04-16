@@ -11,6 +11,7 @@ use super::{CacheEntry, SQLiteStore};
 use crate::routing::health::{AuthHealth, HealthStatus};
 use crate::routing::metrics::AuthMetrics;
 use chrono::{DateTime, Utc};
+use std::collections::HashMap;
 
 impl SQLiteStore {
     /// Write metrics to the database.
@@ -74,6 +75,9 @@ impl SQLiteStore {
             .map_err(|e| SqliteError::query("write_metrics", e))?;
         }
 
+        // Relaxed ordering is safe: this flag is set once at construction and never
+        // modified. The RwLock guarding the actual cache data provides the necessary
+        // Acquire/Release synchronization.
         if self
             .cache_enabled
             .load(std::sync::atomic::Ordering::Relaxed)
@@ -351,10 +355,10 @@ impl SQLiteStore {
                     _ => HealthStatus::Healthy,
                 };
 
-                let error_counts: std::collections::HashMap<i32, i32> =
-                    serde_json::from_str(&error_counts_str).unwrap_or_else(|e| {
+                let error_counts: HashMap<i32, i32> = serde_json::from_str(&error_counts_str)
+                    .unwrap_or_else(|e| {
                         tracing::warn!("Failed to parse error_counts JSON: {}", e);
-                        std::collections::HashMap::default()
+                        HashMap::default()
                     });
 
                 Ok(AuthHealth {
@@ -424,7 +428,7 @@ impl SQLiteStore {
     /// # Errors
     ///
     /// Returns an error if the SQL query or row mapping fails.
-    pub async fn load_all_metrics(&self) -> Result<std::collections::HashMap<String, AuthMetrics>> {
+    pub async fn load_all_metrics(&self) -> Result<HashMap<String, AuthMetrics>> {
         let db = self.db.lock().await;
 
         let mut stmt = db
@@ -511,7 +515,7 @@ impl SQLiteStore {
     /// # Errors
     ///
     /// Returns an error if the SQL query or row mapping fails.
-    pub async fn load_all_health(&self) -> Result<std::collections::HashMap<String, AuthHealth>> {
+    pub async fn load_all_health(&self) -> Result<HashMap<String, AuthHealth>> {
         let db = self.db.lock().await;
 
         let mut stmt = db
@@ -537,10 +541,10 @@ impl SQLiteStore {
                     _ => HealthStatus::Healthy,
                 };
 
-                let error_counts: std::collections::HashMap<i32, i32> =
-                    serde_json::from_str(&error_counts_str).unwrap_or_else(|e| {
+                let error_counts: HashMap<i32, i32> = serde_json::from_str(&error_counts_str)
+                    .unwrap_or_else(|e| {
                         tracing::warn!("Failed to parse error_counts JSON: {}", e);
-                        std::collections::HashMap::default()
+                        HashMap::default()
                     });
 
                 Ok((

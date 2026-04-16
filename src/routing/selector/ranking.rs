@@ -163,7 +163,7 @@ impl SmartSelector {
         let total_weight: f64 = available.iter().map(|a| a.weight).sum();
 
         if total_weight <= 0.0 || !total_weight.is_finite() {
-            let idx = rand::thread_rng().gen_range(0..available.len());
+            let idx = rand::rng().random_range(0..available.len());
             return available
                 .into_iter()
                 .nth(idx)
@@ -176,7 +176,7 @@ impl SmartSelector {
             .map(|a| a.id.clone())
             .expect("should have element");
 
-        let r = rand::thread_rng().r#gen::<f64>() * total_weight;
+        let r = rand::rng().random::<f64>() * total_weight;
         let mut cumulative = 0.0;
 
         for auth in available {

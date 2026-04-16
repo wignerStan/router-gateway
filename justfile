@@ -265,9 +265,9 @@ loom:
 loom-verbose:
     RUST_LOG=loom cargo test --test loom_rate_limiter -- --nocapture
 
-# Run shuttle randomized async concurrency tests
+# Run shuttle randomized async concurrency tests (5000 iterations)
 shuttle:
-    cargo test --test shuttle_concurrency
+    cargo test --test shuttle_concurrency -- --shuttle-count 5000
 
 # Run shuttle with more iterations for deeper testing
 shuttle-deep:
