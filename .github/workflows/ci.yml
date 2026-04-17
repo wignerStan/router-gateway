@@ -7,7 +7,7 @@ on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
   workflow_dispatch:
     inputs:
       version:
@@ -348,3 +348,41 @@ jobs:
 
       - name: Check all workspace members inherit workspace lints
         run: ./scripts/check-lint-inheritance.sh || echo "::warning::Some crates do not inherit workspace lints (see above)"
+
+  # ===========================================
+  # TIER 6: MUTATION TESTING (main branch + manual only)
+  # ===========================================
+
+  mutation:
+    name: Mutation Testing
+    runs-on: ubuntu-latest
+    needs: [test, coverage]
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    timeout-minutes: 120
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: mutation
+
+      - name: Install cargo-mutants
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+
+      - name: Run mutation testing
+        run: cargo mutants --copy-target=false --check
+
+      - name: Upload mutation results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-results
+          path: mutants.out/
+          retention-days: 30

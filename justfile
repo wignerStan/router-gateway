@@ -323,7 +323,7 @@ mutants-file FILE:
 
 # Check mutation score without writing changes
 mutants-check:
-    cargo mutants --no-copy --check
+    cargo mutants --copy-target=false --check
 
 # ============================================
 # FUZZING (requires nightly)
