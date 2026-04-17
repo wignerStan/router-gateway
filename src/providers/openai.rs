@@ -868,4 +868,69 @@ mod tests {
         assert_eq!(result.usage.completion_tokens, 0);
         assert_eq!(result.usage.total_tokens, 0);
     }
+
+    mod proptests {
+        use crate::providers::types::{Message, MessageContent, ProviderAdapter};
+        use proptest::prelude::*;
+        use serde_json::Value;
+
+        use super::OpenAIAdapter;
+
+        /// Recursive strategy for arbitrary JSON values (depth-limited to avoid stack overflow).
+        fn arb_json_value() -> impl Strategy<Value = Value> {
+            let leaf = prop_oneof![
+                Just(Value::Null),
+                proptest::arbitrary::any::<bool>().prop_map(Value::Bool),
+                proptest::arbitrary::any::<f64>().prop_map(Value::from),
+                proptest::arbitrary::any::<String>().prop_map(Value::String),
+            ];
+            leaf.prop_recursive(3, 16, 8, |inner| {
+                prop_oneof![
+                    prop::collection::vec(inner.clone(), 0..8).prop_map(Value::Array),
+                    prop::collection::vec((proptest::arbitrary::any::<String>(), inner), 0..8)
+                        .prop_map(|pairs| Value::Object(pairs.into_iter().collect())),
+                ]
+            })
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(64))]
+
+            #[test]
+            fn proptests_transform_response_never_panics(
+                response in arb_json_value()
+            ) {
+                let adapter = OpenAIAdapter::new();
+                // Must not panic on arbitrary JSON — may return Ok or Err
+                let _ = adapter.transform_response(response);
+            }
+
+            #[test]
+            fn transform_request_any_model(model in "\\PC*") {
+                let adapter = OpenAIAdapter::new();
+                let request = crate::providers::types::ProviderRequest {
+                    messages: vec![Message {
+                        role: "user".to_string(),
+                        content: MessageContent::Text("Hello".to_string()),
+                        name: None,
+                    }],
+                    model,
+                    max_tokens: None,
+                    temperature: None,
+                    top_p: None,
+                    stop: None,
+                    stream: false,
+                    system: None,
+                    tools: None,
+                    tool_choice: None,
+                };
+
+                let transformed = adapter.transform_request(&request);
+                // Model field must be present in output
+                assert!(transformed.get("model").is_some());
+                // Messages array must be present
+                assert!(transformed.get("messages").is_some());
+            }
+        }
+    }
 }

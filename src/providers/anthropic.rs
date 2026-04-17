@@ -1152,4 +1152,72 @@ mod tests {
         let endpoint = adapter.get_endpoint(None, "model");
         assert_eq!(endpoint, "https://test.example.com/api/messages");
     }
+
+    mod proptests {
+        use crate::providers::types::{Message, MessageContent, ProviderAdapter};
+        use proptest::prelude::*;
+        use serde_json::Value;
+
+        use super::AnthropicAdapter;
+
+        /// Recursive strategy for arbitrary JSON values (depth-limited to avoid stack overflow).
+        fn arb_json_value() -> impl Strategy<Value = Value> {
+            let leaf = prop_oneof![
+                Just(Value::Null),
+                proptest::arbitrary::any::<bool>().prop_map(Value::Bool),
+                proptest::arbitrary::any::<f64>().prop_map(Value::from),
+                proptest::arbitrary::any::<String>().prop_map(Value::String),
+            ];
+            leaf.prop_recursive(3, 16, 8, |inner| {
+                prop_oneof![
+                    prop::collection::vec(inner.clone(), 0..8).prop_map(Value::Array),
+                    prop::collection::vec((proptest::arbitrary::any::<String>(), inner), 0..8)
+                        .prop_map(|pairs| Value::Object(pairs.into_iter().collect())),
+                ]
+            })
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(64))]
+
+            #[test]
+            fn proptests_transform_response_never_panics(
+                response in arb_json_value()
+            ) {
+                let adapter = AnthropicAdapter::new();
+                // Must not panic on arbitrary JSON — may return Ok or Err
+                let _ = adapter.transform_response(response);
+            }
+
+            #[test]
+            fn system_prompt_arbitrary_content(system_prompt in "\\PC*") {
+                let adapter = AnthropicAdapter::new();
+                let request = crate::providers::types::ProviderRequest {
+                    messages: vec![Message {
+                        role: "user".to_string(),
+                        content: MessageContent::Text("Hello".to_string()),
+                        name: None,
+                    }],
+                    model: "claude-3-opus".to_string(),
+                    max_tokens: Some(1024),
+                    temperature: None,
+                    top_p: None,
+                    stop: None,
+                    stream: false,
+                    system: Some(system_prompt),
+                    tools: None,
+                    tool_choice: None,
+                };
+
+                let transformed = adapter.transform_request(&request);
+                // System prompt should appear in the output
+                assert!(transformed.get("system").is_some());
+                // Messages should not contain system role
+                let messages = transformed["messages"].as_array().unwrap();
+                for msg in messages {
+                    assert_ne!(msg["role"], "system", "system messages must be extracted");
+                }
+            }
+        }
+    }
 }

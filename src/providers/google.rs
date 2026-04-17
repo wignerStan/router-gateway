@@ -828,4 +828,69 @@ mod tests {
         let result = adapter.transform_response(response).unwrap();
         assert_eq!(result.finish_reason, "UNKNOWN");
     }
+
+    mod proptests {
+        use crate::providers::types::ProviderAdapter;
+        use proptest::prelude::*;
+        use serde_json::Value;
+
+        use super::GoogleAdapter;
+
+        /// Recursive strategy for arbitrary JSON values (depth-limited to avoid stack overflow).
+        fn arb_json_value() -> impl Strategy<Value = Value> {
+            let leaf = prop_oneof![
+                Just(Value::Null),
+                proptest::arbitrary::any::<bool>().prop_map(Value::Bool),
+                proptest::arbitrary::any::<f64>().prop_map(Value::from),
+                proptest::arbitrary::any::<String>().prop_map(Value::String),
+            ];
+            leaf.prop_recursive(3, 16, 8, |inner| {
+                prop_oneof![
+                    prop::collection::vec(inner.clone(), 0..8).prop_map(Value::Array),
+                    prop::collection::vec((proptest::arbitrary::any::<String>(), inner), 0..8)
+                        .prop_map(|pairs| Value::Object(pairs.into_iter().collect())),
+                ]
+            })
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(64))]
+
+            #[test]
+            fn proptests_transform_response_never_panics(
+                response in arb_json_value()
+            ) {
+                let adapter = GoogleAdapter::new();
+                // Must not panic on arbitrary JSON — may return Ok or Err
+                let _ = adapter.transform_response(response);
+            }
+
+            #[test]
+            fn endpoint_generation(model_id in "\\PC*") {
+                let adapter = GoogleAdapter::new();
+                let endpoint = adapter.get_endpoint(None, &model_id);
+                // Endpoint must be a non-empty string
+                assert!(!endpoint.is_empty(), "endpoint must not be empty");
+                // Endpoint must end with :generateContent
+                assert!(
+                    endpoint.ends_with(":generateContent"),
+                    "endpoint must end with :generateContent, got: {endpoint}"
+                );
+                // Endpoint must contain /models/ (even for empty model_id after sanitization)
+                assert!(
+                    endpoint.contains("/models/"),
+                    "endpoint must contain /models/, got: {endpoint}"
+                );
+                // Path traversal characters (/ and \) must be stripped from model_id
+                assert!(
+                    !endpoint.contains("../"),
+                    "endpoint must not contain path traversal, got: {endpoint}"
+                );
+                assert!(
+                    !endpoint.contains("..\\"),
+                    "endpoint must not contain backslash traversal, got: {endpoint}"
+                );
+            }
+        }
+    }
 }
