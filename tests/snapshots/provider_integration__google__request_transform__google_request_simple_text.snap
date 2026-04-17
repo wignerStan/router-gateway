@@ -1,0 +1,20 @@
+---
+source: tests/provider_integration.rs
+expression: transformed
+---
+{
+  "contents": [
+    {
+      "parts": [
+        {
+          "text": "Hello, Gemini!"
+        }
+      ],
+      "role": "user"
+    }
+  ],
+  "generationConfig": {
+    "maxOutputTokens": 1024,
+    "temperature": 0.699999988079071
+  }
+}

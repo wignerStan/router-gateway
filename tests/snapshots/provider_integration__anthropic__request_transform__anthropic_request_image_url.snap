@@ -1,0 +1,26 @@
+---
+source: tests/provider_integration.rs
+expression: transformed
+---
+{
+  "max_tokens": 1024,
+  "messages": [
+    {
+      "content": [
+        {
+          "text": "What is in this image?",
+          "type": "text"
+        },
+        {
+          "source": {
+            "type": "url",
+            "url": "https://example.com/photo.png"
+          },
+          "type": "image"
+        }
+      ],
+      "role": "user"
+    }
+  ],
+  "model": "claude-3-opus-20240229"
+}

@@ -1,0 +1,14 @@
+# Mutation testing configuration for the gateway project.
+#
+# cargo-mutants introduces small code changes (mutations) and verifies
+# that existing tests catch them. Mutations that pass = test gaps.
+
+# Exclude non-business-logic files from mutation
+exclude_globs = [
+    "src/main.rs",
+    "src/bin/cli.rs",
+    "**/tests.rs",
+    "**/tests/**",
+    "benches/**",
+    "fuzz/**",
+]

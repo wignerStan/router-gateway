@@ -1,0 +1,5 @@
+---
+source: tests/provider_integration.rs
+expression: result.unwrap_err().to_string()
+---
+Empty choices array

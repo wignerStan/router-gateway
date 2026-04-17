@@ -1,0 +1,81 @@
+# Test Infrastructure Assessment
+
+**Assessed by:** Murat (TEA — Master Test Architect)
+**Date:** 2026-04-12
+**Project:** router-gateway (local LLM gateway, Rust)
+
+---
+
+## Strengths (Low Risk)
+
+| Area | Assessment |
+|------|-----------|
+| **Test Pyramid Shape** | Solid. 50+ unit test modules, 6 integration test files, BDD feature files. Weighted toward lower levels. |
+| **Coverage Gate** | 90% threshold enforced in CI via llvm-cov + Codecov. Right number for a Rust backend service. |
+| **CI Pipeline Design** | Tiered gates well-architected — fast quality (<2 min) runs before tests. MSRV check is valuable. |
+| **Multi-OS Matrix** | ubuntu/macos/windows. Critical for a tool people run locally. |
+| **Lint Discipline** | clippy strict + deny, workspace lint inheritance enforcement, clippy-allow audit in CI. |
+| **Dev Dependencies** | Well-chosen: `rstest` for parameterized tests, `pretty_assertions` for diffs, `wiremock` for HTTP mocking, `assert_cmd` for CLI testing. |
+| **Security Pipeline** | Gitleaks, cargo-audit, cargo-deny, CodeQL. Defense in depth. |
+| **Justfile Ergonomics** | `just qa` vs `just qa-full` gives developers fast feedback loops. Tiered verification is the right pattern. |
+
+---
+
+## Risk Assessment
+
+| # | Risk | Category | P | I | Score | Detail |
+|---|------|----------|---|---|-------|--------|
+| 1 | **No property-based testing** | TECH | 2 | 2 | **4** | `rstest` covers parameterized tests but no `proptest` or `quickcheck`. For routing algorithms with float-based metrics (bandit, weights, health scores), property-based testing catches NaN/ordering edge cases the known-pitfall doc warns about. |
+| 2 | **BDD tests are monolithic** | TECH | 2 | 2 | **4** | `tests/bdd_integration_tests.rs` is 1,275 lines. `crates/gateway/tests/routes.rs` is 1,577 lines. Test quality standard caps at 300 lines per file. Maintenance and merge conflict risk. |
+| 3 | **No test fixture sharing across crates** | TECH | 2 | 2 | **4** | Each crate defines test helpers independently. No shared test utility crate. Duplication grows with workspace size. |
+| 4 | **Coverage excludes main.rs but not other bins** | OPS | 1 | 2 | **2** | tarpaulin excludes `cli/src/main.rs` and `gateway/src/main.rs`. Verify no other entry points need exclusion/inclusion. |
+| 5 | **No mutation testing** | TECH | 2 | 1 | **2** | 80% coverage doesn't mean 80% effective. `cargo-mutants` would validate tests catch bugs, not just execute lines. Nice-to-have. |
+| 6 | **No snapshot testing** | TECH | 1 | 2 | **2** | `cargo insta` mentioned in testing instructions but not in dev-dependencies. High-value for API response and config parsing validation. |
+
+### Critical Gaps (Score >= 6)
+
+None identified. Test infrastructure is mature for the project's stage.
+
+---
+
+## Priority-Ordered Recommendations
+
+| # | Recommendation | Status | Commit |
+|---|---------------|--------|--------|
+| 1 | Add `proptest` to routing modules | **DONE** | `4a2fc85` — proptests in bandit, weight, health |
+| 2 | Split monolithic test files | **DONE** — BDD split into domain modules | pending |
+| 3 | Consider shared `test-utils` crate | **DEFERRED** — single-crate workspace, not yet needed | — |
+| 4 | Add `insta` for snapshot testing | **DONE** | `e34ea29` — config parsing snapshots |
+
+## Additional Improvements Completed
+
+- Removed `just` dependency from CI — direct cargo commands (`6689c1b`)
+- Raised coverage gate from 80% to 90% (`a9eb708`) — current: ~92%
+- Added `rstest` parameterized config validation tests (`1d2fe02`)
+- Replaced `cargo-tarpaulin` with `cargo-llvm-cov` + `cargo-nextest`
+- Added `.nextest.toml` with CI retry profile
+- Added `codecov.yml` with 90% project/patch targets
+- Updated `AGENTS.md` with current test tooling documentation
+
+---
+
+## Actions Taken
+
+### Session 1 (2026-04-12): Initial Assessment + Infrastructure
+
+- Simplified clippy configuration to `all` + `unwrap_used` + `expect_used` (removed 30+ unexplained overrides)
+- Replaced pre-commit framework with lefthook for git hooks
+- Established three-layer verification: pre-commit (fmt + check -q) / pre-push (clippy) / CI (full)
+- Updated justfile tiered verification to match three-layer model
+
+### Session 2 (2026-04-12): Modern Test Infrastructure Upgrade
+
+- Replaced `cargo-tarpaulin` with `cargo-llvm-cov` + `cargo-nextest` (faster, more accurate)
+- Removed `just` dependency from CI — all direct cargo commands
+- Raised coverage gate from 80% to 90% (current: ~92%)
+- Added `rstest` parameterized config validation tests (4 cases consolidated)
+- Added `insta` snapshot tests for config parsing (3 snapshots with sorted redactions)
+- Added `proptest` property-based tests for bandit (3), weight (2), and health (1) modules
+- Added `.nextest.toml` with CI retry profile and `codecov.yml` with 90% targets
+- Split BDD integration tests into `classification_integration.rs` and `health_integration.rs`
+- Updated `AGENTS.md` with current build/test commands and test tooling documentation

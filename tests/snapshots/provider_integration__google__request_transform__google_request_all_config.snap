@@ -1,0 +1,32 @@
+---
+source: tests/provider_integration.rs
+expression: transformed
+---
+{
+  "contents": [
+    {
+      "parts": [
+        {
+          "text": "Generate a poem"
+        }
+      ],
+      "role": "user"
+    }
+  ],
+  "generationConfig": {
+    "maxOutputTokens": 512,
+    "stopSequences": [
+      "END",
+      "---"
+    ],
+    "temperature": 0.8999999761581421,
+    "topP": 0.949999988079071
+  },
+  "systemInstruction": {
+    "parts": [
+      {
+        "text": "You are a poet."
+      }
+    ]
+  }
+}

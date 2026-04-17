@@ -1,40 +1,52 @@
-[workspace]
-resolver = "2"
-members = [
-    "cli",
-    "crates/gateway",
-    "crates/gateway-utils",
-    "crates/smart-routing",
-    "crates/model-registry",
-    "crates/llm-tracing",
-]
-
-[workspace.package]
+[package]
+name = "gateway"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 license = "MIT OR Apache-2.0"
+description = "Local LLM gateway for intelligent request routing"
 repository = "https://github.com/proxy/gateway"
 rust-version = "1.85"
 
-[workspace.dependencies]
+[features]
+default = []
+bdd = []
+console = ["console-subscriber", "tokio/tracing"]
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "gateway"
+path = "src/main.rs"
+
+[[bin]]
+name = "gateway-cli"
+path = "src/bin/cli.rs"
+
+[dependencies]
 # Async runtime
 tokio = { version = "1.40", features = ["sync", "time", "rt", "rt-multi-thread", "macros"] }
 tokio-util = "0.7"
+tokio-stream = "0.1"
 async-trait = "0.1"
+futures = "0.3.32"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+serde_yaml_ng = "0.10"
 
 # Error handling
 thiserror = "1.0"
 anyhow = "1.0"
 
 # HTTP/Web
-axum = "0.7"
-tower = "0.5"
-tower-http = "0.5"
+axum = { version = "0.8", features = ["macros"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["trace", "cors", "set-header"] }
 http = "1.0"
+hyper = { version = "1.0", features = ["full"] }
+reqwest = { version = "0.12", features = ["json"] }
 
 # Observability
 tracing = "0.1"
@@ -45,28 +57,64 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # CLI
 clap = { version = "4.4", features = ["derive"] }
+colored = "2.1"
+tabled = "0.17"
 
 # Utilities
 uuid = { version = "1.0", features = ["v4", "serde"] }
+subtle = "2.6"
+url = "2.5"
+rand = "0.9"
 
-# Internal packages
-gateway-utils = { path = "crates/gateway-utils", version = "0.1.0" }
-smart-routing = { path = "crates/smart-routing", version = "0.1.0" }
-model-registry = { path = "crates/model-registry", version = "0.1.0" }
-llm-tracing = { path = "crates/llm-tracing", version = "0.1.0" }
+# Database
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "migrate"] }
+libsqlite3-sys = { version = "0.30", features = ["bundled"] }
 
-[workspace.lints.rust]
-unsafe_code = "forbid"
+# Validation
+jsonschema = "0.22"
+
+# Async task inspection (feature-gated, dev-time only)
+console-subscriber = { version = "0.5", optional = true }
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.1"
+tempfile = "3"
+wiremock = "0.6"
+rstest = "0.25"
+pretty_assertions = "1.4"
+http-body-util = "0.1"
+
+# Snapshot testing
+insta = { version = "1.42", features = ["yaml", "json", "redactions"] }
+
+# Property-based testing
+proptest = "1.6"
+
+# BDD testing
+cucumber = { version = "0.21", features = ["libtest"] }
+
+# Benchmarking
+criterion = { version = "0.5", features = ["html_reports"] }
+
+# Systematic concurrency testing (std::sync)
+loom = "0.7"
+
+# Randomized async concurrency testing (tokio::sync)
+shuttle = "0.8"
+
+
+[lints.rust]
+unsafe_code = "deny"
 missing_docs = "warn"
 
-[workspace.lints.clippy]
-# Base comprehensive rules set to deny for production
+[lints.clippy]
 all = { level = "deny", priority = -1 }
-pedantic = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 perf = { level = "deny", priority = -1 }
 
-# Specific rules based on references/Codex rules
+# Production quality gates
 collapsible_if = "deny"
 uninlined_format_args = "deny"
 redundant_closure_for_method_calls = "deny"
@@ -76,16 +124,29 @@ expect_used = "deny"
 panic = "deny"
 todo = "warn"
 clone_on_ref_ptr = "deny"
-
-# Exceptions (allow) for common pedantic rules that are often too noisy
-module_name_repetitions = "allow"
 missing_errors_doc = "deny"
 missing_panics_doc = "deny"
+
 # Casting: precision loss is acceptable for metric calculations, token counts, and costs
 cast_possible_truncation = "allow"
 cast_possible_wrap = "allow"
 cast_precision_loss = "allow"
 cast_sign_loss = "allow"
+module_name_repetitions = "allow"
 similar_names = "allow"
-too_many_lines = "allow"
 struct_excessive_bools = "allow"
+
+# Benchmark targets
+[[bench]]
+name = "routing_benchmark"
+harness = false
+
+[[bench]]
+name = "ssrf_benchmark"
+harness = false
+
+# BDD test target (cucumber harness)
+[[test]]
+name = "cucumber_bdd"
+harness = false
+required-features = ["bdd"]

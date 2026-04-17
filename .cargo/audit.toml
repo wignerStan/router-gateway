@@ -1,0 +1,4 @@
+[advisories]
+ignore = [
+    "RUSTSEC-2026-0097", # Rand is unsound with a custom logger using `rand::rng()`. We don't use this feature and it's brought in by shuttle 0.8.1 in tests only.
+]

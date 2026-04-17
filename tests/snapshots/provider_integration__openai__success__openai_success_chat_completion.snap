@@ -1,0 +1,15 @@
+---
+source: tests/provider_integration.rs
+expression: result
+---
+{
+  "id": "chatcmpl-9bZ3T2z1kQwX5vNpM8rL",
+  "model": "gpt-4-0613",
+  "content": "Hello! How can I help you today?",
+  "finish_reason": "stop",
+  "usage": {
+    "prompt_tokens": 10,
+    "completion_tokens": 8,
+    "total_tokens": 18
+  }
+}

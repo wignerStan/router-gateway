@@ -4,38 +4,102 @@
 
 A **local LLM gateway** written in Rust for intelligent request routing. Routes LLM requests to optimal credentials based on health, latency, and success rate. Designed for local development and self-hosted deployments.
 
-**Stack**: Rust 1.85+, Tokio, Axum, SQLite
+**Stack**: Rust 1.85+ (edition 2024), Tokio, Axum, SQLite
 **Focus**: Smart routing, model registry, LLM tracing
+**Package**: Single crate — `gateway` (no workspace)
 
-### Package Names
+### Build and Test Commands
 
-Directory names match Cargo package names throughout the workspace.
+| Task              | Command                                                        |
+| ----------------- | -------------------------------------------------------------- |
+| Build             | `cargo build`                                                  |
+| Test (all)        | `cargo nextest run`                                            |
+| Test (unit only)  | `cargo nextest run --lib`                                      |
+| Test (one test)   | `cargo nextest run -E 'test(test_name_pattern)'`               |
+| Test (doctests)   | `cargo test --doc`                                             |
+| Test (property)   | `cargo nextest run -E 'test(proptests)'`                       |
+| Benchmarks        | `cargo bench`                                                  |
+| Fuzz (SSRF)       | `cargo +nightly fuzz run ssrf_url_fuzz -- -max_total_time=60`  |
+| Fuzz (Config)     | `cargo +nightly fuzz run config_parse_fuzz -- -max_total_time=60` |
+| Fuzz (Token)      | `cargo +nightly fuzz run token_match_fuzz -- -max_total_time=60` |
+| Fuzz (All)        | `just fuzz-all`                                                |
+| Run Gateway       | `cargo run --bin gateway`                                      |
+| Lint              | `cargo clippy --all-targets -- -D warnings`                    |
+| Format            | `cargo fmt --all`                                              |
+| Coverage (HTML)   | `cargo llvm-cov nextest --html --ignore-filename-regex "src/main\.rs\|src/bin/cli\.rs"` |
+| Coverage gate     | `cargo llvm-cov --fail-under-lines 90 --ignore-filename-regex "src/main\.rs\|src/bin/cli\.rs"` |
+| Snapshots review  | `cargo insta test` then `cargo insta review`                   |
+| Quick Checks      | `just qa`                                                      |
+| Full Checks       | `just qa-full`                                                 |
+| Security Deep     | `just qa-security`                                             |
+| Test (concurrency)  | `cargo test --test loom_rate_limiter && cargo test --test shuttle_concurrency` |
+| Test (error paths)  | `cargo test --test concurrency_error_paths` |
+| Miri (unsafe)       | `MIRIFLAGS="-Zmiri-disable-isolation" cargo +nightly miri test --lib` |
+| TSAN (races)        | `RUSTFLAGS="-Zsanitizer=thread" cargo +nightly test --lib --target x86_64-unknown-linux-gnu -- -- --test-threads=1` |
+| Mutation testing    | `cargo mutants --in-place` |
 
-### Build and test commands
+**Runtime Diagnostics** (not automated tests):
 
-| Task        | Command                  |
-| ----------- | ------------------------ |
-| Build       | `cargo build`            |
-| Test        | `cargo test --workspace` |
-| Run Gateway | `cargo run -p gateway`   |
-| Lint        | `cargo lint`             |
-| Format      | `cargo fmt`              |
-| All Checks  | `just qa`                |
+| Task              | Command                                                        |
+| ----------------- | -------------------------------------------------------------- |
+| Console (debug)   | `cargo run --features console --bin gateway`                   |
+
+### Source Layout
+
+```
+src/
+├── main.rs, lib.rs, config.rs, state.rs, routes.rs     # Gateway core
+├── routing/          # Smart credential selection
+│   ├── bandit/       # Thompson sampling (beta/gamma distributions)
+│   ├── classification/  # Request classification (vision, tools, streaming)
+│   ├── config/       # Routing config (time/quota-aware strategies)
+│   ├── health/       # Health state machine (Healthy → Degraded → Unhealthy)
+│   ├── router/       # Dispatch: strategy → credential selection
+│   ├── selector/     # Ranking and candidate filtering
+│   └── weight/       # Composite weight calculation (success, latency, health, load, priority)
+├── registry/         # Model metadata and routing policies
+│   ├── policy/       # Policy engine (filters, actions, matchers)
+│   └── registry/     # Model info CRUD and lookup
+├── tracing/          # Request/response observability (TraceSpan, collector, middleware)
+├── providers/        # LLM provider adapters (OpenAI, Anthropic, Google)
+└── utils/            # Security (SSRF, constant-time compare), env helpers
+benches/              # Criterion benchmarks (routing, SSRF performance)
+fuzz/                 # cargo-fuzz targets (SSRF, config parsing, token matching)
+```
+
+Integration tests in `tests/` are split by domain: `classification_integration.rs`, `health_integration.rs`, `config.rs`, `routes.rs`, `tracing_integration.rs`, `cli_integration.rs`, `loom_rate_limiter.rs`, `shuttle_concurrency.rs`, `concurrency_error_paths.rs`.
+
+### Key Types
+
+| Type                    | Location                          | Purpose                                  |
+| ----------------------- | --------------------------------- | ---------------------------------------- |
+| `AppState`              | `src/state.rs`                    | Shared Axum state (registry, config)     |
+| `GatewayConfig`         | `src/config.rs`                   | Full gateway YAML config                 |
+| `SmartRoutingConfig`    | `src/routing/config/mod.rs`       | Strategy + weight configuration          |
+| `Router`                | `src/routing/router/mod.rs`       | Strategy dispatch + credential selection |
+| `HealthManager`         | `src/routing/health/mod.rs`       | Credential health state machine          |
+| `WeightCalculator`      | `src/routing/weight/calculator.rs`| Composite scoring (5 factors)            |
+| `Registry`              | `src/registry/registry/mod.rs`    | Model info CRUD + lookup                 |
+| `PolicyRegistry`        | `src/registry/policy/registry.rs` | Routing policy engine                    |
+| `TraceSpan`             | `src/tracing/trace.rs`            | Request/response trace record            |
 
 ### Known Pitfalls
 
 - All async operations use Tokio — always `.await` on registry/selector methods
 - `Registry::get()` requires model ID to be non-empty (returns error otherwise)
-- Health manager clones have independent storage (not shared state)
-- Trace collectors are not shared across clones (same pattern)
+- Health manager clones share the same underlying `Arc<RwLock>` storage. Updates through one clone are visible to all.
+- Trace collector clones share the same `Arc<RwLock>` buffer. Traces recorded via one clone appear in all.
 - SQLite store requires `bundled` feature for cross-platform builds
 - Model registry cache TTL is 1 hour by default
 - Floating-point metrics may contain NaN values — always use `partial_cmp().unwrap_or(Ordering::Equal)` instead of `.unwrap()`
 - `constant_time_token_eq()` must be used for all auth token comparisons to prevent timing attacks
+- Fuzzing requires nightly Rust (`rustup toolchain install nightly; cargo +nightly install cargo-fuzz`)
+- Fuzz corpus is stored in `fuzz/corpus/` — do not commit large corpora to git
+- Line coverage measures executed code, not interleaving coverage. 90%+ line coverage does NOT guarantee race-freedom. Concurrency correctness relies on loom (systematic), shuttle (randomized async), and TSAN.
 
 ### REFERENCE
 
-For architecture, features, configuration, API endpoints, and key types, see [README.md](README.md).
+For architecture diagrams, API endpoints, configuration format, and provider details, see [README.md](README.md).
 
 ## Code style guidelines
 
@@ -43,26 +107,20 @@ This project enforces production-level code style using `rustfmt` and `clippy`. 
 
 ### General Idioms & Style
 
-- **Cosmetic Discipline**: Adhere to standard naming (`snake_case`, `CamelCase`, `UPPER_SNAKE_CASE`). Group imports hierarchically.
-- **Borrowing over Cloning**: Prefer borrowing (`&T`) over `.clone()` to avoid unnecessary allocations.
-- **Prevent Early Allocation**: Do not collect into `Vec` unless explicitly necessary for returning or async bounds.
+- **Borrowing over Cloning**: Prefer borrowing (`&T`) over `.clone()`. Do not collect into `Vec` unless explicitly necessary.
 - **Result over Panic**: Return `Result<T, E>`. Never `unwrap()` or `expect()` in production code. Use `thiserror` (lib) / `anyhow` (bin).
 - **Type State Pattern**: Use Type State for complex state machines to guarantee compile-time correctness.
-- **No Living Comments**: Don't write out-of-sync comments. Let code describe the _what_ and comments the _why_.
-- **Match statements**: Make match statements exhaustive and avoid wildcard arms (`_`) whenever possible. Use explicit arms for maintainability.
+- **No Living Comments**: Comments explain the _why_, not the _what_. Don't write out-of-sync comments.
+- **Match statements**: Exhaustive matches, avoid wildcard arms (`_`) for business-critical enums.
 - **Range checking**: Use `(start..=end).contains(&val)` instead of manual `>=` and `<=` checks.
-- **Borrowing**: Prefer borrowing over cloning. Prevent early allocations.
-- **Iterators**: Prefer `.iter()` and iterator combinators over manual `for` loops for zero-cost abstractions and better readability.
-- **Passing by Value vs Reference**: Follow official guidelines for when to pass by value (e.g. `Copy` traits) vs by reference.
+- **Iterators**: Prefer `.iter()` and iterator combinators over manual `for` loops.
+- **Passing by Value vs Reference**: Follow official Rust guidelines (`Copy` types by value, others by reference).
 
 ### Error Handling
 
-- **Result over Panic**: Prefer returning `Result` and avoid `panic!`.
-- **No unwrap in production**: `unwrap()` is denied everywhere by clippy. Use `unwrap_or()` / `unwrap_or_else()` for default values, or `?` for error propagation.
-- **No expect in production**: `expect()` is denied in production code. If truly unavoidable (e.g., compile-time embedded data, type-state builders), use `#[allow(clippy::expect_used)]` with a comment explaining why.
-- **Error Types**: Use `thiserror` for library/crate level errors and reserve `anyhow` strictly for binaries/applications.
-- **Error Bubbling**: Use the `?` operator to bubble errors up.
-- **Test code**: `expect("reason")` is allowed in tests for better failure messages. Prefer `.expect()` over `.unwrap()` in tests.
+- **No unwrap/expect in production**: Denied by clippy. Use `unwrap_or()` / `unwrap_or_else()` for defaults, `?` for propagation. If truly unavoidable, use `#[allow(clippy::expect_used)]` with a justification comment.
+- **Error Types**: `thiserror` for library errors, `anyhow` for binaries.
+- **Test code**: `expect("reason")` is allowed in tests for better failure messages.
 
 ### Comments and Documentation
 
@@ -89,8 +147,15 @@ This project enforces production-level code style using `rustfmt` and `clippy`. 
 - **Environment**: Avoid mutating process environment in tests; prefer passing environment-derived flags or dependencies from above.
 - **Async Tests**: Always mark async tests as `#[tokio::test]`.
 - **Sleeping**: Avoid `std::thread::sleep` in async contexts; always use `tokio::time::sleep`.
-- **Snapshot Testing**: Use snapshot testing (e.g., `cargo insta`) for output validation where appropriate.
 - **Test Errors**: Ensure unit tests exercise error conditions and not just the happy path.
+- **Test Runner**: Use `cargo nextest run` (not `cargo test`). CI uses the `ci` profile with retries.
+- **Coverage**: Minimum 90% line coverage enforced in CI via `cargo llvm-cov`. Excludes `src/main.rs` and `src/bin/cli.rs`.
+- **Snapshot Testing**: Use `insta` (`assert_yaml_snapshot!`) for structured output. Review with `cargo insta test` + `cargo insta review`.
+- **Property-Based Testing**: Use `proptest` for numeric edge cases and security invariants. Float-heavy modules (bandit, weight) and security modules (ssrf, security, env) have proptest suites. Run with `cargo nextest run -E 'test(proptests)'`.
+- **Fuzzing**: Use `cargo-fuzz` (nightly) for security-critical parsing. Targets: `ssrf_url_fuzz`, `config_parse_fuzz`, `token_match_fuzz`. Run with `just fuzz-all` or individual `just fuzz-ssrf` commands.
+- **Benchmarking**: Use `criterion` for performance regression detection. Run with `cargo bench` or `just bench`.
+- **Parameterized Testing**: Use `rstest` (`#[rstest]` + `#[case]`) for data-driven tests with multiple inputs.
+- **Red/Edge Tests**: Failure-path and boundary-condition tests go in `mod red_edge { ... }` within the existing test module. Run with `just test-red`. Count with `just test-red-count`. Target: 30-40% of all tests should be red/edge. Integration test files that are entirely failure-path (`routes_input_validation`, `db_resilience`, `concurrency_error_paths`) wrap all tests in `mod red_edge`.
 
 ## Security considerations
 
@@ -100,111 +165,3 @@ This project enforces production-level code style using `rustfmt` and `clippy`. 
 - SSRF protection blocks private/reserved IPs and IPv6-mapped/compatible addresses.
 - See [SECURITY.md](SECURITY.md) for full security policy, deployment practices, and reporting procedures.
 
-<!-- BEGIN BEADS INTEGRATION -->
-
-### Issue Tracking with bd (beads)
-
-**IMPORTANT**: This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TODOs, task lists, or other tracking methods.
-
-#### Why bd?
-
-- Dependency-aware: Track blockers and relationships between issues
-- Git-friendly: Dolt-powered version control with native sync
-- Agent-optimized: JSON output, ready work detection, discovered-from links
-- Prevents duplicate tracking systems and confusion
-
-#### Quick Start
-
-**Check for ready work:**
-
-```bash
-bd ready --json
-```
-
-**Create new issues:**
-
-```bash
-bd create "Issue title" --description="Detailed context" -t bug|feature|task -p 0-4 --json
-bd create "Issue title" --description="What this issue is about" -p 1 --deps discovered-from:bd-123 --json
-```
-
-**Claim and update:**
-
-```bash
-bd update <id> --claim --json
-bd update bd-42 --priority 1 --json
-```
-
-**Complete work:**
-
-```bash
-bd close bd-42 --reason "Completed" --json
-```
-
-#### Issue Types
-
-- `bug` - Something broken
-- `feature` - New functionality
-- `task` - Work item (tests, docs, refactoring)
-- `epic` - Large feature with subtasks
-- `chore` - Maintenance (dependencies, tooling)
-
-#### Priorities
-
-- `0` - Critical (security, data loss, broken builds)
-- `1` - High (major features, important bugs)
-- `2` - Medium (default, nice-to-have)
-- `3` - Low (polish, optimization)
-- `4` - Backlog (future ideas)
-
-#### Workflow for AI Agents
-
-1. **Check ready work**: `bd ready` shows unblocked issues
-2. **Claim your task atomically**: `bd update <id> --claim`
-3. **Work on it**: Implement, test, document
-4. **Discover new work?** Create linked issue:
-   - `bd create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
-5. **Complete**: `bd close <id> --reason "Done"`
-
-#### Auto-Sync
-
-bd automatically syncs via Dolt:
-
-- Each write auto-commits to Dolt history
-- Use `bd dolt push`/`bd dolt pull` for remote sync
-- No manual export/import needed!
-
-#### Important Rules
-
-- ✅ Use bd for ALL task tracking
-- ✅ Always use `--json` flag for programmatic use
-- ✅ Link discovered work with `discovered-from` dependencies
-- ✅ Check `bd ready` before asking "what should I work on?"
-- ❌ Do NOT create markdown TODO lists
-- ❌ Do NOT use external issue trackers
-- ❌ Do NOT duplicate tracking systems
-
-For more details, see README.md.
-
-<!-- END BEADS INTEGRATION -->
-
-### Landing the Plane (Session Completion)
-
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until pushing succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **SYNC AND PUBLISH** - This is MANDATORY:
-   Use the standard Git and bd sync commands to publish your work and ensure the working directory is clean.
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND published
-7. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-
-- Work is NOT complete until code is published
-- NEVER stop before publishing - that leaves work stranded locally
-- If publishing fails, resolve and retry until it succeeds

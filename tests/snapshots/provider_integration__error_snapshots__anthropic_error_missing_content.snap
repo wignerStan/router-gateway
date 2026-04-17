@@ -1,0 +1,5 @@
+---
+source: tests/provider_integration.rs
+expression: result.unwrap_err().to_string()
+---
+No content in Anthropic response

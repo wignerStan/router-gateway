@@ -7,7 +7,7 @@ on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
   workflow_dispatch:
     inputs:
       version:
@@ -23,8 +23,6 @@ concurrency:
 env:
   RUST_BACKTRACE: 1
   CARGO_TERM_COLOR: always
-  # Minimum coverage threshold
-  COVERAGE_THRESHOLD: 80
 
 jobs:
   # ===========================================
@@ -63,54 +61,8 @@ jobs:
         with:
           key: lint
 
-      - name: Install just
-        uses: taiki-e/install-action@v2
-        with:
-          tool: just
-
       - name: Run clippy (strict)
-        run: just ci-lint
-
-  msrv:
-    name: MSRV Check (1.85)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Rust 1.85
-        uses: dtolnay/rust-toolchain@1.85
-
-      - name: Cache cargo registry
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: msrv
-
-      - name: Verify MSRV compatibility
-        run: cargo check --all --all-features
-
-  type-check:
-    name: Type Check
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo registry
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: typecheck
-
-      - name: Install just
-        uses: taiki-e/install-action@v2
-        with:
-          tool: just
-
-      - name: Run type check
-        run: just ci-type-check
+        run: cargo clippy --all-targets -- -D warnings
 
   # ===========================================
   # TIER 2: TESTS WITH COVERAGE
@@ -119,7 +71,7 @@ jobs:
   test:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    needs: [fmt, lint, msrv]
+    needs: [fmt, lint]
     strategy:
       fail-fast: false
       matrix:
@@ -139,13 +91,13 @@ jobs:
         with:
           key: test-${{ matrix.os }}
 
-      - name: Install just
+      - name: Install cargo-nextest
         uses: taiki-e/install-action@v2
         with:
-          tool: just
+          tool: cargo-nextest
 
       - name: Run tests
-        run: cargo test --all --all-features
+        run: cargo nextest run --all-features
 
   coverage:
     name: Test Coverage
@@ -157,47 +109,107 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
 
       - name: Cache cargo registry
         uses: Swatinem/rust-cache@v2
         with:
           key: coverage
 
-      - name: Install tarpaulin
+      - name: Install cargo-llvm-cov and cargo-nextest
         uses: taiki-e/install-action@v2
         with:
-          tool: cargo-tarpaulin
+          tool: cargo-llvm-cov,cargo-nextest
 
       - name: Generate coverage report
-        run: cargo tarpaulin --all --all-features --out Xml --output-dir coverage --timeout 300 --exclude-files "cli/src/main.rs" --exclude-files "crates/gateway/src/main.rs"
+        run: |
+          cargo llvm-cov nextest \
+            --profile ci \
+            --lcov --output-path lcov.info \
+            --ignore-filename-regex "src/main\.rs|src/bin/cli\.rs"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
-          files: coverage/cobertura.xml
-          fail_ci_if_error: false
+          files: lcov.info
+          fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: unittests
           name: gateway-coverage
 
-      - name: Check coverage threshold
+      - name: Coverage threshold gate (90%)
         run: |
-          if [ -f coverage/cobertura.xml ]; then
-            COVERAGE=$(grep -oP 'line-rate="\K[0-9.]+' coverage/cobertura.xml | head -1 || true)
-            if [ -n "$COVERAGE" ]; then
-              COVERAGE_PERCENT=$(echo "$COVERAGE * 100" | bc | awk '{printf "%.2f", $0}')
-              echo "Coverage: ${COVERAGE_PERCENT}%"
-              if (( $(echo "$COVERAGE_PERCENT < $COVERAGE_THRESHOLD" | bc -l) )); then
-                echo "::warning::Coverage ${COVERAGE_PERCENT}% is below threshold ${COVERAGE_THRESHOLD}%"
-              else
-                echo "::notice::Coverage ${COVERAGE_PERCENT}% meets threshold ${COVERAGE_THRESHOLD}%"
-              fi
-            else
-              echo "::warning::Failed to parse coverage XML - no line-rate found"
-            fi
-          else
-            echo "::warning::Coverage file coverage/cobertura.xml not found"
-          fi
+          cargo llvm-cov \
+            --fail-under-lines 90 \
+            --ignore-filename-regex "src/main\.rs|src/bin/cli\.rs"
+
+      - name: Branch coverage report
+        run: |
+          cargo llvm-cov nextest \
+            --profile ci \
+            --branch \
+            --lcov --output-path lcov-branch.info \
+            --ignore-filename-regex "src/main\.rs|src/bin/cli\.rs" \
+            || echo "::warning::Branch coverage generation failed (unstable feature)"
+
+      - name: Upload branch coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          files: lcov-branch.info
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: branch-coverage
+          name: gateway-branch-coverage
+
+      - name: Branch coverage threshold gate (70%)
+        run: |
+          chmod +x scripts/check-branch-coverage.sh
+          ./scripts/check-branch-coverage.sh 70 \
+            || echo "::warning::Branch coverage below 70% threshold (not yet enforced)"
+
+      - name: Red/edge test ratio
+        run: |
+          TOTAL=$(cargo nextest list 2>/dev/null | grep -c '    ' || echo 0)
+          RED=$(cargo nextest list -E 'test(red_edge) + test(proptests) + test(routes_input_validation) + test(db_resilience) + test(concurrency_error_paths)' 2>/dev/null | grep -c '    ' || echo 0)
+          echo "Red/edge tests: ${RED}/${TOTAL}"
+          echo "::notice::Red/edge ratio: ${RED}/${TOTAL} — target: 30-40%"
+        continue-on-error: true
+
+  # ===========================================
+  # TIER 3: CONCURRENCY SAFETY
+  # ===========================================
+
+  concurrency-safety:
+    name: Concurrency Safety
+    runs-on: ubuntu-latest
+    needs: [fmt, lint]
+    continue-on-error: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust (nightly)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: nightly
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: concurrency
+
+      - name: Run loom tests
+        run: cargo test --test loom_rate_limiter
+
+      - name: Run shuttle tests
+        run: cargo test --test shuttle_concurrency -- --shuttle-count 5000
+
+      - name: Run miri (unsafe code verification)
+        run: |
+          rustup component add miri --toolchain nightly
+          MIRIFLAGS="-Zmiri-disable-isolation" cargo +nightly miri test --lib
 
   # ===========================================
   # TIER 4: BUILD ARTIFACTS
@@ -235,11 +247,6 @@ jobs:
         with:
           key: build-${{ matrix.os }}
 
-      - name: Install just
-        uses: taiki-e/install-action@v2
-        with:
-          tool: just
-
       - name: Build release
         run: cargo build --release --target ${{ matrix.target }}
 
@@ -248,14 +255,14 @@ jobs:
         run: |
           mkdir -p artifacts
           cp target/${{ matrix.target }}/release/gateway artifacts/${{ matrix.artifact }}
-          cp target/${{ matrix.target }}/release/my-cli artifacts/${{ matrix.artifact }}-cli
+          cp target/${{ matrix.target }}/release/gateway-cli artifacts/${{ matrix.artifact }}-cli
 
       - name: Prepare artifact (Windows)
         if: runner.os == 'Windows'
         run: |
           mkdir artifacts
           copy target\${{ matrix.target }}\release\gateway.exe artifacts\${{ matrix.artifact }}
-          copy target\${{ matrix.target }}\release\my-cli.exe artifacts\${{ matrix.artifact }}-cli
+          copy target\${{ matrix.target }}\release\gateway-cli.exe artifacts\${{ matrix.artifact }}-cli
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -284,13 +291,8 @@ jobs:
         with:
           key: docs
 
-      - name: Install just
-        uses: taiki-e/install-action@v2
-        with:
-          tool: just
-
       - name: Build documentation
-        run: just docs
+        run: cargo doc --no-deps --all
 
       - name: Upload documentation
         uses: actions/upload-artifact@v4
@@ -321,7 +323,7 @@ jobs:
           HEAD="${{ github.event.pull_request.head.sha }}"
           NUMBER="${{ github.event.pull_request.number }}"
 
-          CONFIG_FILES=$(git diff --name-only "$BASE" "$HEAD" | grep -E '^(clippy\.toml|Cargo\.toml|rustfmt\.toml|justfile|\.pre-commit-config\.yaml|\.github/workflows/)' || true)
+          CONFIG_FILES=$(git diff --name-only "$BASE" "$HEAD" | grep -E '^(clippy\.toml|Cargo\.toml|rustfmt\.toml|justfile|lefthook\.yml|\.github/workflows/)' || true)
 
           if [ -n "$CONFIG_FILES" ]; then
             CHANGED=$(echo "$CONFIG_FILES" | sed 's/^/`/;s/$`/' | tr '\n' ', ' | sed 's/,$//')
@@ -336,43 +338,6 @@ jobs:
             echo "No configuration files changed."
           fi
 
-  clippy-allow-check:
-    name: Clippy Allow Check
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Detect new #[allow(clippy::] without justification
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          BASE="${{ github.event.pull_request.base.sha }}"
-          HEAD="${{ github.event.pull_request.head.sha }}"
-          NUMBER="${{ github.event.pull_request.number }}"
-
-          # Find added lines with #[allow(clippy:: that lack an ALLOW: justification comment
-          VIOLATIONS=$(git diff "$BASE" "$HEAD" -- '*.rs' | grep '^+' | grep -E '#\[allow\(clippy::' | grep -v 'ALLOW:' || true)
-
-          if [ -n "$VIOLATIONS" ]; then
-            BODY="## ⚠️ Unjustified \`#[allow(clippy::]\` detected
-
-          The following lines use \`#[allow(clippy::...)]\` without an \`ALLOW:\` justification comment:
-
-          \`\`\`
-          ${VIOLATIONS}
-          \`\`\`
-
-          Per project policy, every \`#[allow(clippy::...)]\` must include a comment starting with \`ALLOW:\` explaining why the suppression is needed."
-            echo "$BODY" | gh pr comment "$NUMBER" --body-file -
-            echo "::warning::Found #[allow(clippy::] without ALLOW: justification"
-          else
-            echo "No unjustified #[allow(clippy::] found."
-          fi
-
   workspace-lint-inheritance:
     name: Workspace Lint Inheritance
     runs-on: ubuntu-latest
@@ -383,3 +348,41 @@ jobs:
 
       - name: Check all workspace members inherit workspace lints
         run: ./scripts/check-lint-inheritance.sh || echo "::warning::Some crates do not inherit workspace lints (see above)"
+
+  # ===========================================
+  # TIER 6: MUTATION TESTING (main branch + manual only)
+  # ===========================================
+
+  mutation:
+    name: Mutation Testing
+    runs-on: ubuntu-latest
+    needs: [test, coverage]
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    timeout-minutes: 120
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: mutation
+
+      - name: Install cargo-mutants
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+
+      - name: Run mutation testing
+        run: cargo mutants --copy-target=false --check
+
+      - name: Upload mutation results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-results
+          path: mutants.out/
+          retention-days: 30

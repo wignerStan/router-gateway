@@ -1,0 +1,15 @@
+---
+source: tests/provider_integration.rs
+expression: transformed
+---
+{
+  "max_tokens": 1024,
+  "messages": [
+    {
+      "content": "Hello, GPT-4!",
+      "role": "user"
+    }
+  ],
+  "model": "gpt-4",
+  "temperature": 0.699999988079071
+}

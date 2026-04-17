@@ -1,0 +1,50 @@
+---
+source: tests/config.rs
+expression: "&config"
+---
+server:
+  port: 8080
+  host: 0.0.0.0
+  timeout_secs: 90
+  auth_tokens:
+    - token-one
+    - token-two
+  trust_proxy_headers: true
+credentials:
+  - id: openai-primary
+    provider: openai
+    api_key: sk-openai-key
+    base_url: ~
+    organization: ~
+    allowed_models:
+      - gpt-4
+      - gpt-3.5-turbo
+    priority: 10
+    daily_quota: ~
+    rate_limit: ~
+  - id: google-primary
+    provider: google
+    api_key: google-key-123
+    base_url: ~
+    organization: ~
+    allowed_models: []
+    priority: 8
+    daily_quota: ~
+    rate_limit: ~
+routing:
+  strategy: adaptive
+  session_affinity: false
+  min_healthy_credentials: 2
+  fallback_depth: 3
+providers:
+  google:
+    enabled: true
+    base_url: "https://generativelanguage.googleapis.com/v1beta"
+    timeout_secs: ~
+    headers: {}
+  openai:
+    enabled: true
+    base_url: "https://api.openai.com/v1"
+    timeout_secs: 120
+    headers:
+      X-Custom-Header: custom-value

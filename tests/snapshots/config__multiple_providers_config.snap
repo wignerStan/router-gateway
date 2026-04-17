@@ -1,0 +1,60 @@
+---
+source: tests/config.rs
+expression: "&config"
+---
+server:
+  port: 3000
+  host: 0.0.0.0
+  timeout_secs: 120
+  auth_tokens: []
+  trust_proxy_headers: false
+credentials:
+  - id: c1
+    provider: openai
+    api_key: key1
+    base_url: ~
+    organization: ~
+    allowed_models: []
+    priority: 0
+    daily_quota: ~
+    rate_limit: ~
+  - id: c2
+    provider: google
+    api_key: key2
+    base_url: ~
+    organization: ~
+    allowed_models: []
+    priority: 0
+    daily_quota: ~
+    rate_limit: ~
+  - id: c3
+    provider: openai
+    api_key: key3
+    base_url: ~
+    organization: ~
+    allowed_models: []
+    priority: 0
+    daily_quota: ~
+    rate_limit: ~
+routing:
+  strategy: weighted
+  session_affinity: true
+  min_healthy_credentials: 1
+  fallback_depth: 2
+providers:
+  custom-llm:
+    enabled: true
+    base_url: "https://custom-llm.example.com"
+    timeout_secs: ~
+    headers:
+      X-API-Version: 2024-01
+  google:
+    enabled: false
+    base_url: ~
+    timeout_secs: ~
+    headers: {}
+  openai:
+    enabled: true
+    base_url: "https://api.openai.com/v1"
+    timeout_secs: ~
+    headers: {}
