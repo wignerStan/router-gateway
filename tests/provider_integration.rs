@@ -1621,3 +1621,110 @@ mod cross_provider {
         }
     }
 }
+
+#[cfg(test)]
+mod error_snapshots {
+    //! Snapshot tests for provider adapter error responses.
+    //!
+    //! These tests capture the exact error message format produced by each adapter
+    //! when given error-indicating JSON payloads. This guards against unintended
+    //! error message changes that could break error handling downstream.
+
+    use gateway::providers::anthropic::AnthropicAdapter;
+    use gateway::providers::google::GoogleAdapter;
+    use gateway::providers::openai::OpenAIAdapter;
+    use gateway::providers::types::ProviderAdapter;
+    use serde_json::json;
+
+    #[test]
+    fn snapshot_openai_error_response() {
+        let adapter = OpenAIAdapter::new();
+        let error_response = json!({
+            "error": {
+                "message": "Rate limit exceeded. Please retry after 20 seconds.",
+                "type": "rate_limit_error",
+                "code": "429"
+            }
+        });
+        let result = adapter.transform_response(error_response);
+        insta::assert_snapshot!("openai_error_rate_limit", result.unwrap_err().to_string());
+    }
+
+    #[test]
+    fn snapshot_anthropic_error_response() {
+        let adapter = AnthropicAdapter::new();
+        let error_response = json!({
+            "id": "msg_err_overloaded",
+            "type": "error",
+            "error": {
+                "type": "overloaded_error",
+                "message": "Overloaded. Please retry after 10 seconds."
+            }
+        });
+        let result = adapter.transform_response(error_response);
+        insta::assert_snapshot!(
+            "anthropic_error_overloaded",
+            result.unwrap_err().to_string()
+        );
+    }
+
+    #[test]
+    fn snapshot_google_error_response() {
+        let adapter = GoogleAdapter::new();
+        let error_response = json!({
+            "error": {
+                "code": 429,
+                "message": "Quota exceeded for quota metric 'Generate requests per minute'",
+                "status": "RESOURCE_EXHAUSTED"
+            }
+        });
+        let result = adapter.transform_response(error_response);
+        insta::assert_snapshot!(
+            "google_error_quota_exceeded",
+            result.unwrap_err().to_string()
+        );
+    }
+
+    #[test]
+    fn snapshot_openai_empty_choices() {
+        let adapter = OpenAIAdapter::new();
+        let response = json!({
+            "id": "chatcmpl-empty",
+            "object": "chat.completion",
+            "created": 1710000000,
+            "model": "gpt-4-0613",
+            "choices": [],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 0,
+                "total_tokens": 10
+            }
+        });
+        let result = adapter.transform_response(response);
+        insta::assert_snapshot!(
+            "openai_error_empty_choices",
+            result.unwrap_err().to_string()
+        );
+    }
+
+    #[test]
+    fn snapshot_anthropic_missing_content() {
+        let adapter = AnthropicAdapter::new();
+        let response = json!({
+            "id": "msg_err_no_content",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-3-opus-20240229",
+            "stop_reason": "end_turn",
+            "usage": {
+                "input_tokens": 10,
+                "output_tokens": 0
+            }
+        });
+        let result = adapter.transform_response(response);
+        insta::assert_snapshot!(
+            "anthropic_error_missing_content",
+            result.unwrap_err().to_string()
+        );
+    }
+}
