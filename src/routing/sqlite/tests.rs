@@ -1451,5 +1451,16 @@ mod sqlite_tests {
             assert!(store.load_metrics("nonexistent").await.unwrap().is_none());
             assert!(store.load_health("nonexistent").await.unwrap().is_none());
         }
+
+        #[sqlx::test(migrations = "./migrations")]
+        async fn get_history_stats_returns_zero_on_empty_table(pool: sqlx::SqlitePool) {
+            let store = store_from_pool(pool);
+            let (count, min_ts) = store
+                .get_history_stats()
+                .await
+                .expect("should succeed on empty table");
+            assert_eq!(count, 0);
+            assert!(min_ts.is_none());
+        }
     }
 }

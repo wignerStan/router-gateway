@@ -540,14 +540,18 @@ impl SQLiteStore {
     ///
     /// Returns an error if the query or row mapping fails.
     pub async fn get_history_stats(&self) -> Result<(i64, Option<DateTime<Utc>>)> {
-        let row: (i64, Option<String>) =
+        let row: Option<(i64, Option<String>)> =
             sqlx::query_as("SELECT COUNT(*), MIN(timestamp) FROM status_code_history")
-                .fetch_one(&self.pool)
+                .fetch_optional(&self.pool)
                 .await
                 .map_err(|e| SqliteError::query("get_history_stats", e))?;
 
-        let min_timestamp = parse_datetime_opt(row.1.as_deref());
+        let Some((count, min_ts_str)) = row else {
+            return Ok((0, None));
+        };
 
-        Ok((row.0, min_timestamp))
+        let min_timestamp = parse_datetime_opt(min_ts_str.as_deref());
+
+        Ok((count, min_timestamp))
     }
 }
