@@ -1453,15 +1453,10 @@ mod sqlite_tests {
         }
 
         #[sqlx::test(migrations = "./migrations")]
-        async fn precompute_weights_rejects_nan(pool: sqlx::SqlitePool) {
-            use crate::routing::config::SmartRoutingConfig;
-            use crate::routing::sqlite::selector::SQLiteSelector;
-
+        async fn check_constraints_reject_nan_metrics(pool: sqlx::SqlitePool) {
             let store = store_from_pool(pool);
-            let config = SmartRoutingConfig::default();
-            let selector = SQLiteSelector::new(store.clone(), config);
 
-            // Write metrics with NaN success_rate to simulate corruption
+            // NaN values should be rejected by CHECK constraints
             let metrics = AuthMetrics {
                 total_requests: 100,
                 success_count: 50,
@@ -1477,22 +1472,51 @@ mod sqlite_tests {
                 last_success_time: None,
                 last_failure_time: None,
             };
+            let result = store.write_metrics("auth_nan", &metrics).await;
+            assert!(
+                result.is_err(),
+                "write_metrics should reject NaN values due to CHECK constraints"
+            );
+        }
+
+        #[sqlx::test(migrations = "./migrations")]
+        async fn precompute_weights_produces_finite_values(pool: sqlx::SqlitePool) {
+            use crate::routing::config::SmartRoutingConfig;
+            use crate::routing::sqlite::selector::SQLiteSelector;
+
+            let store = store_from_pool(pool);
+            let config = SmartRoutingConfig::default();
+            let selector = SQLiteSelector::new(store.clone(), config);
+
+            // Write valid metrics with edge-case zero values
+            let metrics = AuthMetrics {
+                total_requests: 100,
+                success_count: 50,
+                failure_count: 50,
+                avg_latency_ms: 42.5,
+                min_latency_ms: 10.0,
+                max_latency_ms: 100.0,
+                success_rate: 0.5,
+                error_rate: 0.5,
+                consecutive_successes: 0,
+                consecutive_failures: 10,
+                last_request_time: Utc::now(),
+                last_success_time: None,
+                last_failure_time: None,
+            };
             store
-                .write_metrics("auth_nan", &metrics)
+                .write_metrics("auth_edge", &metrics)
                 .await
-                .expect("should write metrics");
+                .expect("should write valid metrics");
 
             selector
-                .precompute_weights(vec!["auth_nan".to_string()])
+                .precompute_weights(vec!["auth_edge".to_string()])
                 .await
-                .expect("should succeed without NaN in DB");
+                .expect("should succeed");
 
-            // Verify the stored weight is finite (not NaN) via direct SQL query.
-            // get_top_auths alone is insufficient — NaN in SQLite still produces a
-            // queryable row, so we must check the actual weight value.
             let stored: Option<(f64,)> =
                 sqlx::query_as("SELECT weight FROM auth_weights WHERE auth_id = $1")
-                    .bind("auth_nan")
+                    .bind("auth_edge")
                     .fetch_optional(&store.get_pool())
                     .await
                     .expect("should query weight");
