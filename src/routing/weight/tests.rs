@@ -1143,7 +1143,7 @@ mod tests {
         }
     }
 
-    mod float_edge_cases {
+    mod red_edge {
         use super::*;
 
         #[test]

@@ -465,7 +465,7 @@ mod fallback_generation {
     }
 }
 
-mod edge_cases {
+mod red_edge {
     use super::*;
 
     #[tokio::test]

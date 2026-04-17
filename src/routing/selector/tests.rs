@@ -414,7 +414,7 @@ mod tests {
         }
     }
 
-    mod selection_edge_cases {
+    mod red_edge {
         use super::*;
 
         #[tokio::test]
