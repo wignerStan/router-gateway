@@ -1143,6 +1143,174 @@ mod tests {
         }
     }
 
+    mod float_edge_cases {
+        use super::*;
+
+        #[test]
+        fn test_weight_with_nan_avg_latency() {
+            let config = WeightConfig::default();
+            let calculator = DefaultWeightCalculator::new(config);
+
+            let auth = AuthInfo {
+                id: "test-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            };
+
+            let metrics = AuthMetrics {
+                total_requests: 100,
+                success_count: 95,
+                failure_count: 5,
+                avg_latency_ms: f64::NAN,
+                min_latency_ms: 100.0,
+                max_latency_ms: 1000.0,
+                success_rate: 0.95,
+                error_rate: 0.05,
+                consecutive_successes: 10,
+                consecutive_failures: 0,
+                last_request_time: chrono::Utc::now(),
+                last_success_time: Some(chrono::Utc::now()),
+                last_failure_time: None,
+            };
+
+            let weight = calculator.calculate(&auth, Some(&metrics), HealthStatus::Healthy);
+
+            assert!(
+                weight.is_finite(),
+                "Weight should be finite with NaN avg_latency_ms, got: {weight}"
+            );
+            assert!(
+                weight >= 0.0,
+                "Weight should be non-negative with NaN avg_latency_ms, got: {weight}"
+            );
+        }
+
+        #[test]
+        fn test_weight_with_infinity_avg_latency() {
+            let config = WeightConfig::default();
+            let calculator = DefaultWeightCalculator::new(config);
+
+            let auth = AuthInfo {
+                id: "test-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            };
+
+            let metrics = AuthMetrics {
+                total_requests: 100,
+                success_count: 95,
+                failure_count: 5,
+                avg_latency_ms: f64::INFINITY,
+                min_latency_ms: 100.0,
+                max_latency_ms: 1000.0,
+                success_rate: 0.95,
+                error_rate: 0.05,
+                consecutive_successes: 10,
+                consecutive_failures: 0,
+                last_request_time: chrono::Utc::now(),
+                last_success_time: Some(chrono::Utc::now()),
+                last_failure_time: None,
+            };
+
+            let weight = calculator.calculate(&auth, Some(&metrics), HealthStatus::Healthy);
+
+            assert!(
+                weight.is_finite(),
+                "Weight should be finite with infinity avg_latency_ms, got: {weight}"
+            );
+            assert!(
+                weight >= 0.0,
+                "Weight should be non-negative with infinity avg_latency_ms, got: {weight}"
+            );
+        }
+
+        #[test]
+        fn test_weight_with_zero_total_requests() {
+            let config = WeightConfig::default();
+            let calculator = DefaultWeightCalculator::new(config);
+
+            let auth = AuthInfo {
+                id: "test-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            };
+
+            let metrics = AuthMetrics {
+                total_requests: 0,
+                success_count: 0,
+                failure_count: 0,
+                avg_latency_ms: 0.0,
+                min_latency_ms: 0.0,
+                max_latency_ms: 0.0,
+                success_rate: 0.0,
+                error_rate: 0.0,
+                consecutive_successes: 0,
+                consecutive_failures: 0,
+                last_request_time: chrono::Utc::now(),
+                last_success_time: None,
+                last_failure_time: None,
+            };
+
+            let weight = calculator.calculate(&auth, Some(&metrics), HealthStatus::Healthy);
+
+            assert!(
+                weight.is_finite(),
+                "Weight should be finite with zero total requests, got: {weight}"
+            );
+            assert!(
+                weight >= 0.0,
+                "Weight should be non-negative with zero total requests, got: {weight}"
+            );
+        }
+
+        #[test]
+        fn test_weight_with_negative_latency() {
+            let config = WeightConfig::default();
+            let calculator = DefaultWeightCalculator::new(config);
+
+            let auth = AuthInfo {
+                id: "test-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            };
+
+            let metrics = AuthMetrics {
+                total_requests: 100,
+                success_count: 95,
+                failure_count: 5,
+                avg_latency_ms: -50.0,
+                min_latency_ms: -100.0,
+                max_latency_ms: 500.0,
+                success_rate: 0.95,
+                error_rate: 0.05,
+                consecutive_successes: 10,
+                consecutive_failures: 0,
+                last_request_time: chrono::Utc::now(),
+                last_success_time: Some(chrono::Utc::now()),
+                last_failure_time: None,
+            };
+
+            let weight = calculator.calculate(&auth, Some(&metrics), HealthStatus::Healthy);
+
+            assert!(
+                weight.is_finite(),
+                "Weight should be finite with negative latency, got: {weight}"
+            );
+            assert!(
+                weight >= 0.0,
+                "Weight should be non-negative with negative latency, got: {weight}"
+            );
+        }
+    }
+
     mod proptests {
         use super::*;
         use proptest::prelude::*;
