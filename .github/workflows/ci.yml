@@ -177,7 +177,7 @@ jobs:
     name: Concurrency Safety
     runs-on: ubuntu-latest
     needs: [fmt, lint]
-    continue-on-error: true
+    continue-on-error: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -197,6 +197,11 @@ jobs:
 
       - name: Run shuttle tests
         run: cargo test --test shuttle_concurrency -- --shuttle-count 5000
+
+      - name: Run miri (unsafe code verification)
+        run: |
+          rustup component add miri --toolchain nightly
+          MIRIFLAGS="-Zmiri-disable-isolation" cargo +nightly miri test --lib
 
   # ===========================================
   # TIER 4: BUILD ARTIFACTS

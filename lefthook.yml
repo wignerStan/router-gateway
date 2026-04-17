@@ -12,5 +12,7 @@ pre-push:
   commands:
     clippy:
       run: cargo clippy --all-targets -- -D warnings
+    unit-tests:
+      run: cargo nextest run --lib
     bdd:
       run: cargo test --test cucumber_bdd --features bdd
