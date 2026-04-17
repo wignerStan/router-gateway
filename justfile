@@ -171,6 +171,18 @@ test-coverage-html:
 test-coverage-check:
     cargo llvm-cov --fail-under-lines 90 --ignore-filename-regex "src/main\.rs|src/bin/cli\.rs"
 
+# Generate branch coverage report (HTML)
+test-coverage-branch-html:
+    cargo llvm-cov nextest --branch --html --ignore-filename-regex "src/main\.rs|src/bin/cli\.rs"
+
+# Check branch coverage threshold (default 70%)
+test-coverage-branch-check THRESHOLD="70":
+    ./scripts/check-branch-coverage.sh {{THRESHOLD}}
+
+# Full coverage report (line + branch)
+test-coverage-full: test-coverage test-coverage-branch-html
+    @echo "Full coverage report generated (line + branch)"
+
 # Run tests matching pattern
 test-package PATTERN:
     cargo nextest run -E '{{PATTERN}}'

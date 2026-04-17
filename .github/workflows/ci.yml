@@ -144,6 +144,31 @@ jobs:
             --fail-under-lines 90 \
             --ignore-filename-regex "src/main\.rs|src/bin/cli\.rs"
 
+      - name: Branch coverage report
+        run: |
+          cargo llvm-cov nextest \
+            --profile ci \
+            --branch \
+            --lcov --output-path lcov-branch.info \
+            --ignore-filename-regex "src/main\.rs|src/bin/cli\.rs" \
+            || echo "::warning::Branch coverage generation failed (unstable feature)"
+
+      - name: Upload branch coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          files: lcov-branch.info
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+          flags: branch-coverage
+          name: gateway-branch-coverage
+
+      - name: Branch coverage threshold gate (70%)
+        run: |
+          chmod +x scripts/check-branch-coverage.sh
+          ./scripts/check-branch-coverage.sh 70 \
+            || echo "::warning::Branch coverage below 70% threshold (not yet enforced)"
+
   # ===========================================
   # TIER 3: CONCURRENCY SAFETY
   # ===========================================
