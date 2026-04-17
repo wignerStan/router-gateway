@@ -169,6 +169,14 @@ jobs:
           ./scripts/check-branch-coverage.sh 70 \
             || echo "::warning::Branch coverage below 70% threshold (not yet enforced)"
 
+      - name: Red/edge test ratio
+        run: |
+          TOTAL=$(cargo nextest list 2>/dev/null | grep -c '    ' || echo 0)
+          RED=$(cargo nextest list -E 'test(red_edge) + test(proptests) + test(routes_input_validation) + test(db_resilience) + test(concurrency_error_paths)' 2>/dev/null | grep -c '    ' || echo 0)
+          echo "Red/edge tests: ${RED}/${TOTAL}"
+          echo "::notice::Red/edge ratio: ${RED}/${TOTAL} — target: 30-40%"
+        continue-on-error: true
+
   # ===========================================
   # TIER 3: CONCURRENCY SAFETY
   # ===========================================

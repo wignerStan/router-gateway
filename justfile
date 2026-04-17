@@ -223,6 +223,20 @@ test-snapshots-accept:
 test-property:
     cargo nextest run -E 'test(proptests)'
 
+# Run red/edge (failure-path) tests only
+test-red:
+    cargo nextest run -E 'test(red_edge) + test(proptests) + test(routes_input_validation) + test(db_resilience) + test(concurrency_error_paths)'
+
+# Run happy-path tests only
+test-happy:
+    cargo nextest run -E 'not (test(red_edge) + test(proptests) + test(routes_input_validation) + test(db_resilience) + test(concurrency_error_paths))'
+
+# Report red vs total test count
+test-red-count:
+    @TOTAL=$$(cargo nextest list 2>/dev/null | grep -c '    ' || echo 0); \
+    RED=$$(cargo nextest list -E 'test(red_edge) + test(proptests) + test(routes_input_validation) + test(db_resilience) + test(concurrency_error_paths)' 2>/dev/null | grep -c '    ' || echo 0); \
+    echo "Red/edge: $${RED}/$${TOTAL} ($$(python3 -c "print(f'{$${RED}/$${TOTAL}*100:.1f}%')" 2>/dev/null || echo 'N/A'))"
+
 # Run BDD scenarios (Gherkin feature files via cucumber)
 bdd:
     cargo test --test cucumber_bdd --features bdd
