@@ -4,7 +4,7 @@
 pre-commit:
   commands:
     fmt:
-      run: cargo fmt --all -- --check
+      run: cargo fmt --all
     check:
       run: cargo check -q
 

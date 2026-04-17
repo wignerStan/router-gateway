@@ -155,6 +155,7 @@ This project enforces production-level code style using `rustfmt` and `clippy`. 
 - **Fuzzing**: Use `cargo-fuzz` (nightly) for security-critical parsing. Targets: `ssrf_url_fuzz`, `config_parse_fuzz`, `token_match_fuzz`. Run with `just fuzz-all` or individual `just fuzz-ssrf` commands.
 - **Benchmarking**: Use `criterion` for performance regression detection. Run with `cargo bench` or `just bench`.
 - **Parameterized Testing**: Use `rstest` (`#[rstest]` + `#[case]`) for data-driven tests with multiple inputs.
+- **Red/Edge Tests**: Failure-path and boundary-condition tests go in `mod red_edge { ... }` within the existing test module. Run with `just test-red`. Count with `just test-red-count`. Target: 30-40% of all tests should be red/edge. Integration test files that are entirely failure-path (`routes_input_validation`, `db_resilience`, `concurrency_error_paths`) wrap all tests in `mod red_edge`.
 
 ## Security considerations
 
