@@ -74,13 +74,21 @@ impl SQLiteStore {
     pub async fn new(config: SQLiteConfig) -> Result<Self> {
         let cfg = config.clone();
 
+        let cache_size_str = format!("-{}", cfg.cache_size_mb.max(1) * 1024);
+
         let options = if cfg.database_path == ":memory:" {
             SqliteConnectOptions::from_str("sqlite::memory:")?
                 .busy_timeout(Duration::from_millis(cfg.busy_timeout_ms as u64))
                 .foreign_keys(true)
                 .synchronous(SqliteSynchronous::Normal)
+                .pragma("cache_size", cache_size_str.clone())
+                .pragma("temp_store", "MEMORY")
         } else {
-            SqliteConnectOptions::from_str(&format!("sqlite:{}", cfg.database_path))?
+            let path = cfg
+                .database_path
+                .strip_prefix("sqlite:")
+                .unwrap_or(&cfg.database_path);
+            SqliteConnectOptions::from_str(&format!("sqlite:{path}"))?
                 .create_if_missing(true)
                 .journal_mode(if cfg.enable_wal {
                     SqliteJournalMode::Wal
@@ -90,10 +98,14 @@ impl SQLiteStore {
                 .busy_timeout(Duration::from_millis(cfg.busy_timeout_ms as u64))
                 .foreign_keys(true)
                 .synchronous(SqliteSynchronous::Normal)
+                .pragma("cache_size", cache_size_str)
+                .pragma("temp_store", "MEMORY")
+                .pragma("mmap_size", "268435456")
         };
 
-        let pool_options =
-            SqlitePoolOptions::new().max_connections(if cfg.database_path == ":memory:" {
+        let pool_options = SqlitePoolOptions::new()
+            .acquire_timeout(Duration::from_millis(cfg.busy_timeout_ms as u64))
+            .max_connections(if cfg.database_path == ":memory:" {
                 1
             } else {
                 4
@@ -102,7 +114,11 @@ impl SQLiteStore {
         let pool = pool_options.connect_with(options).await?;
 
         // Run migrations
-        sqlx::migrate!("./migrations").run(&pool).await?;
+        if let Err(e) = sqlx::migrate!("./migrations").run(&pool).await {
+            // Pool is not yet shared — safe to close on migration failure.
+            pool.close().await;
+            return Err(e.into());
+        }
 
         let store = Self {
             pool,
@@ -118,10 +134,10 @@ impl SQLiteStore {
     ///
     /// Assumes migrations have already been applied to the pool.
     #[must_use]
-    pub fn from_pool(pool: SqlitePool, enable_cache: bool) -> Self {
+    pub fn from_pool(pool: SqlitePool, db_path: impl Into<String>, enable_cache: bool) -> Self {
         Self {
             pool,
-            db_path: ":memory:".to_string(),
+            db_path: db_path.into(),
             cache_enabled: Arc::new(std::sync::atomic::AtomicBool::new(enable_cache)),
             cache: Arc::new(RwLock::new(std::collections::HashMap::new())),
         }

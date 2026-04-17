@@ -1453,6 +1453,58 @@ mod sqlite_tests {
         }
 
         #[sqlx::test(migrations = "./migrations")]
+        async fn precompute_weights_rejects_nan(pool: sqlx::SqlitePool) {
+            use crate::routing::config::SmartRoutingConfig;
+            use crate::routing::sqlite::selector::SQLiteSelector;
+
+            let store = store_from_pool(pool);
+            let config = SmartRoutingConfig::default();
+            let selector = SQLiteSelector::new(store.clone(), config);
+
+            // Write metrics with NaN success_rate to simulate corruption
+            let metrics = AuthMetrics {
+                total_requests: 100,
+                success_count: 50,
+                failure_count: 50,
+                avg_latency_ms: f64::NAN,
+                min_latency_ms: 0.0,
+                max_latency_ms: 100.0,
+                success_rate: f64::NAN,
+                error_rate: 0.5,
+                consecutive_successes: 0,
+                consecutive_failures: 10,
+                last_request_time: Utc::now(),
+                last_success_time: None,
+                last_failure_time: None,
+            };
+            store
+                .write_metrics("auth_nan", &metrics)
+                .await
+                .expect("should write metrics");
+
+            selector
+                .precompute_weights(vec!["auth_nan".to_string()])
+                .await
+                .expect("should succeed without NaN in DB");
+
+            // Verify the stored weight is finite (not NaN) via direct SQL query.
+            // get_top_auths alone is insufficient — NaN in SQLite still produces a
+            // queryable row, so we must check the actual weight value.
+            let stored: Option<(f64,)> =
+                sqlx::query_as("SELECT weight FROM auth_weights WHERE auth_id = $1")
+                    .bind("auth_nan")
+                    .fetch_optional(&store.get_pool())
+                    .await
+                    .expect("should query weight");
+
+            let weight = stored.expect("row should exist").0;
+            assert!(
+                weight.is_finite(),
+                "stored weight should be finite, got {weight}"
+            );
+        }
+
+        #[sqlx::test(migrations = "./migrations")]
         async fn get_history_stats_returns_zero_on_empty_table(pool: sqlx::SqlitePool) {
             let store = store_from_pool(pool);
             let (count, min_ts) = store

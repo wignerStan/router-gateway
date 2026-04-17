@@ -330,6 +330,11 @@ impl SQLiteSelector {
                 row.health_factor,
                 &auth,
             );
+            let weight = if weight.is_finite() && weight >= 0.0 {
+                weight
+            } else {
+                0.0
+            };
             weights.insert(row.auth_id, weight);
         }
 
@@ -348,6 +353,7 @@ impl SQLiteSelector {
             .map_err(|e| SqliteError::query("begin_transaction", e))?;
 
         for (auth_id, weight) in &weights {
+            let sanitized = if weight.is_finite() { *weight } else { 0.0 };
             sqlx::query(
                 r"
                 INSERT INTO auth_weights (auth_id, weight, calculated_at, strategy)
@@ -359,7 +365,7 @@ impl SQLiteSelector {
                 ",
             )
             .bind(auth_id)
-            .bind(*weight)
+            .bind(sanitized)
             .bind(&self.config.strategy)
             .execute(&mut *tx)
             .await
