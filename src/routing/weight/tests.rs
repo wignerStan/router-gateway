@@ -372,633 +372,6 @@ mod tests {
         }
     }
 
-    mod penalties {
-        use super::*;
-
-        #[test]
-        fn test_load_score_with_quota_exceeded() {
-            let config = WeightConfig::default();
-            let calculator = DefaultWeightCalculator::new(config.clone());
-
-            let metrics = AuthMetrics {
-                total_requests: 100,
-                success_count: 95,
-                failure_count: 5,
-                avg_latency_ms: 500.0,
-                min_latency_ms: 100.0,
-                max_latency_ms: 1000.0,
-                success_rate: 0.95,
-                error_rate: 0.05,
-                consecutive_successes: 10,
-                consecutive_failures: 0,
-                last_request_time: chrono::Utc::now(),
-                last_success_time: Some(chrono::Utc::now()),
-                last_failure_time: None,
-            };
-
-            let auth_normal = AuthInfo {
-                id: "test-auth".to_string(),
-                priority: Some(0),
-                quota_exceeded: false,
-                unavailable: false,
-                model_states: Vec::new(),
-            };
-
-            let auth_quota = AuthInfo {
-                id: "test-auth".to_string(),
-                priority: Some(0),
-                quota_exceeded: true,
-                unavailable: false,
-                model_states: Vec::new(),
-            };
-
-            let normal_weight =
-                calculator.calculate(&auth_normal, Some(&metrics), HealthStatus::Healthy);
-            let quota_exceeded_weight =
-                calculator.calculate(&auth_quota, Some(&metrics), HealthStatus::Healthy);
-
-            assert!(
-                quota_exceeded_weight < normal_weight,
-                "Quota exceeded should reduce weight"
-            );
-            let expected = normal_weight * config.quota_exceeded_penalty;
-            assert!(
-                (quota_exceeded_weight - expected).abs() < 0.01,
-                "Quota exceeded weight should be normal * penalty"
-            );
-        }
-
-        #[test]
-        fn test_load_score_with_model_states() {
-            let config = WeightConfig::default();
-            let calculator = DefaultWeightCalculator::new(config);
-
-            let metrics = AuthMetrics {
-                total_requests: 100,
-                success_count: 95,
-                failure_count: 5,
-                avg_latency_ms: 500.0,
-                min_latency_ms: 100.0,
-                max_latency_ms: 1000.0,
-                success_rate: 0.95,
-                error_rate: 0.05,
-                consecutive_successes: 10,
-                consecutive_failures: 0,
-                last_request_time: chrono::Utc::now(),
-                last_success_time: Some(chrono::Utc::now()),
-                last_failure_time: None,
-            };
-
-            let auth_available = AuthInfo {
-                id: "test-auth".to_string(),
-                priority: Some(0),
-                quota_exceeded: false,
-                unavailable: false,
-                model_states: vec![
-                    ModelState {
-                        unavailable: false,
-                        quota_exceeded: false,
-                    },
-                    ModelState {
-                        unavailable: false,
-                        quota_exceeded: false,
-                    },
-                ],
-            };
-
-            let auth_partial = AuthInfo {
-                id: "test-auth".to_string(),
-                priority: Some(0),
-                quota_exceeded: false,
-                unavailable: false,
-                model_states: vec![
-                    ModelState {
-                        unavailable: true,
-                        quota_exceeded: false,
-                    },
-                    ModelState {
-                        unavailable: false,
-                        quota_exceeded: false,
-                    },
-                ],
-            };
-
-            let available_weight =
-                calculator.calculate(&auth_available, Some(&metrics), HealthStatus::Healthy);
-            let partial_weight =
-                calculator.calculate(&auth_partial, Some(&metrics), HealthStatus::Healthy);
-
-            assert!(
-                available_weight > partial_weight,
-                "All available models should yield higher weight"
-            );
-        }
-
-        #[test]
-        fn test_degraded_penalty_applied() {
-            let config = WeightConfig::default();
-            let calculator = DefaultWeightCalculator::new(config);
-
-            let auth = AuthInfo {
-                id: "test-auth".to_string(),
-                priority: Some(0),
-                quota_exceeded: false,
-                unavailable: false,
-                model_states: Vec::new(),
-            };
-
-            let metrics = AuthMetrics {
-                total_requests: 100,
-                success_count: 95,
-                failure_count: 5,
-                avg_latency_ms: 500.0,
-                min_latency_ms: 100.0,
-                max_latency_ms: 1000.0,
-                success_rate: 0.95,
-                error_rate: 0.05,
-                consecutive_successes: 10,
-                consecutive_failures: 0,
-                last_request_time: chrono::Utc::now(),
-                last_success_time: Some(chrono::Utc::now()),
-                last_failure_time: None,
-            };
-
-            let healthy_weight = calculator.calculate(&auth, Some(&metrics), HealthStatus::Healthy);
-            let degraded_weight =
-                calculator.calculate(&auth, Some(&metrics), HealthStatus::Degraded);
-
-            assert!(
-                degraded_weight < healthy_weight,
-                "Degraded weight ({degraded_weight}) should be less than healthy weight ({healthy_weight})"
-            );
-
-            assert!(degraded_weight > 0.0, "Degraded weight should be positive");
-        }
-
-        #[test]
-        fn test_unavailable_penalty_applied() {
-            let config = WeightConfig::default();
-            let calculator = DefaultWeightCalculator::new(config.clone());
-
-            let metrics = AuthMetrics {
-                total_requests: 100,
-                success_count: 95,
-                failure_count: 5,
-                avg_latency_ms: 500.0,
-                min_latency_ms: 100.0,
-                max_latency_ms: 1000.0,
-                success_rate: 0.95,
-                error_rate: 0.05,
-                consecutive_successes: 10,
-                consecutive_failures: 0,
-                last_request_time: chrono::Utc::now(),
-                last_success_time: Some(chrono::Utc::now()),
-                last_failure_time: None,
-            };
-
-            let auth_available = AuthInfo {
-                id: "test-auth".to_string(),
-                priority: Some(0),
-                quota_exceeded: false,
-                unavailable: false,
-                model_states: Vec::new(),
-            };
-
-            let auth_unavailable = AuthInfo {
-                id: "test-auth".to_string(),
-                priority: Some(0),
-                quota_exceeded: false,
-                unavailable: true,
-                model_states: Vec::new(),
-            };
-
-            let available_weight =
-                calculator.calculate(&auth_available, Some(&metrics), HealthStatus::Healthy);
-            let unavailable_weight =
-                calculator.calculate(&auth_unavailable, Some(&metrics), HealthStatus::Healthy);
-
-            let expected = available_weight * config.unavailable_penalty;
-            assert!(
-                (unavailable_weight - expected).abs() < 0.01,
-                "Unavailable weight should be available * unavailable_penalty"
-            );
-        }
-    }
-
-    mod numerical_stability {
-        use super::*;
-
-        #[test]
-        fn test_combined_penalties() {
-            let config = WeightConfig::default();
-            let calculator = DefaultWeightCalculator::new(config.clone());
-
-            let auth = AuthInfo {
-                id: "test-auth".to_string(),
-                priority: Some(0),
-                quota_exceeded: true,
-                unavailable: true,
-                model_states: Vec::new(),
-            };
-
-            let metrics = AuthMetrics {
-                total_requests: 100,
-                success_count: 95,
-                failure_count: 5,
-                avg_latency_ms: 500.0,
-                min_latency_ms: 100.0,
-                max_latency_ms: 1000.0,
-                success_rate: 0.95,
-                error_rate: 0.05,
-                consecutive_successes: 10,
-                consecutive_failures: 0,
-                last_request_time: chrono::Utc::now(),
-                last_success_time: Some(chrono::Utc::now()),
-                last_failure_time: None,
-            };
-
-            let weight = calculator.calculate(&auth, Some(&metrics), HealthStatus::Unhealthy);
-
-            assert!(
-                weight >= 0.0,
-                "Weight should be non-negative with combined penalties"
-            );
-
-            let base_weight = calculator.calculate(
-                &AuthInfo {
-                    id: "test-auth".to_string(),
-                    priority: Some(0),
-                    quota_exceeded: false,
-                    unavailable: false,
-                    model_states: Vec::new(),
-                },
-                Some(&metrics),
-                HealthStatus::Healthy,
-            );
-
-            let expected = base_weight
-                * config.unhealthy_penalty
-                * config.quota_exceeded_penalty
-                * config.unavailable_penalty;
-            assert!(
-                (weight - expected).abs() < 0.001,
-                "Combined penalties should be multiplicative"
-            );
-        }
-
-        #[test]
-        fn test_weight_calculation_with_nan_metrics() {
-            let config = WeightConfig::default();
-            let calculator = DefaultWeightCalculator::new(config);
-
-            let auth = AuthInfo {
-                id: "test-auth".to_string(),
-                priority: Some(0),
-                quota_exceeded: false,
-                unavailable: false,
-                model_states: Vec::new(),
-            };
-
-            let nan_metrics = AuthMetrics {
-                total_requests: 100,
-                success_count: 50,
-                failure_count: 50,
-                avg_latency_ms: f64::NAN,
-                min_latency_ms: f64::NAN,
-                max_latency_ms: f64::NAN,
-                success_rate: f64::NAN,
-                error_rate: f64::NAN,
-                consecutive_successes: 10,
-                consecutive_failures: 5,
-                last_request_time: chrono::Utc::now(),
-                last_success_time: Some(chrono::Utc::now()),
-                last_failure_time: None,
-            };
-
-            let weight = calculator.calculate(&auth, Some(&nan_metrics), HealthStatus::Healthy);
-
-            assert!(
-                !weight.is_nan(),
-                "Weight should not be NaN even with NaN metrics"
-            );
-            assert!(
-                weight >= 0.0,
-                "Weight should be non-negative even with NaN metrics"
-            );
-        }
-
-        #[test]
-        fn test_weight_calculation_with_inf_metrics() {
-            let config = WeightConfig::default();
-            let calculator = DefaultWeightCalculator::new(config);
-
-            let auth = AuthInfo {
-                id: "test-auth".to_string(),
-                priority: Some(0),
-                quota_exceeded: false,
-                unavailable: false,
-                model_states: Vec::new(),
-            };
-
-            let inf_metrics = AuthMetrics {
-                total_requests: 100,
-                success_count: 100,
-                failure_count: 0,
-                avg_latency_ms: f64::INFINITY,
-                min_latency_ms: 0.0,
-                max_latency_ms: f64::INFINITY,
-                success_rate: 1.0,
-                error_rate: 0.0,
-                consecutive_successes: 100,
-                consecutive_failures: 0,
-                last_request_time: chrono::Utc::now(),
-                last_success_time: Some(chrono::Utc::now()),
-                last_failure_time: None,
-            };
-
-            let weight = calculator.calculate(&auth, Some(&inf_metrics), HealthStatus::Healthy);
-
-            assert!(
-                weight.is_finite(),
-                "Weight should be finite even with Inf metrics"
-            );
-            assert!(
-                (0.0..=1.0).contains(&weight),
-                "Weight should be in valid range"
-            );
-        }
-
-        #[test]
-        fn test_priority_weight_extreme_values() {
-            let config = WeightConfig::default();
-            let calculator = DefaultWeightCalculator::new(config);
-
-            let metrics = AuthMetrics {
-                total_requests: 100,
-                success_count: 95,
-                failure_count: 5,
-                avg_latency_ms: 500.0,
-                min_latency_ms: 100.0,
-                max_latency_ms: 1000.0,
-                success_rate: 0.95,
-                error_rate: 0.05,
-                consecutive_successes: 10,
-                consecutive_failures: 0,
-                last_request_time: chrono::Utc::now(),
-                last_success_time: Some(chrono::Utc::now()),
-                last_failure_time: None,
-            };
-
-            let auth_max = AuthInfo {
-                id: "test-auth".to_string(),
-                priority: Some(i32::MAX),
-                quota_exceeded: false,
-                unavailable: false,
-                model_states: Vec::new(),
-            };
-            let weight_max = calculator.calculate(&auth_max, Some(&metrics), HealthStatus::Healthy);
-            assert!(
-                weight_max.is_finite() && weight_max > 0.0,
-                "Max priority should produce valid weight"
-            );
-
-            let auth_min = AuthInfo {
-                id: "test-auth".to_string(),
-                priority: Some(i32::MIN),
-                quota_exceeded: false,
-                unavailable: false,
-                model_states: Vec::new(),
-            };
-            let weight_min = calculator.calculate(&auth_min, Some(&metrics), HealthStatus::Healthy);
-            assert!(
-                weight_min.is_finite() && weight_min >= 0.0,
-                "Min priority should produce valid weight"
-            );
-
-            assert!(
-                weight_max > weight_min,
-                "Max priority should give higher weight than min"
-            );
-        }
-    }
-
-    mod model_states_and_extremes {
-        use super::*;
-
-        #[test]
-        fn test_weight_clamping_non_negative() {
-            let config = WeightConfig {
-                success_rate_weight: 1.0,
-                latency_weight: 0.0,
-                health_weight: 0.0,
-                load_weight: 0.0,
-                priority_weight: 0.0,
-                unhealthy_penalty: 0.0,
-                degraded_penalty: 0.0,
-                quota_exceeded_penalty: 0.0,
-                unavailable_penalty: 0.0,
-            };
-            let calculator = DefaultWeightCalculator::new(config);
-
-            let auth = AuthInfo {
-                id: "test-auth".to_string(),
-                priority: Some(0),
-                quota_exceeded: false,
-                unavailable: false,
-                model_states: Vec::new(),
-            };
-
-            let metrics = AuthMetrics {
-                total_requests: 100,
-                success_count: 0,
-                failure_count: 100,
-                avg_latency_ms: 10000.0,
-                min_latency_ms: 5000.0,
-                max_latency_ms: 20000.0,
-                success_rate: 0.0,
-                error_rate: 1.0,
-                consecutive_successes: 0,
-                consecutive_failures: 100,
-                last_request_time: chrono::Utc::now(),
-                last_success_time: None,
-                last_failure_time: Some(chrono::Utc::now()),
-            };
-
-            let weight = calculator.calculate(&auth, Some(&metrics), HealthStatus::Unhealthy);
-
-            assert!(
-                weight >= 0.0,
-                "Weight should always be non-negative, got: {weight}"
-            );
-        }
-
-        #[test]
-        fn test_weight_calculation_zero_metrics() {
-            let config = WeightConfig::default();
-            let calculator = DefaultWeightCalculator::new(config);
-
-            let auth = AuthInfo {
-                id: "test-auth".to_string(),
-                priority: Some(0),
-                quota_exceeded: false,
-                unavailable: false,
-                model_states: Vec::new(),
-            };
-
-            let zero_metrics = AuthMetrics {
-                total_requests: 0,
-                success_count: 0,
-                failure_count: 0,
-                avg_latency_ms: 0.0,
-                min_latency_ms: 0.0,
-                max_latency_ms: 0.0,
-                success_rate: 1.0,
-                error_rate: 0.0,
-                consecutive_successes: 0,
-                consecutive_failures: 0,
-                last_request_time: chrono::Utc::now(),
-                last_success_time: None,
-                last_failure_time: None,
-            };
-
-            let weight = calculator.calculate(&auth, Some(&zero_metrics), HealthStatus::Healthy);
-
-            assert!(
-                weight > 0.0,
-                "Weight should be positive even with zero metrics"
-            );
-            assert!(weight <= 1.0, "Weight should not exceed 1.0");
-        }
-
-        #[test]
-        fn test_quota_exceeded_heavy_penalty() {
-            let config = WeightConfig::default();
-            let calculator = DefaultWeightCalculator::new(config.clone());
-
-            let metrics = AuthMetrics {
-                total_requests: 100,
-                success_count: 95,
-                failure_count: 5,
-                avg_latency_ms: 500.0,
-                min_latency_ms: 100.0,
-                max_latency_ms: 1000.0,
-                success_rate: 0.95,
-                error_rate: 0.05,
-                consecutive_successes: 10,
-                consecutive_failures: 0,
-                last_request_time: chrono::Utc::now(),
-                last_success_time: Some(chrono::Utc::now()),
-                last_failure_time: None,
-            };
-
-            let auth_normal = AuthInfo {
-                id: "test-auth".to_string(),
-                priority: Some(0),
-                quota_exceeded: false,
-                unavailable: false,
-                model_states: Vec::new(),
-            };
-
-            let auth_quota = AuthInfo {
-                id: "test-auth".to_string(),
-                priority: Some(0),
-                quota_exceeded: true,
-                unavailable: false,
-                model_states: Vec::new(),
-            };
-
-            let normal_weight =
-                calculator.calculate(&auth_normal, Some(&metrics), HealthStatus::Healthy);
-            let quota_weight =
-                calculator.calculate(&auth_quota, Some(&metrics), HealthStatus::Healthy);
-
-            assert!(
-                quota_weight < normal_weight * 0.5,
-                "Quota exceeded should reduce weight by at least 50%: normal={normal_weight}, quota={quota_weight}"
-            );
-
-            let expected = normal_weight * config.quota_exceeded_penalty;
-            assert!(
-                (quota_weight - expected).abs() < 0.01,
-                "Quota penalty should match config"
-            );
-        }
-
-        #[test]
-        fn test_model_state_all_unavailable() {
-            let config = WeightConfig::default();
-            let calculator = DefaultWeightCalculator::new(config);
-
-            let metrics = AuthMetrics {
-                total_requests: 100,
-                success_count: 95,
-                failure_count: 5,
-                avg_latency_ms: 500.0,
-                min_latency_ms: 100.0,
-                max_latency_ms: 1000.0,
-                success_rate: 0.95,
-                error_rate: 0.05,
-                consecutive_successes: 10,
-                consecutive_failures: 0,
-                last_request_time: chrono::Utc::now(),
-                last_success_time: Some(chrono::Utc::now()),
-                last_failure_time: None,
-            };
-
-            let auth_all_unavailable = AuthInfo {
-                id: "test-auth".to_string(),
-                priority: Some(0),
-                quota_exceeded: false,
-                unavailable: false,
-                model_states: vec![
-                    ModelState {
-                        unavailable: true,
-                        quota_exceeded: false,
-                    },
-                    ModelState {
-                        unavailable: true,
-                        quota_exceeded: false,
-                    },
-                    ModelState {
-                        unavailable: true,
-                        quota_exceeded: false,
-                    },
-                ],
-            };
-
-            let auth_all_available = AuthInfo {
-                id: "test-auth".to_string(),
-                priority: Some(0),
-                quota_exceeded: false,
-                unavailable: false,
-                model_states: vec![
-                    ModelState {
-                        unavailable: false,
-                        quota_exceeded: false,
-                    },
-                    ModelState {
-                        unavailable: false,
-                        quota_exceeded: false,
-                    },
-                    ModelState {
-                        unavailable: false,
-                        quota_exceeded: false,
-                    },
-                ],
-            };
-
-            let weight_unavailable =
-                calculator.calculate(&auth_all_unavailable, Some(&metrics), HealthStatus::Healthy);
-            let weight_available =
-                calculator.calculate(&auth_all_available, Some(&metrics), HealthStatus::Healthy);
-
-            assert!(
-                weight_available > weight_unavailable,
-                "All available models should yield higher weight than all unavailable"
-            );
-        }
-    }
-
     mod priority_and_planner {
         use super::*;
 
@@ -1307,6 +680,621 @@ mod tests {
             assert!(
                 weight >= 0.0,
                 "Weight should be non-negative with negative latency, got: {weight}"
+            );
+        }
+
+        #[test]
+        fn test_load_score_with_quota_exceeded() {
+            let config = WeightConfig::default();
+            let calculator = DefaultWeightCalculator::new(config.clone());
+
+            let metrics = AuthMetrics {
+                total_requests: 100,
+                success_count: 95,
+                failure_count: 5,
+                avg_latency_ms: 500.0,
+                min_latency_ms: 100.0,
+                max_latency_ms: 1000.0,
+                success_rate: 0.95,
+                error_rate: 0.05,
+                consecutive_successes: 10,
+                consecutive_failures: 0,
+                last_request_time: chrono::Utc::now(),
+                last_success_time: Some(chrono::Utc::now()),
+                last_failure_time: None,
+            };
+
+            let auth_normal = AuthInfo {
+                id: "test-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            };
+
+            let auth_quota = AuthInfo {
+                id: "test-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: true,
+                unavailable: false,
+                model_states: Vec::new(),
+            };
+
+            let normal_weight =
+                calculator.calculate(&auth_normal, Some(&metrics), HealthStatus::Healthy);
+            let quota_exceeded_weight =
+                calculator.calculate(&auth_quota, Some(&metrics), HealthStatus::Healthy);
+
+            assert!(
+                quota_exceeded_weight < normal_weight,
+                "Quota exceeded should reduce weight"
+            );
+            let expected = normal_weight * config.quota_exceeded_penalty;
+            assert!(
+                (quota_exceeded_weight - expected).abs() < 0.01,
+                "Quota exceeded weight should be normal * penalty"
+            );
+        }
+
+        #[test]
+        fn test_degraded_penalty_applied() {
+            let config = WeightConfig::default();
+            let calculator = DefaultWeightCalculator::new(config);
+
+            let auth = AuthInfo {
+                id: "test-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            };
+
+            let metrics = AuthMetrics {
+                total_requests: 100,
+                success_count: 95,
+                failure_count: 5,
+                avg_latency_ms: 500.0,
+                min_latency_ms: 100.0,
+                max_latency_ms: 1000.0,
+                success_rate: 0.95,
+                error_rate: 0.05,
+                consecutive_successes: 10,
+                consecutive_failures: 0,
+                last_request_time: chrono::Utc::now(),
+                last_success_time: Some(chrono::Utc::now()),
+                last_failure_time: None,
+            };
+
+            let healthy_weight = calculator.calculate(&auth, Some(&metrics), HealthStatus::Healthy);
+            let degraded_weight =
+                calculator.calculate(&auth, Some(&metrics), HealthStatus::Degraded);
+
+            assert!(
+                degraded_weight < healthy_weight,
+                "Degraded weight ({degraded_weight}) should be less than healthy weight ({healthy_weight})"
+            );
+
+            assert!(degraded_weight > 0.0, "Degraded weight should be positive");
+        }
+
+        #[test]
+        fn test_unavailable_penalty_applied() {
+            let config = WeightConfig::default();
+            let calculator = DefaultWeightCalculator::new(config.clone());
+
+            let metrics = AuthMetrics {
+                total_requests: 100,
+                success_count: 95,
+                failure_count: 5,
+                avg_latency_ms: 500.0,
+                min_latency_ms: 100.0,
+                max_latency_ms: 1000.0,
+                success_rate: 0.95,
+                error_rate: 0.05,
+                consecutive_successes: 10,
+                consecutive_failures: 0,
+                last_request_time: chrono::Utc::now(),
+                last_success_time: Some(chrono::Utc::now()),
+                last_failure_time: None,
+            };
+
+            let auth_available = AuthInfo {
+                id: "test-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            };
+
+            let auth_unavailable = AuthInfo {
+                id: "test-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: true,
+                model_states: Vec::new(),
+            };
+
+            let available_weight =
+                calculator.calculate(&auth_available, Some(&metrics), HealthStatus::Healthy);
+            let unavailable_weight =
+                calculator.calculate(&auth_unavailable, Some(&metrics), HealthStatus::Healthy);
+
+            let expected = available_weight * config.unavailable_penalty;
+            assert!(
+                (unavailable_weight - expected).abs() < 0.01,
+                "Unavailable weight should be available * unavailable_penalty"
+            );
+        }
+
+        #[test]
+        fn test_load_score_with_model_states() {
+            let config = WeightConfig::default();
+            let calculator = DefaultWeightCalculator::new(config);
+
+            let metrics = AuthMetrics {
+                total_requests: 100,
+                success_count: 95,
+                failure_count: 5,
+                avg_latency_ms: 500.0,
+                min_latency_ms: 100.0,
+                max_latency_ms: 1000.0,
+                success_rate: 0.95,
+                error_rate: 0.05,
+                consecutive_successes: 10,
+                consecutive_failures: 0,
+                last_request_time: chrono::Utc::now(),
+                last_success_time: Some(chrono::Utc::now()),
+                last_failure_time: None,
+            };
+
+            let auth_available = AuthInfo {
+                id: "test-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: vec![
+                    ModelState {
+                        unavailable: false,
+                        quota_exceeded: false,
+                    },
+                    ModelState {
+                        unavailable: false,
+                        quota_exceeded: false,
+                    },
+                ],
+            };
+
+            let auth_partial = AuthInfo {
+                id: "test-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: vec![
+                    ModelState {
+                        unavailable: true,
+                        quota_exceeded: false,
+                    },
+                    ModelState {
+                        unavailable: false,
+                        quota_exceeded: false,
+                    },
+                ],
+            };
+
+            let available_weight =
+                calculator.calculate(&auth_available, Some(&metrics), HealthStatus::Healthy);
+            let partial_weight =
+                calculator.calculate(&auth_partial, Some(&metrics), HealthStatus::Healthy);
+
+            assert!(
+                available_weight > partial_weight,
+                "All available models should yield higher weight"
+            );
+        }
+
+        #[test]
+        fn test_weight_calculation_with_nan_metrics() {
+            let config = WeightConfig::default();
+            let calculator = DefaultWeightCalculator::new(config);
+
+            let auth = AuthInfo {
+                id: "test-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            };
+
+            let nan_metrics = AuthMetrics {
+                total_requests: 100,
+                success_count: 50,
+                failure_count: 50,
+                avg_latency_ms: f64::NAN,
+                min_latency_ms: f64::NAN,
+                max_latency_ms: f64::NAN,
+                success_rate: f64::NAN,
+                error_rate: f64::NAN,
+                consecutive_successes: 10,
+                consecutive_failures: 5,
+                last_request_time: chrono::Utc::now(),
+                last_success_time: Some(chrono::Utc::now()),
+                last_failure_time: None,
+            };
+
+            let weight = calculator.calculate(&auth, Some(&nan_metrics), HealthStatus::Healthy);
+
+            assert!(
+                !weight.is_nan(),
+                "Weight should not be NaN even with NaN metrics"
+            );
+            assert!(
+                weight >= 0.0,
+                "Weight should be non-negative even with NaN metrics"
+            );
+        }
+
+        #[test]
+        fn test_weight_calculation_with_inf_metrics() {
+            let config = WeightConfig::default();
+            let calculator = DefaultWeightCalculator::new(config);
+
+            let auth = AuthInfo {
+                id: "test-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            };
+
+            let inf_metrics = AuthMetrics {
+                total_requests: 100,
+                success_count: 100,
+                failure_count: 0,
+                avg_latency_ms: f64::INFINITY,
+                min_latency_ms: 0.0,
+                max_latency_ms: f64::INFINITY,
+                success_rate: 1.0,
+                error_rate: 0.0,
+                consecutive_successes: 100,
+                consecutive_failures: 0,
+                last_request_time: chrono::Utc::now(),
+                last_success_time: Some(chrono::Utc::now()),
+                last_failure_time: None,
+            };
+
+            let weight = calculator.calculate(&auth, Some(&inf_metrics), HealthStatus::Healthy);
+
+            assert!(
+                weight.is_finite(),
+                "Weight should be finite even with Inf metrics"
+            );
+            assert!(
+                (0.0..=1.0).contains(&weight),
+                "Weight should be in valid range"
+            );
+        }
+
+        #[test]
+        fn test_combined_penalties() {
+            let config = WeightConfig::default();
+            let calculator = DefaultWeightCalculator::new(config.clone());
+
+            let auth = AuthInfo {
+                id: "test-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: true,
+                unavailable: true,
+                model_states: Vec::new(),
+            };
+
+            let metrics = AuthMetrics {
+                total_requests: 100,
+                success_count: 95,
+                failure_count: 5,
+                avg_latency_ms: 500.0,
+                min_latency_ms: 100.0,
+                max_latency_ms: 1000.0,
+                success_rate: 0.95,
+                error_rate: 0.05,
+                consecutive_successes: 10,
+                consecutive_failures: 0,
+                last_request_time: chrono::Utc::now(),
+                last_success_time: Some(chrono::Utc::now()),
+                last_failure_time: None,
+            };
+
+            let weight = calculator.calculate(&auth, Some(&metrics), HealthStatus::Unhealthy);
+
+            assert!(
+                weight >= 0.0,
+                "Weight should be non-negative with combined penalties"
+            );
+
+            let base_weight = calculator.calculate(
+                &AuthInfo {
+                    id: "test-auth".to_string(),
+                    priority: Some(0),
+                    quota_exceeded: false,
+                    unavailable: false,
+                    model_states: Vec::new(),
+                },
+                Some(&metrics),
+                HealthStatus::Healthy,
+            );
+
+            let expected = base_weight
+                * config.unhealthy_penalty
+                * config.quota_exceeded_penalty
+                * config.unavailable_penalty;
+            assert!(
+                (weight - expected).abs() < 0.001,
+                "Combined penalties should be multiplicative"
+            );
+        }
+
+        #[test]
+        fn test_priority_weight_extreme_values() {
+            let config = WeightConfig::default();
+            let calculator = DefaultWeightCalculator::new(config);
+
+            let metrics = AuthMetrics {
+                total_requests: 100,
+                success_count: 95,
+                failure_count: 5,
+                avg_latency_ms: 500.0,
+                min_latency_ms: 100.0,
+                max_latency_ms: 1000.0,
+                success_rate: 0.95,
+                error_rate: 0.05,
+                consecutive_successes: 10,
+                consecutive_failures: 0,
+                last_request_time: chrono::Utc::now(),
+                last_success_time: Some(chrono::Utc::now()),
+                last_failure_time: None,
+            };
+
+            let auth_max = AuthInfo {
+                id: "test-auth".to_string(),
+                priority: Some(i32::MAX),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            };
+            let weight_max = calculator.calculate(&auth_max, Some(&metrics), HealthStatus::Healthy);
+            assert!(
+                weight_max.is_finite() && weight_max > 0.0,
+                "Max priority should produce valid weight"
+            );
+
+            let auth_min = AuthInfo {
+                id: "test-auth".to_string(),
+                priority: Some(i32::MIN),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            };
+            let weight_min = calculator.calculate(&auth_min, Some(&metrics), HealthStatus::Healthy);
+            assert!(
+                weight_min.is_finite() && weight_min >= 0.0,
+                "Min priority should produce valid weight"
+            );
+
+            assert!(
+                weight_max > weight_min,
+                "Max priority should give higher weight than min"
+            );
+        }
+
+        #[test]
+        fn test_weight_clamping_non_negative() {
+            let config = WeightConfig {
+                success_rate_weight: 1.0,
+                latency_weight: 0.0,
+                health_weight: 0.0,
+                load_weight: 0.0,
+                priority_weight: 0.0,
+                unhealthy_penalty: 0.0,
+                degraded_penalty: 0.0,
+                quota_exceeded_penalty: 0.0,
+                unavailable_penalty: 0.0,
+            };
+            let calculator = DefaultWeightCalculator::new(config);
+
+            let auth = AuthInfo {
+                id: "test-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            };
+
+            let metrics = AuthMetrics {
+                total_requests: 100,
+                success_count: 0,
+                failure_count: 100,
+                avg_latency_ms: 10000.0,
+                min_latency_ms: 5000.0,
+                max_latency_ms: 20000.0,
+                success_rate: 0.0,
+                error_rate: 1.0,
+                consecutive_successes: 0,
+                consecutive_failures: 100,
+                last_request_time: chrono::Utc::now(),
+                last_success_time: None,
+                last_failure_time: Some(chrono::Utc::now()),
+            };
+
+            let weight = calculator.calculate(&auth, Some(&metrics), HealthStatus::Unhealthy);
+
+            assert!(
+                weight >= 0.0,
+                "Weight should always be non-negative, got: {weight}"
+            );
+        }
+
+        #[test]
+        fn test_weight_calculation_zero_metrics() {
+            let config = WeightConfig::default();
+            let calculator = DefaultWeightCalculator::new(config);
+
+            let auth = AuthInfo {
+                id: "test-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            };
+
+            let zero_metrics = AuthMetrics {
+                total_requests: 0,
+                success_count: 0,
+                failure_count: 0,
+                avg_latency_ms: 0.0,
+                min_latency_ms: 0.0,
+                max_latency_ms: 0.0,
+                success_rate: 1.0,
+                error_rate: 0.0,
+                consecutive_successes: 0,
+                consecutive_failures: 0,
+                last_request_time: chrono::Utc::now(),
+                last_success_time: None,
+                last_failure_time: None,
+            };
+
+            let weight = calculator.calculate(&auth, Some(&zero_metrics), HealthStatus::Healthy);
+
+            assert!(
+                weight > 0.0,
+                "Weight should be positive even with zero metrics"
+            );
+            assert!(weight <= 1.0, "Weight should not exceed 1.0");
+        }
+
+        #[test]
+        fn test_quota_exceeded_heavy_penalty() {
+            let config = WeightConfig::default();
+            let calculator = DefaultWeightCalculator::new(config.clone());
+
+            let metrics = AuthMetrics {
+                total_requests: 100,
+                success_count: 95,
+                failure_count: 5,
+                avg_latency_ms: 500.0,
+                min_latency_ms: 100.0,
+                max_latency_ms: 1000.0,
+                success_rate: 0.95,
+                error_rate: 0.05,
+                consecutive_successes: 10,
+                consecutive_failures: 0,
+                last_request_time: chrono::Utc::now(),
+                last_success_time: Some(chrono::Utc::now()),
+                last_failure_time: None,
+            };
+
+            let auth_normal = AuthInfo {
+                id: "test-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: Vec::new(),
+            };
+
+            let auth_quota = AuthInfo {
+                id: "test-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: true,
+                unavailable: false,
+                model_states: Vec::new(),
+            };
+
+            let normal_weight =
+                calculator.calculate(&auth_normal, Some(&metrics), HealthStatus::Healthy);
+            let quota_weight =
+                calculator.calculate(&auth_quota, Some(&metrics), HealthStatus::Healthy);
+
+            assert!(
+                quota_weight < normal_weight * 0.5,
+                "Quota exceeded should reduce weight by at least 50%: normal={normal_weight}, quota={quota_weight}"
+            );
+
+            let expected = normal_weight * config.quota_exceeded_penalty;
+            assert!(
+                (quota_weight - expected).abs() < 0.01,
+                "Quota penalty should match config"
+            );
+        }
+
+        #[test]
+        fn test_model_state_all_unavailable() {
+            let config = WeightConfig::default();
+            let calculator = DefaultWeightCalculator::new(config);
+
+            let metrics = AuthMetrics {
+                total_requests: 100,
+                success_count: 95,
+                failure_count: 5,
+                avg_latency_ms: 500.0,
+                min_latency_ms: 100.0,
+                max_latency_ms: 1000.0,
+                success_rate: 0.95,
+                error_rate: 0.05,
+                consecutive_successes: 10,
+                consecutive_failures: 0,
+                last_request_time: chrono::Utc::now(),
+                last_success_time: Some(chrono::Utc::now()),
+                last_failure_time: None,
+            };
+
+            let auth_all_unavailable = AuthInfo {
+                id: "test-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: vec![
+                    ModelState {
+                        unavailable: true,
+                        quota_exceeded: false,
+                    },
+                    ModelState {
+                        unavailable: true,
+                        quota_exceeded: false,
+                    },
+                    ModelState {
+                        unavailable: true,
+                        quota_exceeded: false,
+                    },
+                ],
+            };
+
+            let auth_all_available = AuthInfo {
+                id: "test-auth".to_string(),
+                priority: Some(0),
+                quota_exceeded: false,
+                unavailable: false,
+                model_states: vec![
+                    ModelState {
+                        unavailable: false,
+                        quota_exceeded: false,
+                    },
+                    ModelState {
+                        unavailable: false,
+                        quota_exceeded: false,
+                    },
+                    ModelState {
+                        unavailable: false,
+                        quota_exceeded: false,
+                    },
+                ],
+            };
+
+            let weight_unavailable =
+                calculator.calculate(&auth_all_unavailable, Some(&metrics), HealthStatus::Healthy);
+            let weight_available =
+                calculator.calculate(&auth_all_available, Some(&metrics), HealthStatus::Healthy);
+
+            assert!(
+                weight_available > weight_unavailable,
+                "All available models should yield higher weight than all unavailable"
             );
         }
     }

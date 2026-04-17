@@ -715,38 +715,75 @@ mod tests {
         assert_eq!(result.model, "gemini-1.5-pro");
     }
 
-    #[test]
-    fn test_transform_response_missing_candidates() {
-        let adapter = GoogleAdapter::new();
-        let response = json!({});
-        let result = adapter.transform_response(response);
-        assert!(result.is_err());
-    }
+    mod red_edge {
+        use super::*;
 
-    #[test]
-    fn test_transform_response_empty_candidates() {
-        let adapter = GoogleAdapter::new();
-        let response = json!({"candidates": []});
-        let result = adapter.transform_response(response);
-        assert!(result.is_err());
-    }
+        #[test]
+        fn test_transform_response_missing_candidates() {
+            let adapter = GoogleAdapter::new();
+            let response = json!({});
+            let result = adapter.transform_response(response);
+            assert!(result.is_err());
+        }
 
-    #[test]
-    fn test_transform_response_missing_usage() {
-        let adapter = GoogleAdapter::new();
-        let response = json!({
-            "candidates": [{
-                "content": {
-                    "parts": [{"text": "Hello"}]
-                },
-                "finishReason": "STOP"
-            }]
-        });
+        #[test]
+        fn test_transform_response_empty_candidates() {
+            let adapter = GoogleAdapter::new();
+            let response = json!({"candidates": []});
+            let result = adapter.transform_response(response);
+            assert!(result.is_err());
+        }
 
-        let result = adapter.transform_response(response).unwrap();
-        assert_eq!(result.usage.prompt_tokens, 0);
-        assert_eq!(result.usage.completion_tokens, 0);
-        assert_eq!(result.usage.total_tokens, 0);
+        #[test]
+        fn test_transform_response_missing_usage() {
+            let adapter = GoogleAdapter::new();
+            let response = json!({
+                "candidates": [{
+                    "content": {
+                        "parts": [{"text": "Hello"}]
+                    },
+                    "finishReason": "STOP"
+                }]
+            });
+
+            let result = adapter.transform_response(response).unwrap();
+            assert_eq!(result.usage.prompt_tokens, 0);
+            assert_eq!(result.usage.completion_tokens, 0);
+            assert_eq!(result.usage.total_tokens, 0);
+        }
+
+        #[test]
+        fn test_transform_response_no_content_parts() {
+            let adapter = GoogleAdapter::new();
+            let response = json!({
+                "candidates": [{
+                    "content": {
+                        "parts": []
+                    },
+                    "finishReason": "STOP"
+                }],
+                "usageMetadata": {}
+            });
+
+            let result = adapter.transform_response(response).unwrap();
+            assert_eq!(result.content, "");
+        }
+
+        #[test]
+        fn test_transform_response_missing_finish_reason() {
+            let adapter = GoogleAdapter::new();
+            let response = json!({
+                "candidates": [{
+                    "content": {
+                        "parts": [{"text": "Hello"}]
+                    }
+                }],
+                "usageMetadata": {}
+            });
+
+            let result = adapter.transform_response(response).unwrap();
+            assert_eq!(result.finish_reason, "UNKNOWN");
+        }
     }
 
     #[test]
@@ -796,39 +833,6 @@ mod tests {
         assert_eq!(result.content, "Hello there!");
     }
 
-    #[test]
-    fn test_transform_response_no_content_parts() {
-        let adapter = GoogleAdapter::new();
-        let response = json!({
-            "candidates": [{
-                "content": {
-                    "parts": []
-                },
-                "finishReason": "STOP"
-            }],
-            "usageMetadata": {}
-        });
-
-        let result = adapter.transform_response(response).unwrap();
-        assert_eq!(result.content, "");
-    }
-
-    #[test]
-    fn test_transform_response_missing_finish_reason() {
-        let adapter = GoogleAdapter::new();
-        let response = json!({
-            "candidates": [{
-                "content": {
-                    "parts": [{"text": "Hello"}]
-                }
-            }],
-            "usageMetadata": {}
-        });
-
-        let result = adapter.transform_response(response).unwrap();
-        assert_eq!(result.finish_reason, "UNKNOWN");
-    }
-
     mod proptests {
         use crate::providers::types::ProviderAdapter;
         use proptest::prelude::*;
@@ -866,9 +870,14 @@ mod tests {
             }
 
             #[test]
-            fn endpoint_generation(model_id in "\\PC*") {
+            fn endpoint_generation(
+                base_url in proptest::option::of(
+                    proptest::string::string_regex("(https?://[a-zA-Z0-9.-]+(:[0-9]+)?(/[a-zA-Z0-9._/-]*)?)").unwrap()
+                ),
+                model_id in "\\PC*"
+            ) {
                 let adapter = GoogleAdapter::new();
-                let endpoint = adapter.get_endpoint(None, &model_id);
+                let endpoint = adapter.get_endpoint(base_url.as_deref(), &model_id);
                 // Endpoint must be a non-empty string
                 assert!(!endpoint.is_empty(), "endpoint must not be empty");
                 // Endpoint must end with :generateContent
@@ -876,20 +885,31 @@ mod tests {
                     endpoint.ends_with(":generateContent"),
                     "endpoint must end with :generateContent, got: {endpoint}"
                 );
-                // Endpoint must contain /models/ (even for empty model_id after sanitization)
+                // Endpoint must contain /models/
                 assert!(
                     endpoint.contains("/models/"),
                     "endpoint must contain /models/, got: {endpoint}"
                 );
-                // Path traversal characters (/ and \) must be stripped from model_id
+                // Path traversal in model_id must be stripped (get_endpoint sanitizes
+                // model_id but not base_url, so check the segment after /models/ only).
+                let model_segment = endpoint
+                    .split("/models/")
+                    .nth(1)
+                    .unwrap_or("");
+                let sanitized = model_segment.trim_end_matches(":generateContent");
                 assert!(
-                    !endpoint.contains("../"),
-                    "endpoint must not contain path traversal, got: {endpoint}"
+                    !sanitized.contains('/') && !sanitized.contains('\\'),
+                    "model segment must have path separators stripped, got: {sanitized}"
                 );
-                assert!(
-                    !endpoint.contains("..\\"),
-                    "endpoint must not contain backslash traversal, got: {endpoint}"
-                );
+                // When a non-empty base_url is provided, the endpoint must start with it
+                if let Some(ref url) = base_url {
+                    if !url.is_empty() {
+                        assert!(
+                            endpoint.starts_with(url.trim_end_matches('/')),
+                            "endpoint must start with provided base_url, got: {endpoint}"
+                        );
+                    }
+                }
             }
         }
     }

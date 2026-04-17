@@ -323,59 +323,272 @@ mod tests {
     // Edge Case Tests for Request Transformation
     // ============================================================
 
-    #[test]
-    fn test_transform_request_empty_message_content() {
-        let adapter = AnthropicAdapter::new();
-        let request = ProviderRequest {
-            messages: vec![Message {
-                role: "user".to_string(),
-                content: MessageContent::Text(String::new()),
-                name: None,
-            }],
-            model: "claude-3-opus".to_string(),
-            max_tokens: Some(1024),
-            temperature: None,
-            top_p: None,
-            stop: None,
-            stream: false,
-            system: None,
-            tools: None,
-            tool_choice: None,
-        };
+    mod red_edge {
+        use super::*;
 
-        let transformed = adapter.transform_request(&request);
-        // Should still create a message with empty text
-        assert_eq!(transformed["model"], "claude-3-opus");
-        let messages = transformed["messages"].as_array().unwrap();
-        assert_eq!(messages.len(), 1);
-        // Content should be an array with empty text
-        let content = &messages[0]["content"];
-        assert!(content.is_array());
-        let content_arr = content.as_array().unwrap();
-        assert_eq!(content_arr[0]["type"], "text");
-        assert_eq!(content_arr[0]["text"], "");
-    }
+        #[test]
+        fn test_transform_request_empty_message_content() {
+            let adapter = AnthropicAdapter::new();
+            let request = ProviderRequest {
+                messages: vec![Message {
+                    role: "user".to_string(),
+                    content: MessageContent::Text(String::new()),
+                    name: None,
+                }],
+                model: "claude-3-opus".to_string(),
+                max_tokens: Some(1024),
+                temperature: None,
+                top_p: None,
+                stop: None,
+                stream: false,
+                system: None,
+                tools: None,
+                tool_choice: None,
+            };
 
-    #[test]
-    fn test_transform_request_empty_messages_array() {
-        let adapter = AnthropicAdapter::new();
-        let request = ProviderRequest {
-            messages: vec![], // Empty messages array
-            model: "claude-3-opus".to_string(),
-            max_tokens: Some(1024),
-            temperature: None,
-            top_p: None,
-            stop: None,
-            stream: false,
-            system: None,
-            tools: None,
-            tool_choice: None,
-        };
+            let transformed = adapter.transform_request(&request);
+            // Should still create a message with empty text
+            assert_eq!(transformed["model"], "claude-3-opus");
+            let messages = transformed["messages"].as_array().unwrap();
+            assert_eq!(messages.len(), 1);
+            // Content should be an array with empty text
+            let content = &messages[0]["content"];
+            assert!(content.is_array());
+            let content_arr = content.as_array().unwrap();
+            assert_eq!(content_arr[0]["type"], "text");
+            assert_eq!(content_arr[0]["text"], "");
+        }
 
-        let transformed = adapter.transform_request(&request);
-        // Should handle empty messages gracefully
-        let messages = transformed["messages"].as_array().unwrap();
-        assert_eq!(messages.len(), 0);
+        #[test]
+        fn test_transform_request_empty_messages_array() {
+            let adapter = AnthropicAdapter::new();
+            let request = ProviderRequest {
+                messages: vec![], // Empty messages array
+                model: "claude-3-opus".to_string(),
+                max_tokens: Some(1024),
+                temperature: None,
+                top_p: None,
+                stop: None,
+                stream: false,
+                system: None,
+                tools: None,
+                tool_choice: None,
+            };
+
+            let transformed = adapter.transform_request(&request);
+            // Should handle empty messages gracefully
+            let messages = transformed["messages"].as_array().unwrap();
+            assert_eq!(messages.len(), 0);
+        }
+
+        #[test]
+        fn test_transform_request_null_content() {
+            // Test with content that deserializes to empty text
+            let adapter = AnthropicAdapter::new();
+
+            let request = ProviderRequest {
+                messages: vec![Message {
+                    role: "user".to_string(),
+                    content: MessageContent::Text(String::new()),
+                    name: None,
+                }],
+                model: "claude-3-opus".to_string(),
+                max_tokens: Some(1024),
+                temperature: None,
+                top_p: None,
+                stop: None,
+                stream: false,
+                system: None,
+                tools: None,
+                tool_choice: None,
+            };
+
+            let transformed = adapter.transform_request(&request);
+            let messages = transformed["messages"].as_array().unwrap();
+            assert_eq!(messages.len(), 1);
+        }
+
+        #[test]
+        fn test_transform_response_empty_content_array() {
+            let adapter = AnthropicAdapter::new();
+            let response = json!({
+                "id": "msg_123",
+                "model": "claude-3-opus",
+                "content": [],
+                "stop_reason": "end_turn",
+                "usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 5
+                }
+            });
+
+            let result = adapter.transform_response(response).unwrap();
+            assert_eq!(result.id, "msg_123");
+            assert_eq!(result.content, ""); // Empty string from empty array
+        }
+
+        #[test]
+        fn test_transform_response_missing_id() {
+            let adapter = AnthropicAdapter::new();
+            let response = json!({
+                "model": "claude-3-opus",
+                "content": [
+                    {"type": "text", "text": "Hello"}
+                ],
+                "stop_reason": "end_turn",
+                "usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 5
+                }
+            });
+
+            let result = adapter.transform_response(response).unwrap();
+            assert_eq!(result.id, "unknown"); // Should use default
+        }
+
+        #[test]
+        fn test_transform_response_missing_model() {
+            let adapter = AnthropicAdapter::new();
+            let response = json!({
+                "id": "msg_123",
+                "content": [
+                    {"type": "text", "text": "Hello"}
+                ],
+                "stop_reason": "end_turn",
+                "usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 5
+                }
+            });
+
+            let result = adapter.transform_response(response).unwrap();
+            assert_eq!(result.model, "unknown"); // Should use default
+        }
+
+        #[test]
+        fn test_transform_response_missing_stop_reason() {
+            let adapter = AnthropicAdapter::new();
+            let response = json!({
+                "id": "msg_123",
+                "model": "claude-3-opus",
+                "content": [
+                    {"type": "text", "text": "Hello"}
+                ],
+                "usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 5
+                }
+            });
+
+            let result = adapter.transform_response(response).unwrap();
+            assert_eq!(result.finish_reason, "unknown"); // Should use default
+        }
+
+        #[test]
+        fn test_transform_response_missing_usage() {
+            let adapter = AnthropicAdapter::new();
+            let response = json!({
+                "id": "msg_123",
+                "model": "claude-3-opus",
+                "content": [
+                    {"type": "text", "text": "Hello"}
+                ],
+                "stop_reason": "end_turn"
+            });
+
+            let result = adapter.transform_response(response).unwrap();
+            assert_eq!(result.usage.prompt_tokens, 0);
+            assert_eq!(result.usage.completion_tokens, 0);
+            assert_eq!(result.usage.total_tokens, 0);
+        }
+
+        #[test]
+        fn test_transform_response_partial_usage() {
+            let adapter = AnthropicAdapter::new();
+            let response = json!({
+                "id": "msg_123",
+                "model": "claude-3-opus",
+                "content": [
+                    {"type": "text", "text": "Hello"}
+                ],
+                "stop_reason": "end_turn",
+                "usage": {
+                    "input_tokens": 100
+                    // Missing output_tokens
+                }
+            });
+
+            let result = adapter.transform_response(response).unwrap();
+            assert_eq!(result.usage.prompt_tokens, 100);
+            assert_eq!(result.usage.completion_tokens, 0); // Default
+            assert_eq!(result.usage.total_tokens, 100);
+        }
+
+        #[test]
+        fn test_transform_response_no_content_field() {
+            let adapter = AnthropicAdapter::new();
+            let response = json!({
+                "id": "msg_123",
+                "model": "claude-3-opus",
+                "stop_reason": "end_turn",
+                "usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 5
+                }
+            });
+
+            let result = adapter.transform_response(response);
+            assert!(
+                result.is_err(),
+                "Should return error when content is missing"
+            );
+        }
+
+        #[test]
+        fn test_transform_response_null_content() {
+            let adapter = AnthropicAdapter::new();
+            let response = json!({
+                "id": "msg_123",
+                "model": "claude-3-opus",
+                "content": null,
+                "stop_reason": "end_turn",
+                "usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 5
+                }
+            });
+
+            let result = adapter.transform_response(response);
+            assert!(result.is_err(), "Should return error when content is null");
+        }
+
+        #[test]
+        fn test_transform_response_tool_use_missing_fields() {
+            let adapter = AnthropicAdapter::new();
+            let response = json!({
+                "id": "msg_123",
+                "model": "claude-3-opus",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        // Missing id and name
+                        "input": {"location": "SF"}
+                    }
+                ],
+                "stop_reason": "tool_use",
+                "usage": {
+                    "input_tokens": 20,
+                    "output_tokens": 30
+                }
+            });
+
+            let result = adapter.transform_response(response).unwrap();
+            // Tool calls with missing fields should result in None
+            assert!(
+                result.tool_calls.is_none() || result.tool_calls.as_ref().unwrap().is_empty(),
+                "Tool calls with missing required fields should be filtered out"
+            );
+        }
     }
 
     #[test]
@@ -652,190 +865,9 @@ mod tests {
         assert_eq!(transformed["tool_choice"]["name"], "calculator");
     }
 
-    #[test]
-    fn test_transform_request_null_content() {
-        // Test with content that deserializes to empty text
-        let adapter = AnthropicAdapter::new();
-
-        let request = ProviderRequest {
-            messages: vec![Message {
-                role: "user".to_string(),
-                content: MessageContent::Text(String::new()),
-                name: None,
-            }],
-            model: "claude-3-opus".to_string(),
-            max_tokens: Some(1024),
-            temperature: None,
-            top_p: None,
-            stop: None,
-            stream: false,
-            system: None,
-            tools: None,
-            tool_choice: None,
-        };
-
-        let transformed = adapter.transform_request(&request);
-        let messages = transformed["messages"].as_array().unwrap();
-        assert_eq!(messages.len(), 1);
-    }
-
     // ============================================================
-    // Edge Case Tests for Response Transformation
+    // Edge Case Tests for Response Transformation (happy path)
     // ============================================================
-
-    #[test]
-    fn test_transform_response_empty_content_array() {
-        let adapter = AnthropicAdapter::new();
-        let response = json!({
-            "id": "msg_123",
-            "model": "claude-3-opus",
-            "content": [],
-            "stop_reason": "end_turn",
-            "usage": {
-                "input_tokens": 10,
-                "output_tokens": 5
-            }
-        });
-
-        let result = adapter.transform_response(response).unwrap();
-        assert_eq!(result.id, "msg_123");
-        assert_eq!(result.content, ""); // Empty string from empty array
-    }
-
-    #[test]
-    fn test_transform_response_missing_id() {
-        let adapter = AnthropicAdapter::new();
-        let response = json!({
-            "model": "claude-3-opus",
-            "content": [
-                {"type": "text", "text": "Hello"}
-            ],
-            "stop_reason": "end_turn",
-            "usage": {
-                "input_tokens": 10,
-                "output_tokens": 5
-            }
-        });
-
-        let result = adapter.transform_response(response).unwrap();
-        assert_eq!(result.id, "unknown"); // Should use default
-    }
-
-    #[test]
-    fn test_transform_response_missing_model() {
-        let adapter = AnthropicAdapter::new();
-        let response = json!({
-            "id": "msg_123",
-            "content": [
-                {"type": "text", "text": "Hello"}
-            ],
-            "stop_reason": "end_turn",
-            "usage": {
-                "input_tokens": 10,
-                "output_tokens": 5
-            }
-        });
-
-        let result = adapter.transform_response(response).unwrap();
-        assert_eq!(result.model, "unknown"); // Should use default
-    }
-
-    #[test]
-    fn test_transform_response_missing_stop_reason() {
-        let adapter = AnthropicAdapter::new();
-        let response = json!({
-            "id": "msg_123",
-            "model": "claude-3-opus",
-            "content": [
-                {"type": "text", "text": "Hello"}
-            ],
-            "usage": {
-                "input_tokens": 10,
-                "output_tokens": 5
-            }
-        });
-
-        let result = adapter.transform_response(response).unwrap();
-        assert_eq!(result.finish_reason, "unknown"); // Should use default
-    }
-
-    #[test]
-    fn test_transform_response_missing_usage() {
-        let adapter = AnthropicAdapter::new();
-        let response = json!({
-            "id": "msg_123",
-            "model": "claude-3-opus",
-            "content": [
-                {"type": "text", "text": "Hello"}
-            ],
-            "stop_reason": "end_turn"
-        });
-
-        let result = adapter.transform_response(response).unwrap();
-        assert_eq!(result.usage.prompt_tokens, 0);
-        assert_eq!(result.usage.completion_tokens, 0);
-        assert_eq!(result.usage.total_tokens, 0);
-    }
-
-    #[test]
-    fn test_transform_response_partial_usage() {
-        let adapter = AnthropicAdapter::new();
-        let response = json!({
-            "id": "msg_123",
-            "model": "claude-3-opus",
-            "content": [
-                {"type": "text", "text": "Hello"}
-            ],
-            "stop_reason": "end_turn",
-            "usage": {
-                "input_tokens": 100
-                // Missing output_tokens
-            }
-        });
-
-        let result = adapter.transform_response(response).unwrap();
-        assert_eq!(result.usage.prompt_tokens, 100);
-        assert_eq!(result.usage.completion_tokens, 0); // Default
-        assert_eq!(result.usage.total_tokens, 100);
-    }
-
-    #[test]
-    fn test_transform_response_no_content_field() {
-        let adapter = AnthropicAdapter::new();
-        let response = json!({
-            "id": "msg_123",
-            "model": "claude-3-opus",
-            "stop_reason": "end_turn",
-            "usage": {
-                "input_tokens": 10,
-                "output_tokens": 5
-            }
-        });
-
-        let result = adapter.transform_response(response);
-        assert!(
-            result.is_err(),
-            "Should return error when content is missing"
-        );
-    }
-
-    #[test]
-    fn test_transform_response_null_content() {
-        let adapter = AnthropicAdapter::new();
-        let response = json!({
-            "id": "msg_123",
-            "model": "claude-3-opus",
-            "content": null,
-            "stop_reason": "end_turn",
-            "usage": {
-                "input_tokens": 10,
-                "output_tokens": 5
-            }
-        });
-
-        let result = adapter.transform_response(response);
-        assert!(result.is_err(), "Should return error when content is null");
-    }
 
     #[test]
     fn test_transform_response_multiple_text_blocks() {
@@ -920,34 +952,6 @@ mod tests {
         let result = adapter.transform_response(response).unwrap();
         let tool_calls = result.tool_calls.as_ref().unwrap();
         assert_eq!(tool_calls.len(), 2);
-    }
-
-    #[test]
-    fn test_transform_response_tool_use_missing_fields() {
-        let adapter = AnthropicAdapter::new();
-        let response = json!({
-            "id": "msg_123",
-            "model": "claude-3-opus",
-            "content": [
-                {
-                    "type": "tool_use",
-                    // Missing id and name
-                    "input": {"location": "SF"}
-                }
-            ],
-            "stop_reason": "tool_use",
-            "usage": {
-                "input_tokens": 20,
-                "output_tokens": 30
-            }
-        });
-
-        let result = adapter.transform_response(response).unwrap();
-        // Tool calls with missing fields should result in None
-        assert!(
-            result.tool_calls.is_none() || result.tool_calls.as_ref().unwrap().is_empty(),
-            "Tool calls with missing required fields should be filtered out"
-        );
     }
 
     #[test]

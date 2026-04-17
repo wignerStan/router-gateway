@@ -126,64 +126,214 @@ fn ipv6_to_v4_compat(v6: &std::net::Ipv6Addr) -> Option<std::net::Ipv4Addr> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn reject_loopback() {
-        let result = validate_url_not_private("http://127.0.0.1/v1/chat");
-        assert!(result.is_err());
-    }
+    mod red_edge {
+        use super::*;
 
-    #[test]
-    fn reject_loopback_localhost() {
-        let result = validate_url_not_private("http://127.0.0.1/v1/chat");
-        assert!(result.is_err());
-    }
+        #[test]
+        fn reject_loopback() {
+            let result = validate_url_not_private("http://127.0.0.1/v1/chat");
+            assert!(result.is_err());
+        }
 
-    #[test]
-    fn reject_private_10_range() {
-        let result = validate_url_not_private("http://10.0.0.1/api");
-        assert!(result.is_err());
-    }
+        #[test]
+        fn reject_loopback_localhost() {
+            let result = validate_url_not_private("http://127.0.0.1/v1/chat");
+            assert!(result.is_err());
+        }
 
-    #[test]
-    fn reject_private_172_range_lower() {
-        let result = validate_url_not_private("http://172.16.0.1/api");
-        assert!(result.is_err());
-    }
+        #[test]
+        fn reject_private_10_range() {
+            let result = validate_url_not_private("http://10.0.0.1/api");
+            assert!(result.is_err());
+        }
 
-    #[test]
-    fn reject_private_172_range_upper() {
-        let result = validate_url_not_private("http://172.31.255.255/api");
-        assert!(result.is_err());
-    }
+        #[test]
+        fn reject_private_172_range_lower() {
+            let result = validate_url_not_private("http://172.16.0.1/api");
+            assert!(result.is_err());
+        }
 
-    #[test]
-    fn reject_private_192_range() {
-        let result = validate_url_not_private("http://192.168.1.1/api");
-        assert!(result.is_err());
-    }
+        #[test]
+        fn reject_private_172_range_upper() {
+            let result = validate_url_not_private("http://172.31.255.255/api");
+            assert!(result.is_err());
+        }
 
-    #[test]
-    fn reject_link_local() {
-        let result = validate_url_not_private("http://169.254.169.254/latest/meta-data/");
-        assert!(result.is_err());
-    }
+        #[test]
+        fn reject_private_192_range() {
+            let result = validate_url_not_private("http://192.168.1.1/api");
+            assert!(result.is_err());
+        }
 
-    #[test]
-    fn reject_ipv6_loopback() {
-        let result = validate_url_not_private("http://[::1]:8000/api");
-        assert!(result.is_err());
-    }
+        #[test]
+        fn reject_link_local() {
+            let result = validate_url_not_private("http://169.254.169.254/latest/meta-data/");
+            assert!(result.is_err());
+        }
 
-    #[test]
-    fn reject_ipv6_unique_local() {
-        let result = validate_url_not_private("http://[fc00::1]/api");
-        assert!(result.is_err());
-    }
+        #[test]
+        fn reject_ipv6_loopback() {
+            let result = validate_url_not_private("http://[::1]:8000/api");
+            assert!(result.is_err());
+        }
 
-    #[test]
-    fn reject_ipv6_link_local() {
-        let result = validate_url_not_private("http://[fe80::1]/api");
-        assert!(result.is_err());
+        #[test]
+        fn reject_ipv6_unique_local() {
+            let result = validate_url_not_private("http://[fc00::1]/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_ipv6_link_local() {
+            let result = validate_url_not_private("http://[fe80::1]/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_zero_network() {
+            let result = validate_url_not_private("http://0.0.0.0/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_ipv4_mapped_ipv6_loopback() {
+            let result = validate_url_not_private("http://[::ffff:127.0.0.1]:8000/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_ipv4_mapped_ipv6_cloud_metadata() {
+            let result =
+                validate_url_not_private("http://[::ffff:169.254.169.254]/latest/meta-data/");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_ipv4_mapped_ipv6_private_10() {
+            let result = validate_url_not_private("http://[::ffff:10.0.0.1]/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_ipv4_mapped_ipv6_private_192() {
+            let result = validate_url_not_private("http://[::ffff:192.168.1.1]/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_ietf_protocol_assignments() {
+            let result = validate_url_not_private("http://192.0.0.1/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_test_net_1() {
+            let result = validate_url_not_private("http://192.0.2.1/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_test_net_2() {
+            let result = validate_url_not_private("http://198.51.100.1/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_test_net_3() {
+            let result = validate_url_not_private("http://203.0.113.1/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_broadcast() {
+            let result = validate_url_not_private("http://255.255.255.255/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_ipv6_unspecified() {
+            let result = validate_url_not_private("http://[::]/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_ipv6_multicast() {
+            let result = validate_url_not_private("http://[ff02::1]/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_ipv4_compatible_loopback() {
+            let result = validate_url_not_private("http://[::127.0.0.1]/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_ipv4_compatible_private() {
+            let result = validate_url_not_private("http://[::192.168.1.1]/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_ipv4_multicast() {
+            let result = validate_url_not_private("http://224.0.0.1/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_ipv4_multicast_upper() {
+            let result = validate_url_not_private("http://239.255.255.255/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_ipv4_cgnat() {
+            let result = validate_url_not_private("http://100.64.0.1/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_ipv4_cgnat_upper() {
+            let result = validate_url_not_private("http://100.127.255.255/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_ipv4_class_e() {
+            let result = validate_url_not_private("http://240.0.0.1/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_ipv4_class_e_upper() {
+            let result = validate_url_not_private("http://254.255.255.255/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_ipv6_deprecated_site_local() {
+            let result = validate_url_not_private("http://[fec0::1]/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn reject_ipv6_deprecated_site_local_upper() {
+            let result =
+                validate_url_not_private("http://[feff:ffff:ffff:ffff:ffff:ffff:ffff:ffff]/api");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn invalid_url_returns_error() {
+            let result = validate_url_not_private("not a url");
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn url_without_host_returns_error() {
+            let result = validate_url_not_private("file:///path/to/file");
+            assert!(result.is_err());
+        }
     }
 
     #[test]
@@ -199,117 +349,9 @@ mod tests {
     }
 
     #[test]
-    fn reject_zero_network() {
-        let result = validate_url_not_private("http://0.0.0.0/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn reject_ipv4_mapped_ipv6_loopback() {
-        let result = validate_url_not_private("http://[::ffff:127.0.0.1]:8000/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn reject_ipv4_mapped_ipv6_cloud_metadata() {
-        let result = validate_url_not_private("http://[::ffff:169.254.169.254]/latest/meta-data/");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn reject_ipv4_mapped_ipv6_private_10() {
-        let result = validate_url_not_private("http://[::ffff:10.0.0.1]/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn reject_ipv4_mapped_ipv6_private_192() {
-        let result = validate_url_not_private("http://[::ffff:192.168.1.1]/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
     fn allow_ipv4_mapped_public_ip() {
         let result = validate_url_not_private("http://[::ffff:1.1.1.1]/api");
         assert!(result.is_ok());
-    }
-
-    #[test]
-    fn reject_ietf_protocol_assignments() {
-        let result = validate_url_not_private("http://192.0.0.1/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn reject_test_net_1() {
-        let result = validate_url_not_private("http://192.0.2.1/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn reject_test_net_2() {
-        let result = validate_url_not_private("http://198.51.100.1/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn reject_test_net_3() {
-        let result = validate_url_not_private("http://203.0.113.1/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn reject_broadcast() {
-        let result = validate_url_not_private("http://255.255.255.255/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn reject_ipv6_unspecified() {
-        let result = validate_url_not_private("http://[::]/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn reject_ipv6_multicast() {
-        let result = validate_url_not_private("http://[ff02::1]/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn reject_ipv4_compatible_loopback() {
-        let result = validate_url_not_private("http://[::127.0.0.1]/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn reject_ipv4_compatible_private() {
-        let result = validate_url_not_private("http://[::192.168.1.1]/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn reject_ipv4_multicast() {
-        let result = validate_url_not_private("http://224.0.0.1/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn reject_ipv4_multicast_upper() {
-        let result = validate_url_not_private("http://239.255.255.255/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn reject_ipv4_cgnat() {
-        let result = validate_url_not_private("http://100.64.0.1/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn reject_ipv4_cgnat_upper() {
-        let result = validate_url_not_private("http://100.127.255.255/api");
-        assert!(result.is_err());
     }
 
     #[test]
@@ -327,31 +369,6 @@ mod tests {
     }
 
     #[test]
-    fn reject_ipv4_class_e() {
-        let result = validate_url_not_private("http://240.0.0.1/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn reject_ipv4_class_e_upper() {
-        let result = validate_url_not_private("http://254.255.255.255/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn reject_ipv6_deprecated_site_local() {
-        let result = validate_url_not_private("http://[fec0::1]/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn reject_ipv6_deprecated_site_local_upper() {
-        let result =
-            validate_url_not_private("http://[feff:ffff:ffff:ffff:ffff:ffff:ffff:ffff]/api");
-        assert!(result.is_err());
-    }
-
-    #[test]
     fn allow_ipv6_just_above_site_local() {
         // ff00:: is multicast which is blocked, but fe00:: is not in site-local range
         // Actually fe00:: through febf:: falls in fe80..=febf check, so test ff00 separately
@@ -364,18 +381,6 @@ mod tests {
     fn allow_public_ipv4_literal() {
         let result = validate_url_not_private("https://8.8.8.8/api");
         assert!(result.is_ok());
-    }
-
-    #[test]
-    fn invalid_url_returns_error() {
-        let result = validate_url_not_private("not a url");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn url_without_host_returns_error() {
-        let result = validate_url_not_private("file:///path/to/file");
-        assert!(result.is_err());
     }
 
     mod proptests {

@@ -411,25 +411,148 @@ mod tests {
     // transform_request Edge Case Tests
     // ============================================================
 
-    #[test]
-    fn test_transform_request_empty_messages() {
-        let adapter = OpenAIAdapter::new();
-        let request = ProviderRequest {
-            messages: vec![],
-            model: "gpt-4".to_string(),
-            max_tokens: None,
-            temperature: None,
-            top_p: None,
-            stop: None,
-            stream: false,
-            system: None,
-            tools: None,
-            tool_choice: None,
-        };
+    mod red_edge {
+        use super::*;
 
-        let transformed = adapter.transform_request(&request);
-        let messages = transformed["messages"].as_array().unwrap();
-        assert!(messages.is_empty());
+        #[test]
+        fn test_transform_request_empty_messages() {
+            let adapter = OpenAIAdapter::new();
+            let request = ProviderRequest {
+                messages: vec![],
+                model: "gpt-4".to_string(),
+                max_tokens: None,
+                temperature: None,
+                top_p: None,
+                stop: None,
+                stream: false,
+                system: None,
+                tools: None,
+                tool_choice: None,
+            };
+
+            let transformed = adapter.transform_request(&request);
+            let messages = transformed["messages"].as_array().unwrap();
+            assert!(messages.is_empty());
+        }
+
+        #[test]
+        fn test_transform_response_missing_choices() {
+            let adapter = OpenAIAdapter::new();
+            let response = json!({});
+            let result = adapter.transform_response(response);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_transform_response_empty_choices() {
+            let adapter = OpenAIAdapter::new();
+            let response = json!({"choices": []});
+            let result = adapter.transform_response(response);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_transform_response_missing_id() {
+            let adapter = OpenAIAdapter::new();
+            let response = json!({
+                "choices": [{
+                    "message": {"content": "Hello"},
+                    "finish_reason": "stop"
+                }],
+                "usage": {}
+            });
+
+            let result = adapter.transform_response(response).unwrap();
+            assert_eq!(result.id, "unknown");
+        }
+
+        #[test]
+        fn test_transform_response_missing_model() {
+            let adapter = OpenAIAdapter::new();
+            let response = json!({
+                "id": "chatcmpl-123",
+                "choices": [{
+                    "message": {"content": "Hello"},
+                    "finish_reason": "stop"
+                }],
+                "usage": {}
+            });
+
+            let result = adapter.transform_response(response).unwrap();
+            assert_eq!(result.model, "unknown");
+        }
+
+        #[test]
+        fn test_transform_response_missing_content() {
+            let adapter = OpenAIAdapter::new();
+            let response = json!({
+                "id": "chatcmpl-123",
+                "model": "gpt-4",
+                "choices": [{
+                    "message": {},
+                    "finish_reason": "stop"
+                }],
+                "usage": {}
+            });
+
+            let result = adapter.transform_response(response).unwrap();
+            assert_eq!(result.content, "");
+        }
+
+        #[test]
+        fn test_transform_response_missing_finish_reason() {
+            let adapter = OpenAIAdapter::new();
+            let response = json!({
+                "id": "chatcmpl-123",
+                "model": "gpt-4",
+                "choices": [{
+                    "message": {"content": "Hello"}
+                }],
+                "usage": {}
+            });
+
+            let result = adapter.transform_response(response).unwrap();
+            assert_eq!(result.finish_reason, "unknown");
+        }
+
+        #[test]
+        fn test_transform_response_missing_usage() {
+            let adapter = OpenAIAdapter::new();
+            let response = json!({
+                "id": "chatcmpl-123",
+                "model": "gpt-4",
+                "choices": [{
+                    "message": {"content": "Hello"},
+                    "finish_reason": "stop"
+                }]
+            });
+
+            let result = adapter.transform_response(response).unwrap();
+            assert_eq!(result.usage.prompt_tokens, 0);
+            assert_eq!(result.usage.completion_tokens, 0);
+            assert_eq!(result.usage.total_tokens, 0);
+        }
+
+        #[test]
+        fn test_transform_response_partial_usage() {
+            let adapter = OpenAIAdapter::new();
+            let response = json!({
+                "id": "chatcmpl-123",
+                "model": "gpt-4",
+                "choices": [{
+                    "message": {"content": "Hello"},
+                    "finish_reason": "stop"
+                }],
+                "usage": {
+                    "prompt_tokens": 10
+                }
+            });
+
+            let result = adapter.transform_response(response).unwrap();
+            assert_eq!(result.usage.prompt_tokens, 10);
+            assert_eq!(result.usage.completion_tokens, 0);
+            assert_eq!(result.usage.total_tokens, 0);
+        }
     }
 
     #[test]
@@ -660,7 +783,7 @@ mod tests {
     }
 
     // ============================================================
-    // transform_response Edge Case Tests
+    // transform_response Edge Case Tests (happy path)
     // ============================================================
 
     #[test]
@@ -684,104 +807,6 @@ mod tests {
         assert_eq!(result.id, "chatcmpl-123");
         assert_eq!(result.content, "Hello there!");
         assert_eq!(result.usage.total_tokens, 15);
-    }
-
-    #[test]
-    fn test_transform_response_missing_choices() {
-        let adapter = OpenAIAdapter::new();
-        let response = json!({});
-        let result = adapter.transform_response(response);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_transform_response_empty_choices() {
-        let adapter = OpenAIAdapter::new();
-        let response = json!({"choices": []});
-        let result = adapter.transform_response(response);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_transform_response_missing_id() {
-        let adapter = OpenAIAdapter::new();
-        let response = json!({
-            "choices": [{
-                "message": {"content": "Hello"},
-                "finish_reason": "stop"
-            }],
-            "usage": {}
-        });
-
-        let result = adapter.transform_response(response).unwrap();
-        assert_eq!(result.id, "unknown");
-    }
-
-    #[test]
-    fn test_transform_response_missing_model() {
-        let adapter = OpenAIAdapter::new();
-        let response = json!({
-            "id": "chatcmpl-123",
-            "choices": [{
-                "message": {"content": "Hello"},
-                "finish_reason": "stop"
-            }],
-            "usage": {}
-        });
-
-        let result = adapter.transform_response(response).unwrap();
-        assert_eq!(result.model, "unknown");
-    }
-
-    #[test]
-    fn test_transform_response_missing_content() {
-        let adapter = OpenAIAdapter::new();
-        let response = json!({
-            "id": "chatcmpl-123",
-            "model": "gpt-4",
-            "choices": [{
-                "message": {},
-                "finish_reason": "stop"
-            }],
-            "usage": {}
-        });
-
-        let result = adapter.transform_response(response).unwrap();
-        assert_eq!(result.content, "");
-    }
-
-    #[test]
-    fn test_transform_response_missing_finish_reason() {
-        let adapter = OpenAIAdapter::new();
-        let response = json!({
-            "id": "chatcmpl-123",
-            "model": "gpt-4",
-            "choices": [{
-                "message": {"content": "Hello"}
-            }],
-            "usage": {}
-        });
-
-        let result = adapter.transform_response(response).unwrap();
-        assert_eq!(result.finish_reason, "unknown");
-    }
-
-    #[test]
-    fn test_transform_response_missing_usage() {
-        let adapter = OpenAIAdapter::new();
-        let response = json!({
-            "id": "chatcmpl-123",
-            "model": "gpt-4",
-            "choices": [{
-                "message": {"content": "Hello"},
-                "finish_reason": "stop"
-            }]
-        });
-
-        let result = adapter.transform_response(response).unwrap();
-        assert_eq!(result.usage.prompt_tokens, 0);
-        assert_eq!(result.usage.completion_tokens, 0);
-        assert_eq!(result.usage.total_tokens, 0);
     }
 
     #[test]
@@ -846,27 +871,6 @@ mod tests {
         let result = adapter.transform_response(response).unwrap();
         let tool_calls = result.tool_calls.unwrap();
         assert_eq!(tool_calls.len(), 2);
-    }
-
-    #[test]
-    fn test_transform_response_partial_usage() {
-        let adapter = OpenAIAdapter::new();
-        let response = json!({
-            "id": "chatcmpl-123",
-            "model": "gpt-4",
-            "choices": [{
-                "message": {"content": "Hello"},
-                "finish_reason": "stop"
-            }],
-            "usage": {
-                "prompt_tokens": 10
-            }
-        });
-
-        let result = adapter.transform_response(response).unwrap();
-        assert_eq!(result.usage.prompt_tokens, 10);
-        assert_eq!(result.usage.completion_tokens, 0);
-        assert_eq!(result.usage.total_tokens, 0);
     }
 
     mod proptests {
