@@ -385,6 +385,10 @@ impl SQLiteSelector {
     ///
     /// Returns `SqliteError` if the query fails.
     pub async fn get_top_auths(&self, limit: usize) -> Result<Vec<String>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+
         // sqlx SQLite does not support binding LIMIT; format with integer is safe here.
         let query = format!(
             r"

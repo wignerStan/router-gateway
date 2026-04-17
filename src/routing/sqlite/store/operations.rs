@@ -531,7 +531,7 @@ impl SQLiteStore {
             .await
             .map_err(|e| SqliteError::query("cleanup_old_history", e))?;
 
-        Ok(result.rows_affected() as i64)
+        Ok(i64::try_from(result.rows_affected()).unwrap_or(i64::MAX))
     }
 
     /// Get history statistics.
