@@ -9,7 +9,7 @@ use std::collections::HashMap;
 /// Create a store backed by a fresh migrated pool (for `sqlx::test`-based tests).
 #[must_use]
 pub fn store_from_pool(pool: sqlx::SqlitePool) -> SQLiteStore {
-    SQLiteStore::from_pool(pool, true)
+    SQLiteStore::from_pool(pool, ":memory:", true)
 }
 
 /// Create sample metrics for testing.
