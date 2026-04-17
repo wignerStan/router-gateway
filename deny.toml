@@ -16,8 +16,8 @@ feature-depth = 1
 db-path = "$CARGO_HOME/advisory-dbs"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 # Ignore specific advisories if needed
-# RUSTSEC-2024-0370: proc-macro-error is unmaintained - transitive dep from tabled
-ignore = ["RUSTSEC-2024-0370"]
+# RUSTSEC-2026-0097: Rand is unsound with a custom logger using `rand::rng()`. We don't use this feature and it's brought in by shuttle 0.8.1 in tests only.
+ignore = ["RUSTSEC-2026-0097"]
 
 # Licenses check configuration
 # More info: https://embarkstudios.github.io/cargo-deny/checks/licenses/cfg.html
