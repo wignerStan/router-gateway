@@ -9,7 +9,7 @@
 //! safety, nonexistent auth lookups, and upsert semantics verification.
 
 #[cfg(test)]
-mod db_resilience {
+mod red_edge {
     use chrono::Utc;
     use gateway::routing::health::{AuthHealth, HealthStatus};
     use gateway::routing::metrics::AuthMetrics;
